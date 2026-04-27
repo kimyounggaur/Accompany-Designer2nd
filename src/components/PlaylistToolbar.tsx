@@ -5,8 +5,12 @@ import menuIcon from "../assets/icons/flicon_menu.png";
 import muteIcon from "../assets/icons/flicon_mute.png";
 import paintIcon from "../assets/icons/flicon_paint.png";
 import drawIcon from "../assets/icons/flicon_pencilup.png";
-import playSelectedIcon from "../assets/icons/flicon_play.png";
+import playSelectedIcon from "../assets/icons/flicon_playback.png";
+import selectIcon from "../assets/icons/flicon_select.png";
+import sliceIcon from "../assets/icons/flicon_slice.png";
+import slipIcon from "../assets/icons/flicon_slip.png";
 import snapIcon from "../assets/icons/flicon_snap.png";
+import zoomIcon from "../assets/icons/flicon_zoom.png";
 import { useDawStore } from "../store/useDawStore";
 import type { PlaylistSnap, PlaylistTool } from "../types";
 
@@ -20,6 +24,10 @@ const toolButtons: Array<{
   { tool: "paint", label: "Paint", shortcut: "B", icon: paintIcon },
   { tool: "delete", label: "Delete", shortcut: "D", icon: deleteIcon },
   { tool: "mute", label: "Mute", shortcut: "T", icon: muteIcon },
+  { tool: "slip", label: "Slip Edit", shortcut: "S", icon: slipIcon },
+  { tool: "slice", label: "Slice", shortcut: "C", icon: sliceIcon },
+  { tool: "select", label: "Select", shortcut: "E", icon: selectIcon },
+  { tool: "zoom", label: "Zoom", shortcut: "Z", icon: zoomIcon },
   {
     tool: "play-selected",
     label: "Play Selected",
