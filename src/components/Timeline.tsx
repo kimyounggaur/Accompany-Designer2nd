@@ -37,6 +37,17 @@ export function Timeline() {
       label: beat % 4 === 0 ? String(beat / 4 + 1) : "",
     }));
   }, [beatSeconds, beatWidth, projectDuration]);
+  const timelineClips = useMemo(
+    () =>
+      tracks.flatMap((track, trackIndex) =>
+        track.clips.map((clip) => ({
+          clip,
+          trackIndex,
+        })),
+      ),
+    [tracks],
+  );
+  const trackIds = useMemo(() => tracks.map((track) => track.id), [tracks]);
 
   function seekFromPointer(clientX: number) {
     const rect = lanesRef.current?.getBoundingClientRect();
@@ -144,15 +155,18 @@ export function Timeline() {
                 }
                 seekFromPointer(event.clientX);
               }}
-            >
-              {track.clips.map((clip) => (
-                <ClipView
-                  asset={audioAssets[clip.audioBufferId]}
-                  clip={clip}
-                  key={clip.id}
-                />
-              ))}
-            </div>
+            />
+          ))}
+          {timelineClips.map(({ clip, trackIndex }) => (
+            <ClipView
+              asset={audioAssets[clip.audioBufferId]}
+              clip={clip}
+              key={clip.id}
+              lanesRef={lanesRef}
+              trackHeight={TRACK_HEIGHT}
+              trackIndex={trackIndex}
+              trackIds={trackIds}
+            />
           ))}
         </div>
       </div>

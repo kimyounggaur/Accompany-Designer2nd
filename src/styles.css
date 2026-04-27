@@ -325,6 +325,7 @@ button {
   left: 0;
   width: 100%;
   border-bottom: 1px solid var(--line-soft);
+  pointer-events: auto;
 }
 
 .track-lane:nth-child(odd) {
@@ -354,6 +355,7 @@ button {
 
 .clip {
   position: absolute;
+  z-index: 2;
   top: 15px;
   height: 84px;
   overflow: hidden;

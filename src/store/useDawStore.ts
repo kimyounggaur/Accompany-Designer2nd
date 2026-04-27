@@ -19,6 +19,7 @@ interface DawStore extends DawProject {
   updateAudioAsset: (assetId: string, patch: Partial<AudioAsset>) => void;
   addClip: (trackId: string, clip: Clip) => void;
   updateClip: (clipId: string, patch: Partial<Clip>) => void;
+  moveClip: (clipId: string, targetTrackId: string, patch?: Partial<Clip>) => void;
   deleteClip: (clipId: string) => void;
   selectClip: (clipId?: string) => void;
   addTrack: () => void;
@@ -112,6 +113,42 @@ export const useDawStore = create<DawStore>((set) => ({
         ),
       })),
     })),
+  moveClip: (clipId, targetTrackId, patch = {}) =>
+    set((state) => {
+      let movingClip: Clip | undefined;
+      const tracksWithoutClip = state.tracks.map((track) => {
+        const clip = track.clips.find((candidate) => candidate.id === clipId);
+
+        if (!clip) {
+          return track;
+        }
+
+        movingClip = {
+          ...clip,
+          ...patch,
+          trackId: targetTrackId,
+        };
+
+        return {
+          ...track,
+          clips: track.clips.filter((candidate) => candidate.id !== clipId),
+        };
+      });
+
+      if (!movingClip) {
+        return { tracks: state.tracks };
+      }
+
+      const clipToInsert = movingClip;
+
+      return {
+        tracks: tracksWithoutClip.map((track) =>
+          track.id === targetTrackId
+            ? { ...track, clips: [...track.clips, clipToInsert] }
+            : track,
+        ),
+      };
+    }),
   deleteClip: (clipId) =>
     set((state) => ({
       tracks: state.tracks.map((track) => ({

@@ -1,3 +1,4 @@
+import type { RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { AudioAsset, Clip } from "../types";
 import { useDawStore } from "../store/useDawStore";
@@ -14,6 +15,10 @@ type DragMode = "move" | "trim-left" | "trim-right";
 interface ClipViewProps {
   asset?: AudioAsset;
   clip: Clip;
+  lanesRef: RefObject<HTMLDivElement | null>;
+  trackHeight: number;
+  trackIds: string[];
+  trackIndex: number;
 }
 
 interface PointerSession {
@@ -23,11 +28,19 @@ interface PointerSession {
   originalClip: Clip;
 }
 
-export function ClipView({ asset, clip }: ClipViewProps) {
+export function ClipView({
+  asset,
+  clip,
+  lanesRef,
+  trackHeight,
+  trackIds,
+  trackIndex,
+}: ClipViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sessionRef = useRef<PointerSession | undefined>(undefined);
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const updateClip = useDawStore((state) => state.updateClip);
+  const moveClip = useDawStore((state) => state.moveClip);
   const selectClip = useDawStore((state) => state.selectClip);
   const bpm = useDawStore((state) => state.bpm);
   const zoomPxPerSecond = useDawStore((state) => state.zoomPxPerSecond);
@@ -38,6 +51,7 @@ export function ClipView({ asset, clip }: ClipViewProps) {
   const timelineDuration = getClipTimelineDuration(bpm, clip);
   const width = Math.max(48, timelineDuration * zoomPxPerSecond);
   const left = clip.startTime * zoomPxPerSecond;
+  const top = trackIndex * trackHeight + 15;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -109,7 +123,17 @@ export function ClipView({ asset, clip }: ClipViewProps) {
         snapEnabled,
         gridDivision,
       );
-      updateClip(original.id, { startTime: Math.max(0, moved) });
+      const lanesRect = lanesRef.current?.getBoundingClientRect();
+      const targetTrackIndex = lanesRect
+        ? clamp(
+            Math.floor((event.clientY - lanesRect.top) / trackHeight),
+            0,
+            Math.max(0, trackIds.length - 1),
+          )
+        : trackIndex;
+      const targetTrackId = trackIds[targetTrackIndex] ?? original.trackId;
+
+      moveClip(original.id, targetTrackId, { startTime: Math.max(0, moved) });
       return;
     }
 
@@ -162,7 +186,7 @@ export function ClipView({ asset, clip }: ClipViewProps) {
   return (
     <article
       className={`clip ${isSelected ? "selected" : ""}`}
-      style={{ left, width }}
+      style={{ left, top, width }}
       onPointerDown={(event) => beginDrag("move", event)}
       onPointerMove={updateDrag}
       onPointerUp={endDrag}
