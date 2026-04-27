@@ -21,6 +21,7 @@ interface DawStore extends DawProject {
   updateClip: (clipId: string, patch: Partial<Clip>) => void;
   deleteClip: (clipId: string) => void;
   selectClip: (clipId?: string) => void;
+  addTrack: () => void;
   updateTrack: (trackId: string, patch: Partial<Omit<Track, "clips">>) => void;
   importProject: (project: DawProject) => void;
   resetProject: () => void;
@@ -121,6 +122,11 @@ export const useDawStore = create<DawStore>((set) => ({
         state.selectedClipId === clipId ? undefined : state.selectedClipId,
     })),
   selectClip: (selectedClipId) => set({ selectedClipId }),
+  addTrack: () =>
+    set((state) => ({
+      tracks: [...state.tracks, createDefaultTrack(state.tracks.length + 1)],
+      selectedClipId: undefined,
+    })),
   updateTrack: (trackId, patch) =>
     set((state) => ({
       tracks: state.tracks.map((track) =>

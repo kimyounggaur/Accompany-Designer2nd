@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { useMemo, useRef } from "react";
 import { useDawStore } from "../store/useDawStore";
 import { getBeatSeconds, getProjectDuration, snapTime } from "../utils/audioMath";
@@ -16,6 +17,7 @@ export function Timeline() {
   const gridDivision = useDawStore((state) => state.gridDivision);
   const setPlayhead = useDawStore((state) => state.setPlayhead);
   const selectClip = useDawStore((state) => state.selectClip);
+  const addTrack = useDawStore((state) => state.addTrack);
   const updateTrack = useDawStore((state) => state.updateTrack);
 
   const projectDuration = useMemo(
@@ -49,7 +51,13 @@ export function Timeline() {
   return (
     <section className="playlist" aria-label="Playlist">
       <div className="track-column">
-        <div className="ruler-corner">Playlist</div>
+        <div className="ruler-corner">
+          <span>Playlist</span>
+          <button className="add-track-button" onClick={addTrack} title="Add track">
+            <Plus size={15} />
+            <span>Track</span>
+          </button>
+        </div>
         {tracks.map((track) => (
           <div className="track-header" key={track.id}>
             <input

@@ -200,6 +200,8 @@ button {
 .ruler-corner {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   height: 42px;
   padding: 0 14px;
   color: var(--text-muted);
@@ -208,6 +210,28 @@ button {
   font-weight: 800;
   letter-spacing: 0;
   text-transform: uppercase;
+}
+
+.add-track-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  min-width: 74px;
+  padding: 0 8px;
+  color: #101311;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: var(--mint);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: none;
+}
+
+.add-track-button:hover {
+  background: #62e4b5;
 }
 
 .track-header {

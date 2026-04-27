@@ -16,7 +16,8 @@
 
 ## Phase 2: Playlist 강화
 
-- [ ] 여러 트랙 추가/삭제
+- [x] 여러 트랙 추가
+- [ ] 트랙 삭제
 - [ ] clip copy/paste
 - [ ] split at playhead
 - [ ] undo/redo

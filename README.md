@@ -14,6 +14,7 @@ npm run dev
 - mp3, wav, m4a 등 브라우저가 디코딩할 수 있는 오디오 파일 업로드
 - AudioBuffer 기반 파형 피크 생성 및 Canvas 렌더링
 - 단일 트랙 Playlist UI
+- 트랙 추가
 - 클립 이동, 좌우 trim, 선택, 삭제
 - play, pause, stop, playhead 표시
 - 프로젝트 BPM 입력, snap grid, zoom
