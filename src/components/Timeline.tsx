@@ -33,6 +33,11 @@ interface DragBox {
   height: number;
 }
 
+interface CursorAccent {
+  left: number;
+  top: number;
+}
+
 interface LanePointerSession {
   mode: Extract<PlaylistTool, "draw" | "paint" | "select" | "zoom">;
   pointerId: number;
@@ -57,6 +62,7 @@ export function Timeline() {
   const lanesRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<LanePointerSession | undefined>(undefined);
   const [dragBox, setDragBox] = useState<DragBox | undefined>();
+  const [cursorAccent, setCursorAccent] = useState<CursorAccent | undefined>();
   const tracks = useDawStore((state) => state.tracks);
   const audioAssets = useDawStore((state) => state.audioAssets);
   const timeMarkers = useDawStore((state) => state.timeMarkers);
@@ -265,6 +271,14 @@ export function Timeline() {
     setDragBox(makeBox(session.startX, session.startY, position.x, position.y));
   }
 
+  function handleLanePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    setCursorAccent({
+      left: event.clientX - 8,
+      top: event.clientY - 8,
+    });
+    updateLanePointer(event);
+  }
+
   function endLanePointer(event: React.PointerEvent<HTMLDivElement>) {
     const session = sessionRef.current;
     if (!session || session.pointerId !== event.pointerId) {
@@ -383,9 +397,10 @@ export function Timeline() {
             backgroundSize: `${subdivisionWidth}px 100%`,
           }}
           onPointerDown={beginLanePointer}
-          onPointerMove={updateLanePointer}
+          onPointerMove={handleLanePointerMove}
           onPointerUp={endLanePointer}
           onPointerCancel={endLanePointer}
+          onPointerLeave={() => setCursorAccent(undefined)}
         >
           {timeMarkers.map((marker) => (
             <div
@@ -430,6 +445,9 @@ export function Timeline() {
               className={`selection-box ${playlistTool === "zoom" ? "zoom-box" : ""}`}
               style={dragBox}
             />
+          )}
+          {cursorAccent && (
+            <div className="playlist-cursor-accent" style={cursorAccent} />
           )}
         </div>
       </div>

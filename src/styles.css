@@ -566,6 +566,16 @@ button {
   background: rgba(240, 180, 75, 0.13);
 }
 
+.playlist-cursor-accent {
+  position: fixed;
+  z-index: 9999;
+  width: 1px;
+  height: 32px;
+  background: #ff2a2a;
+  box-shadow: 0 0 0 1px rgba(255, 42, 42, 0.18);
+  pointer-events: none;
+}
+
 .clip {
   position: absolute;
   z-index: 2;
