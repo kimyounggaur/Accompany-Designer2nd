@@ -1,4 +1,5 @@
 import { Plus } from "lucide-react";
+import type { CSSProperties } from "react";
 import { useMemo, useRef, useState } from "react";
 import { useDawStore } from "../store/useDawStore";
 import type { PlaylistTool } from "../types";
@@ -9,6 +10,7 @@ import {
   getProjectDuration,
   snapTime,
 } from "../utils/audioMath";
+import { playlistToolIcons } from "../utils/playlistToolIcons";
 import { ClipView } from "./ClipView";
 import { PlaylistToolbar } from "./PlaylistToolbar";
 
@@ -103,6 +105,9 @@ export function Timeline() {
     [tracks],
   );
   const trackIds = useMemo(() => tracks.map((track) => track.id), [tracks]);
+  const playlistCursorStyle = {
+    "--playlist-tool-cursor": `url("${playlistToolIcons[playlistTool]}") 8 8, auto`,
+  } as CSSProperties;
 
   function getPointerPosition(event: React.PointerEvent<HTMLElement>): PointerPosition | undefined {
     const rect = lanesRef.current?.getBoundingClientRect();
@@ -299,6 +304,7 @@ export function Timeline() {
     <section
       className={`playlist ${performanceMode ? "performance-mode" : ""}`}
       aria-label="Playlist"
+      style={playlistCursorStyle}
     >
       <PlaylistToolbar />
       <div className="track-column">

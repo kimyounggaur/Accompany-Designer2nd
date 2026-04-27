@@ -1,18 +1,10 @@
 import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
-import deleteIcon from "../assets/icons/flicon_delete.png";
 import menuIcon from "../assets/icons/flicon_menu.png";
-import muteIcon from "../assets/icons/flicon_mute.png";
-import paintIcon from "../assets/icons/flicon_paint.png";
-import drawIcon from "../assets/icons/flicon_pencilup.png";
-import playSelectedIcon from "../assets/icons/flicon_playback.png";
-import selectIcon from "../assets/icons/flicon_select.png";
-import sliceIcon from "../assets/icons/flicon_slice.png";
-import slipIcon from "../assets/icons/flicon_slip.png";
 import snapIcon from "../assets/icons/flicon_snap.png";
-import zoomIcon from "../assets/icons/flicon_zoom.png";
 import { useDawStore } from "../store/useDawStore";
 import type { PlaylistSnap, PlaylistTool } from "../types";
+import { playlistToolIcons } from "../utils/playlistToolIcons";
 
 const toolButtons: Array<{
   tool: PlaylistTool;
@@ -20,19 +12,19 @@ const toolButtons: Array<{
   shortcut: string;
   icon: string;
 }> = [
-  { tool: "draw", label: "Draw", shortcut: "P", icon: drawIcon },
-  { tool: "paint", label: "Paint", shortcut: "B", icon: paintIcon },
-  { tool: "delete", label: "Delete", shortcut: "D", icon: deleteIcon },
-  { tool: "mute", label: "Mute", shortcut: "T", icon: muteIcon },
-  { tool: "slip", label: "Slip Edit", shortcut: "S", icon: slipIcon },
-  { tool: "slice", label: "Slice", shortcut: "C", icon: sliceIcon },
-  { tool: "select", label: "Select", shortcut: "E", icon: selectIcon },
-  { tool: "zoom", label: "Zoom", shortcut: "Z", icon: zoomIcon },
+  { tool: "draw", label: "Draw", shortcut: "P", icon: playlistToolIcons.draw },
+  { tool: "paint", label: "Paint", shortcut: "B", icon: playlistToolIcons.paint },
+  { tool: "delete", label: "Delete", shortcut: "D", icon: playlistToolIcons.delete },
+  { tool: "mute", label: "Mute", shortcut: "T", icon: playlistToolIcons.mute },
+  { tool: "slip", label: "Slip Edit", shortcut: "S", icon: playlistToolIcons.slip },
+  { tool: "slice", label: "Slice", shortcut: "C", icon: playlistToolIcons.slice },
+  { tool: "select", label: "Select", shortcut: "E", icon: playlistToolIcons.select },
+  { tool: "zoom", label: "Zoom", shortcut: "Z", icon: playlistToolIcons.zoom },
   {
     tool: "play-selected",
     label: "Play Selected",
     shortcut: "Y",
-    icon: playSelectedIcon,
+    icon: playlistToolIcons["play-selected"],
   },
 ];
 
