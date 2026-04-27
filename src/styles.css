@@ -569,10 +569,10 @@ button {
 .playlist-cursor-accent {
   position: fixed;
   z-index: 9999;
-  width: 1px;
+  width: 5px;
   height: 32px;
   background: #ff2a2a;
-  box-shadow: 0 0 0 1px rgba(255, 42, 42, 0.18);
+  box-shadow: 0 0 0 1px rgba(255, 42, 42, 0.22);
   pointer-events: none;
 }
 
