@@ -10,7 +10,7 @@ import {
   snapTime,
 } from "../utils/audioMath";
 
-type DragMode = "move" | "trim-left" | "trim-right";
+type DragMode = "move" | "trim-left" | "trim-right" | "slip";
 
 interface ClipViewProps {
   asset?: AudioAsset;
@@ -38,15 +38,20 @@ export function ClipView({
 }: ClipViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sessionRef = useRef<PointerSession | undefined>(undefined);
-  const selectedClipId = useDawStore((state) => state.selectedClipId);
+  const selectedClipIds = useDawStore((state) => state.selectedClipIds);
+  const playlistTool = useDawStore((state) => state.playlistTool);
   const updateClip = useDawStore((state) => state.updateClip);
   const moveClip = useDawStore((state) => state.moveClip);
+  const deleteClip = useDawStore((state) => state.deleteClip);
+  const toggleClipMuted = useDawStore((state) => state.toggleClipMuted);
+  const sliceClipAt = useDawStore((state) => state.sliceClipAt);
   const selectClip = useDawStore((state) => state.selectClip);
+  const setPlayhead = useDawStore((state) => state.setPlayhead);
   const bpm = useDawStore((state) => state.bpm);
   const zoomPxPerSecond = useDawStore((state) => state.zoomPxPerSecond);
   const snapEnabled = useDawStore((state) => state.snapEnabled);
   const gridDivision = useDawStore((state) => state.gridDivision);
-  const isSelected = selectedClipId === clip.id;
+  const isSelected = selectedClipIds.includes(clip.id);
   const playbackRate = getClipPlaybackRate(bpm, clip);
   const timelineDuration = getClipTimelineDuration(bpm, clip);
   const width = Math.max(48, timelineDuration * zoomPxPerSecond);
@@ -70,7 +75,9 @@ export function ClipView({
       }
 
       context.clearRect(0, 0, canvas.width, canvas.height);
-      context.fillStyle = "rgba(218, 255, 239, 0.82)";
+      context.fillStyle = clip.muted
+        ? "rgba(188, 196, 185, 0.52)"
+        : "rgba(218, 255, 239, 0.82)";
       const middle = canvas.height / 2;
       const cssWidth = Math.max(1, Math.floor(rect.width));
       const peakStep = asset.waveformPeaks.length / cssWidth;
@@ -91,11 +98,32 @@ export function ClipView({
     const resizeObserver = new ResizeObserver(draw);
     resizeObserver.observe(canvas);
     return () => resizeObserver.disconnect();
-  }, [asset, width]);
+  }, [asset, clip.muted, width]);
+
+  function getPointerTime(event: React.PointerEvent<HTMLElement>) {
+    const lanesRect = lanesRef.current?.getBoundingClientRect();
+    if (!lanesRect) {
+      return clip.startTime;
+    }
+
+    const rawTime = Math.max(0, (event.clientX - lanesRect.left) / zoomPxPerSecond);
+    return snapTime(rawTime, bpm, snapEnabled && !event.altKey, gridDivision);
+  }
+
+  function playFromPointer(event: React.PointerEvent<HTMLElement>) {
+    const startAt = clamp(
+      getPointerTime(event),
+      clip.startTime,
+      clip.startTime + timelineDuration,
+    );
+
+    setPlayhead(startAt);
+    window.dispatchEvent(new CustomEvent("playlist-play-from", { detail: startAt }));
+  }
 
   function beginDrag(mode: DragMode, event: React.PointerEvent<HTMLElement>) {
     event.stopPropagation();
-    selectClip(clip.id);
+    selectClip(clip.id, event.shiftKey || event.ctrlKey);
     sessionRef.current = {
       mode,
       pointerId: event.pointerId,
@@ -103,6 +131,48 @@ export function ClipView({
       originalClip: clip,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handleClipPointerDown(event: React.PointerEvent<HTMLElement>) {
+    event.stopPropagation();
+
+    if (event.button === 2 || playlistTool === "delete") {
+      event.preventDefault();
+      deleteClip(clip.id);
+      return;
+    }
+
+    if (playlistTool === "mute") {
+      toggleClipMuted(clip.id);
+      return;
+    }
+
+    if (playlistTool === "slice") {
+      sliceClipAt(clip.id, getPointerTime(event));
+      return;
+    }
+
+    if (playlistTool === "play-selected") {
+      selectClip(clip.id, event.shiftKey || event.ctrlKey);
+      playFromPointer(event);
+      return;
+    }
+
+    if (playlistTool === "select" || event.ctrlKey || event.shiftKey) {
+      selectClip(clip.id, event.shiftKey || event.ctrlKey);
+      return;
+    }
+
+    beginDrag(playlistTool === "slip" ? "slip" : "move", event);
+  }
+
+  function beginTrim(mode: Extract<DragMode, "trim-left" | "trim-right">, event: React.PointerEvent<HTMLElement>) {
+    if (["delete", "mute", "slice", "play-selected"].includes(playlistTool)) {
+      handleClipPointerDown(event);
+      return;
+    }
+
+    beginDrag(mode, event);
   }
 
   function updateDrag(event: React.PointerEvent<HTMLElement>) {
@@ -120,7 +190,7 @@ export function ClipView({
       const moved = snapTime(
         original.startTime + deltaTimeline,
         bpm,
-        snapEnabled,
+        snapEnabled && !event.altKey,
         gridDivision,
       );
       const lanesRect = lanesRef.current?.getBoundingClientRect();
@@ -137,11 +207,22 @@ export function ClipView({
       return;
     }
 
+    if (session.mode === "slip") {
+      const nextOffset = clamp(
+        original.offset + deltaTimeline * originalRate,
+        0,
+        Math.max(0, assetDuration - original.duration),
+      );
+
+      updateClip(original.id, { offset: nextOffset });
+      return;
+    }
+
     if (session.mode === "trim-left") {
       const desiredStart = snapTime(
         original.startTime + deltaTimeline,
         bpm,
-        snapEnabled,
+        snapEnabled && !event.altKey,
         gridDivision,
       );
       let deltaSource = (desiredStart - original.startTime) * originalRate;
@@ -165,7 +246,7 @@ export function ClipView({
     const desiredDisplayDuration = snapTime(
       currentDisplayDuration + deltaTimeline,
       bpm,
-      snapEnabled,
+      snapEnabled && !event.altKey,
       gridDivision,
     );
     const nextDuration = clamp(
@@ -185,9 +266,15 @@ export function ClipView({
 
   return (
     <article
-      className={`clip ${isSelected ? "selected" : ""}`}
+      className={`clip ${isSelected ? "selected" : ""} ${
+        clip.muted ? "muted" : ""
+      } ${clip.groupId ? "grouped" : ""}`}
       style={{ left, top, width }}
-      onPointerDown={(event) => beginDrag("move", event)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        deleteClip(clip.id);
+      }}
+      onPointerDown={handleClipPointerDown}
       onPointerMove={updateDrag}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
@@ -195,7 +282,7 @@ export function ClipView({
       <button
         aria-label="Trim clip start"
         className="trim-handle left"
-        onPointerDown={(event) => beginDrag("trim-left", event)}
+        onPointerDown={(event) => beginTrim("trim-left", event)}
         onPointerMove={updateDrag}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
@@ -203,12 +290,12 @@ export function ClipView({
       <canvas ref={canvasRef} />
       <div className="clip-label">
         <strong>{clip.name}</strong>
-        <span>{playbackRate.toFixed(2)}x</span>
+        <span>{clip.muted ? "Muted" : `${playbackRate.toFixed(2)}x`}</span>
       </div>
       <button
         aria-label="Trim clip end"
         className="trim-handle right"
-        onPointerDown={(event) => beginDrag("trim-right", event)}
+        onPointerDown={(event) => beginTrim("trim-right", event)}
         onPointerMove={updateDrag}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}

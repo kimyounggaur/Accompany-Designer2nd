@@ -130,6 +130,14 @@ export function Inspector() {
                 }
               />
             </label>
+            <button
+              className={selectedClip.muted ? "toggle active danger" : "toggle"}
+              onClick={() =>
+                updateClip(selectedClip.id, { muted: !selectedClip.muted })
+              }
+            >
+              Clip Mute
+            </button>
             <label>
               Stretch
               <select

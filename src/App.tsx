@@ -16,6 +16,7 @@ function getProjectSnapshot(): DawProject {
     sampleRate: state.sampleRate,
     tracks: state.tracks,
     audioAssets: state.audioAssets,
+    timeMarkers: state.timeMarkers,
   };
 }
 
@@ -28,9 +29,15 @@ export default function App() {
   const addAudioAsset = useDawStore((state) => state.addAudioAsset);
   const addClip = useDawStore((state) => state.addClip);
   const importProject = useDawStore((state) => state.importProject);
-  const deleteClip = useDawStore((state) => state.deleteClip);
-  const selectedClipId = useDawStore((state) => state.selectedClipId);
+  const deleteSelectedClips = useDawStore((state) => state.deleteSelectedClips);
+  const selectedClipIds = useDawStore((state) => state.selectedClipIds);
   const setPlaylistTool = useDawStore((state) => state.setPlaylistTool);
+  const quantizeSelectedClips = useDawStore((state) => state.quantizeSelectedClips);
+  const zoomToSelectedClips = useDawStore((state) => state.zoomToSelectedClips);
+  const setZoom = useDawStore((state) => state.setZoom);
+  const zoomPxPerSecond = useDawStore((state) => state.zoomPxPerSecond);
+  const commandMessage = useDawStore((state) => state.commandMessage);
+  const playlistDetached = useDawStore((state) => state.playlistDetached);
   const [status, setStatus] = useState("오디오 파일을 업로드하면 첫 트랙에 클립이 생성됩니다.");
   const animationRef = useRef<number | undefined>(undefined);
 
@@ -98,8 +105,54 @@ export default function App() {
         return;
       }
 
-      if ((event.key === "Delete" || event.key === "Backspace") && selectedClipId) {
-        deleteClip(selectedClipId);
+      if (event.altKey && event.key.toLowerCase() === "q") {
+        event.preventDefault();
+        quantizeSelectedClips();
+        return;
+      }
+
+      if (event.shiftKey && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        zoomToSelectedClips();
+        return;
+      }
+
+      if (event.shiftKey && ["1", "2", "3"].includes(event.key)) {
+        event.preventDefault();
+        setZoom(event.key === "1" ? 72 : event.key === "2" ? 132 : 220);
+        return;
+      }
+
+      if (event.shiftKey && event.key === "4") {
+        event.preventDefault();
+        setZoom(72);
+        return;
+      }
+
+      if (event.shiftKey && event.key === "5") {
+        event.preventDefault();
+        zoomToSelectedClips();
+        return;
+      }
+
+      if (event.key === "PageUp") {
+        event.preventDefault();
+        setZoom(zoomPxPerSecond + 16);
+        return;
+      }
+
+      if (event.key === "PageDown") {
+        event.preventDefault();
+        setZoom(zoomPxPerSecond - 16);
+        return;
+      }
+
+      if (
+        (event.key === "Delete" || event.key === "Backspace") &&
+        selectedClipIds.length
+      ) {
+        deleteSelectedClips();
+        return;
       }
 
       const shortcut = event.key.toLowerCase();
@@ -111,6 +164,14 @@ export default function App() {
         setPlaylistTool("delete");
       } else if (shortcut === "t") {
         setPlaylistTool("mute");
+      } else if (shortcut === "s") {
+        setPlaylistTool("slip");
+      } else if (shortcut === "c") {
+        setPlaylistTool("slice");
+      } else if (shortcut === "e") {
+        setPlaylistTool("select");
+      } else if (shortcut === "z") {
+        setPlaylistTool("zoom");
       } else if (shortcut === "y") {
         setPlaylistTool("play-selected");
       }
@@ -123,7 +184,33 @@ export default function App() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [deleteClip, selectedClipId, setPlaylistTool]);
+  }, [
+    deleteSelectedClips,
+    quantizeSelectedClips,
+    selectedClipIds.length,
+    setPlaylistTool,
+    setZoom,
+    zoomPxPerSecond,
+    zoomToSelectedClips,
+  ]);
+
+  useEffect(() => {
+    const onPlayFrom = (event: Event) => {
+      const startAt = Math.max(
+        0,
+        Number((event as CustomEvent<number>).detail) || 0,
+      );
+      const state = useDawStore.getState();
+
+      state.setPlayhead(startAt);
+      void audioEngine.play(getProjectSnapshot(), startAt).then(() => {
+        state.setIsPlaying(true);
+      });
+    };
+
+    window.addEventListener("playlist-play-from", onPlayFrom);
+    return () => window.removeEventListener("playlist-play-from", onPlayFrom);
+  }, []);
 
   useEffect(() => {
     return () => audioEngine.stop();
@@ -176,6 +263,7 @@ export default function App() {
           gain: 1,
           fadeIn: 0,
           fadeOut: 0,
+          muted: false,
         };
 
         addAudioAsset(asset);
@@ -216,14 +304,14 @@ export default function App() {
   return (
     <main className="app-shell">
       <TransportBar
-        status={status}
+        status={commandMessage || status}
         onFiles={handleFiles}
         onLoadProject={handleLoadProject}
         onPlayPause={handlePlayPause}
         onSaveProject={handleSaveProject}
         onStop={handleStop}
       />
-      <div className="workspace">
+      <div className={`workspace ${playlistDetached ? "detached" : ""}`}>
         <Timeline />
         <Inspector />
       </div>

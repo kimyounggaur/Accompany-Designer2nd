@@ -5,12 +5,21 @@ import type {
   DawProject,
   PlaylistSnap,
   PlaylistTool,
+  TimeMarker,
   Track,
 } from "../types";
-import { clamp, createId } from "../utils/audioMath";
+import {
+  clamp,
+  createId,
+  findClip,
+  getClipPlaybackRate,
+  getClipTimelineDuration,
+  snapTime,
+} from "../utils/audioMath";
 
 interface DawStore extends DawProject {
   selectedClipId?: string;
+  selectedClipIds: string[];
   isPlaying: boolean;
   playhead: number;
   zoomPxPerSecond: number;
@@ -18,6 +27,10 @@ interface DawStore extends DawProject {
   gridDivision: number;
   playlistTool: PlaylistTool;
   playlistSnap: PlaylistSnap;
+  globalSnap: Exclude<PlaylistSnap, "main">;
+  performanceMode: boolean;
+  playlistDetached: boolean;
+  commandMessage: string;
   setBpm: (bpm: number) => void;
   setProjectName: (name: string) => void;
   setPlayhead: (playhead: number) => void;
@@ -26,13 +39,36 @@ interface DawStore extends DawProject {
   setSnapEnabled: (enabled: boolean) => void;
   setPlaylistTool: (tool: PlaylistTool) => void;
   setPlaylistSnap: (snap: PlaylistSnap) => void;
+  setGlobalSnap: (snap: Exclude<PlaylistSnap, "main">) => void;
+  setCommandMessage: (message: string) => void;
   addAudioAsset: (asset: AudioAsset) => void;
   updateAudioAsset: (assetId: string, patch: Partial<AudioAsset>) => void;
   addClip: (trackId: string, clip: Clip) => void;
+  addClipFromSource: (
+    sourceClipId: string | undefined,
+    trackId: string,
+    startTime: number,
+  ) => string | undefined;
   updateClip: (clipId: string, patch: Partial<Clip>) => void;
   moveClip: (clipId: string, targetTrackId: string, patch?: Partial<Clip>) => void;
   deleteClip: (clipId: string) => void;
-  selectClip: (clipId?: string) => void;
+  deleteSelectedClips: () => void;
+  toggleClipMuted: (clipId: string) => void;
+  sliceClipAt: (clipId: string, splitTime: number) => void;
+  selectClip: (clipId?: string, additive?: boolean) => void;
+  setSelectedClips: (clipIds: string[]) => void;
+  toggleClipSelection: (clipId: string) => void;
+  selectAllClips: () => void;
+  clearSelection: () => void;
+  quantizeSelectedClips: () => void;
+  groupSelectedClips: () => void;
+  ungroupSelectedClips: () => void;
+  zoomToSelectedClips: () => void;
+  resetSelectedClipSource: () => void;
+  addTimeMarker: (time?: number) => void;
+  clearTimeMarkers: () => void;
+  togglePerformanceMode: () => void;
+  togglePlaylistDetached: () => void;
   addTrack: () => void;
   updateTrack: (trackId: string, patch: Partial<Omit<Track, "clips">>) => void;
   importProject: (project: DawProject) => void;
@@ -71,7 +107,12 @@ function createDefaultProject(): DawProject {
     sampleRate: 44100,
     tracks: [createDefaultTrack(1)],
     audioAssets: {},
+    timeMarkers: [],
   };
+}
+
+function resolveSnap(snap: PlaylistSnap, globalSnap: Exclude<PlaylistSnap, "main">) {
+  return snap === "main" ? globalSnap : snap;
 }
 
 function getSnapDivision(snap: PlaylistSnap) {
@@ -86,9 +127,70 @@ function getSnapDivision(snap: PlaylistSnap) {
   return 2;
 }
 
+function getAllClipIds(tracks: Track[]) {
+  return tracks.flatMap((track) => track.clips.map((clip) => clip.id));
+}
+
+function getClipsByIds(tracks: Track[], clipIds: string[]) {
+  const selected = new Set(clipIds);
+  return tracks.flatMap((track) =>
+    track.clips
+      .filter((clip) => selected.has(clip.id))
+      .map((clip) => ({ track, clip })),
+  );
+}
+
+function dedupeClipIds(clipIds: string[], tracks: Track[]) {
+  const validIds = new Set(getAllClipIds(tracks));
+  return Array.from(new Set(clipIds)).filter((clipId) => validIds.has(clipId));
+}
+
+function cloneClipFromSource(
+  state: DawStore,
+  sourceClipId: string | undefined,
+  trackId: string,
+  startTime: number,
+): Clip | undefined {
+  const selection = findClip(state.tracks, sourceClipId);
+
+  if (selection) {
+    return {
+      ...selection.clip,
+      id: createId("clip"),
+      name: `${selection.clip.name} copy`,
+      trackId,
+      startTime,
+      muted: false,
+      groupId: undefined,
+    };
+  }
+
+  const firstAsset = Object.values(state.audioAssets)[0];
+  if (!firstAsset) {
+    return undefined;
+  }
+
+  return {
+    id: createId("clip"),
+    audioBufferId: firstAsset.id,
+    name: firstAsset.fileName,
+    trackId,
+    startTime,
+    offset: 0,
+    duration: firstAsset.duration,
+    sourceBpm: state.bpm,
+    stretchMode: "resample",
+    gain: 1,
+    fadeIn: 0,
+    fadeOut: 0,
+    muted: false,
+  };
+}
+
 export const useDawStore = create<DawStore>((set) => ({
   ...createDefaultProject(),
   selectedClipId: undefined,
+  selectedClipIds: [],
   isPlaying: false,
   playhead: 0,
   zoomPxPerSecond: 96,
@@ -96,6 +198,10 @@ export const useDawStore = create<DawStore>((set) => ({
   gridDivision: 2,
   playlistTool: "draw",
   playlistSnap: "line",
+  globalSnap: "line",
+  performanceMode: false,
+  playlistDetached: false,
+  commandMessage: "",
   setBpm: (bpm) => set({ bpm: clamp(Number(bpm) || 120, 20, 300) }),
   setProjectName: (name) => set({ name }),
   setPlayhead: (playhead) => set({ playhead: Math.max(0, playhead) }),
@@ -108,13 +214,32 @@ export const useDawStore = create<DawStore>((set) => ({
       playlistSnap: snapEnabled ? "line" : "none",
       gridDivision: snapEnabled ? getSnapDivision("line") : 2,
     }),
-  setPlaylistTool: (playlistTool) => set({ playlistTool }),
-  setPlaylistSnap: (playlistSnap) =>
+  setPlaylistTool: (playlistTool) =>
     set({
-      playlistSnap,
-      snapEnabled: playlistSnap !== "none",
-      gridDivision: getSnapDivision(playlistSnap),
+      playlistTool,
+      commandMessage: `${playlistTool.replace("-", " ")} tool selected`,
     }),
+  setPlaylistSnap: (playlistSnap) =>
+    set((state) => {
+      const effectiveSnap = resolveSnap(playlistSnap, state.globalSnap);
+      return {
+        playlistSnap,
+        snapEnabled: effectiveSnap !== "none",
+        gridDivision: getSnapDivision(effectiveSnap),
+        commandMessage: `Snap set to ${playlistSnap}`,
+      };
+    }),
+  setGlobalSnap: (globalSnap) =>
+    set((state) => {
+      const effectiveSnap = resolveSnap(state.playlistSnap, globalSnap);
+      return {
+        globalSnap,
+        snapEnabled: effectiveSnap !== "none",
+        gridDivision: getSnapDivision(effectiveSnap),
+        commandMessage: `Global snap set to ${globalSnap}`,
+      };
+    }),
+  setCommandMessage: (commandMessage) => set({ commandMessage }),
   addAudioAsset: (asset) =>
     set((state) => ({
       audioAssets: {
@@ -140,7 +265,39 @@ export const useDawStore = create<DawStore>((set) => ({
           : track,
       ),
       selectedClipId: clip.id,
+      selectedClipIds: [clip.id],
+      commandMessage: `Added ${clip.name}`,
     })),
+  addClipFromSource: (sourceClipId, trackId, startTime) => {
+    let createdId: string | undefined;
+
+    set((state) => {
+      const targetTrack = state.tracks.find((track) => track.id === trackId);
+      const clip = targetTrack
+        ? cloneClipFromSource(state, sourceClipId, trackId, startTime)
+        : undefined;
+
+      if (!clip) {
+        return {
+          commandMessage: "Upload audio or select a clip before drawing.",
+        };
+      }
+
+      createdId = clip.id;
+      return {
+        tracks: state.tracks.map((track) =>
+          track.id === trackId
+            ? { ...track, clips: [...track.clips, clip] }
+            : track,
+        ),
+        selectedClipId: clip.id,
+        selectedClipIds: [clip.id],
+        commandMessage: `Added ${clip.name}`,
+      };
+    });
+
+    return createdId;
+  },
   updateClip: (clipId, patch) =>
     set((state) => ({
       tracks: state.tracks.map((track) => ({
@@ -184,6 +341,10 @@ export const useDawStore = create<DawStore>((set) => ({
             ? { ...track, clips: [...track.clips, clipToInsert] }
             : track,
         ),
+        selectedClipId: clipId,
+        selectedClipIds: state.selectedClipIds.includes(clipId)
+          ? state.selectedClipIds
+          : [clipId],
       };
     }),
   deleteClip: (clipId) =>
@@ -192,14 +353,295 @@ export const useDawStore = create<DawStore>((set) => ({
         ...track,
         clips: track.clips.filter((clip) => clip.id !== clipId),
       })),
-      selectedClipId:
-        state.selectedClipId === clipId ? undefined : state.selectedClipId,
+      selectedClipId: state.selectedClipId === clipId ? undefined : state.selectedClipId,
+      selectedClipIds: state.selectedClipIds.filter((selectedId) => selectedId !== clipId),
+      commandMessage: "Deleted clip",
     })),
-  selectClip: (selectedClipId) => set({ selectedClipId }),
+  deleteSelectedClips: () =>
+    set((state) => {
+      const deleting = new Set(state.selectedClipIds);
+      if (!deleting.size) {
+        return { commandMessage: "No clips selected." };
+      }
+
+      return {
+        tracks: state.tracks.map((track) => ({
+          ...track,
+          clips: track.clips.filter((clip) => !deleting.has(clip.id)),
+        })),
+        selectedClipId: undefined,
+        selectedClipIds: [],
+        commandMessage: `Deleted ${deleting.size} clip${deleting.size === 1 ? "" : "s"}`,
+      };
+    }),
+  toggleClipMuted: (clipId) =>
+    set((state) => ({
+      tracks: state.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) =>
+          clip.id === clipId ? { ...clip, muted: !clip.muted } : clip,
+        ),
+      })),
+      selectedClipId: clipId,
+      selectedClipIds: state.selectedClipIds.includes(clipId)
+        ? state.selectedClipIds
+        : [clipId],
+      commandMessage: "Toggled clip mute",
+    })),
+  sliceClipAt: (clipId, splitTime) =>
+    set((state) => {
+      const selection = findClip(state.tracks, clipId);
+      if (!selection) {
+        return { commandMessage: "Select a clip to slice." };
+      }
+
+      const { clip } = selection;
+      const playbackRate = getClipPlaybackRate(state.bpm, clip);
+      const timelineDuration = getClipTimelineDuration(state.bpm, clip);
+      const localTime = splitTime - clip.startTime;
+
+      if (localTime <= 0.03 || localTime >= timelineDuration - 0.03) {
+        return { commandMessage: "Slice inside the clip body." };
+      }
+
+      const sourceDelta = localTime * playbackRate;
+      const leftDuration = clamp(sourceDelta, 0.03, clip.duration - 0.03);
+      const rightDuration = clip.duration - leftDuration;
+      const rightClip: Clip = {
+        ...clip,
+        id: createId("clip"),
+        name: `${clip.name} slice`,
+        startTime: clip.startTime + leftDuration / playbackRate,
+        offset: clip.offset + leftDuration,
+        duration: rightDuration,
+        groupId: undefined,
+      };
+
+      return {
+        tracks: state.tracks.map((track) =>
+          track.id === selection.track.id
+            ? {
+                ...track,
+                clips: track.clips.flatMap((candidate) =>
+                  candidate.id === clipId
+                    ? [{ ...candidate, duration: leftDuration }, rightClip]
+                    : [candidate],
+                ),
+              }
+            : track,
+        ),
+        selectedClipId: rightClip.id,
+        selectedClipIds: [rightClip.id],
+        commandMessage: "Sliced clip",
+      };
+    }),
+  selectClip: (clipId, additive = false) =>
+    set((state) => {
+      if (!clipId) {
+        return {
+          selectedClipId: undefined,
+          selectedClipIds: [],
+        };
+      }
+
+      if (!additive) {
+        return {
+          selectedClipId: clipId,
+          selectedClipIds: [clipId],
+        };
+      }
+
+      const exists = state.selectedClipIds.includes(clipId);
+      const selectedClipIds = exists
+        ? state.selectedClipIds.filter((selectedId) => selectedId !== clipId)
+        : [...state.selectedClipIds, clipId];
+
+      return {
+        selectedClipId: selectedClipIds[selectedClipIds.length - 1],
+        selectedClipIds,
+      };
+    }),
+  setSelectedClips: (clipIds) =>
+    set((state) => {
+      const selectedClipIds = dedupeClipIds(clipIds, state.tracks);
+      return {
+        selectedClipId: selectedClipIds[selectedClipIds.length - 1],
+        selectedClipIds,
+        commandMessage: selectedClipIds.length
+          ? `Selected ${selectedClipIds.length} clip${selectedClipIds.length === 1 ? "" : "s"}`
+          : "Selection cleared",
+      };
+    }),
+  toggleClipSelection: (clipId) =>
+    set((state) => {
+      const selectedClipIds = state.selectedClipIds.includes(clipId)
+        ? state.selectedClipIds.filter((selectedId) => selectedId !== clipId)
+        : [...state.selectedClipIds, clipId];
+
+      return {
+        selectedClipId: selectedClipIds[selectedClipIds.length - 1],
+        selectedClipIds,
+      };
+    }),
+  selectAllClips: () =>
+    set((state) => {
+      const selectedClipIds = getAllClipIds(state.tracks);
+      return {
+        selectedClipId: selectedClipIds[selectedClipIds.length - 1],
+        selectedClipIds,
+        commandMessage: `Selected ${selectedClipIds.length} clip${selectedClipIds.length === 1 ? "" : "s"}`,
+      };
+    }),
+  clearSelection: () =>
+    set({
+      selectedClipId: undefined,
+      selectedClipIds: [],
+      commandMessage: "Selection cleared",
+    }),
+  quantizeSelectedClips: () =>
+    set((state) => {
+      const selected = new Set(state.selectedClipIds);
+      if (!selected.size) {
+        return { commandMessage: "No clips selected to quantize." };
+      }
+
+      const division = state.snapEnabled ? state.gridDivision : getSnapDivision("line");
+      return {
+        tracks: state.tracks.map((track) => ({
+          ...track,
+          clips: track.clips.map((clip) =>
+            selected.has(clip.id)
+              ? {
+                  ...clip,
+                  startTime: Math.max(0, snapTime(clip.startTime, state.bpm, true, division)),
+                }
+              : clip,
+          ),
+        })),
+        commandMessage: `Quantized ${selected.size} clip${selected.size === 1 ? "" : "s"}`,
+      };
+    }),
+  groupSelectedClips: () =>
+    set((state) => {
+      if (state.selectedClipIds.length < 2) {
+        return { commandMessage: "Select two or more clips to group." };
+      }
+
+      const groupId = createId("group");
+      const selected = new Set(state.selectedClipIds);
+      return {
+        tracks: state.tracks.map((track) => ({
+          ...track,
+          clips: track.clips.map((clip) =>
+            selected.has(clip.id) ? { ...clip, groupId } : clip,
+          ),
+        })),
+        commandMessage: `Grouped ${selected.size} clips`,
+      };
+    }),
+  ungroupSelectedClips: () =>
+    set((state) => {
+      const selected = new Set(state.selectedClipIds);
+      if (!selected.size) {
+        return { commandMessage: "No selected group to clear." };
+      }
+
+      return {
+        tracks: state.tracks.map((track) => ({
+          ...track,
+          clips: track.clips.map((clip) =>
+            selected.has(clip.id) ? { ...clip, groupId: undefined } : clip,
+          ),
+        })),
+        commandMessage: "Ungrouped selected clips",
+      };
+    }),
+  zoomToSelectedClips: () =>
+    set((state) => {
+      const selected = getClipsByIds(state.tracks, state.selectedClipIds);
+      if (!selected.length) {
+        return { commandMessage: "Select clips before zooming." };
+      }
+
+      const start = Math.min(...selected.map(({ clip }) => clip.startTime));
+      const end = Math.max(
+        ...selected.map(
+          ({ clip }) => clip.startTime + getClipTimelineDuration(state.bpm, clip),
+        ),
+      );
+      const span = Math.max(0.25, end - start);
+
+      return {
+        playhead: start,
+        zoomPxPerSecond: clamp(760 / span, 40, 320),
+        commandMessage: "Zoomed to selection",
+      };
+    }),
+  resetSelectedClipSource: () =>
+    set((state) => {
+      const selected = getClipsByIds(state.tracks, state.selectedClipIds);
+      if (!selected.length) {
+        return { commandMessage: "Select a clip to reset its source." };
+      }
+
+      const selectedIds = new Set(selected.map(({ clip }) => clip.id));
+      return {
+        tracks: state.tracks.map((track) => ({
+          ...track,
+          clips: track.clips.map((clip) => {
+            if (!selectedIds.has(clip.id)) {
+              return clip;
+            }
+
+            const asset = state.audioAssets[clip.audioBufferId];
+            return {
+              ...clip,
+              offset: 0,
+              duration: asset?.duration ?? clip.duration,
+            };
+          }),
+        })),
+        commandMessage: "Reset selected clip source",
+      };
+    }),
+  addTimeMarker: (time) =>
+    set((state) => {
+      const markerTime = Math.max(0, time ?? state.playhead);
+      const marker: TimeMarker = {
+        id: createId("marker"),
+        time: markerTime,
+        name: `Marker ${state.timeMarkers.length + 1}`,
+      };
+
+      return {
+        timeMarkers: [...state.timeMarkers, marker],
+        commandMessage: `Added ${marker.name}`,
+      };
+    }),
+  clearTimeMarkers: () =>
+    set({
+      timeMarkers: [],
+      commandMessage: "Cleared time markers",
+    }),
+  togglePerformanceMode: () =>
+    set((state) => ({
+      performanceMode: !state.performanceMode,
+      commandMessage: state.performanceMode
+        ? "Performance mode off"
+        : "Performance mode on",
+    })),
+  togglePlaylistDetached: () =>
+    set((state) => ({
+      playlistDetached: !state.playlistDetached,
+      commandMessage: state.playlistDetached
+        ? "Playlist attached"
+        : "Playlist detached",
+    })),
   addTrack: () =>
     set((state) => ({
       tracks: [...state.tracks, createDefaultTrack(state.tracks.length + 1)],
       selectedClipId: undefined,
+      selectedClipIds: [],
     })),
   updateTrack: (trackId, patch) =>
     set((state) => ({
@@ -215,18 +657,25 @@ export const useDawStore = create<DawStore>((set) => ({
       sampleRate: project.sampleRate || 44100,
       tracks: project.tracks?.length ? project.tracks : [createDefaultTrack(1)],
       audioAssets: project.audioAssets || {},
+      timeMarkers: project.timeMarkers || [],
       selectedClipId: undefined,
+      selectedClipIds: [],
       isPlaying: false,
       playhead: 0,
       snapEnabled: true,
       gridDivision: getSnapDivision("line"),
       playlistTool: "draw",
       playlistSnap: "line",
+      globalSnap: "line",
+      performanceMode: false,
+      playlistDetached: false,
+      commandMessage: "Project loaded",
     }),
   resetProject: () =>
     set({
       ...createDefaultProject(),
       selectedClipId: undefined,
+      selectedClipIds: [],
       isPlaying: false,
       playhead: 0,
       zoomPxPerSecond: 96,
@@ -234,5 +683,9 @@ export const useDawStore = create<DawStore>((set) => ({
       gridDivision: 2,
       playlistTool: "draw",
       playlistSnap: "line",
+      globalSnap: "line",
+      performanceMode: false,
+      playlistDetached: false,
+      commandMessage: "Project reset",
     }),
 }));

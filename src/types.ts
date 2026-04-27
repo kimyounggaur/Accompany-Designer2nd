@@ -1,5 +1,14 @@
 export type StretchMode = "none" | "resample";
-export type PlaylistTool = "draw" | "paint" | "delete" | "mute" | "play-selected";
+export type PlaylistTool =
+  | "draw"
+  | "paint"
+  | "delete"
+  | "mute"
+  | "slip"
+  | "slice"
+  | "select"
+  | "zoom"
+  | "play-selected";
 export type PlaylistSnap =
   | "main"
   | "line"
@@ -35,6 +44,8 @@ export interface Clip {
   gain: number;
   fadeIn: number;
   fadeOut: number;
+  muted?: boolean;
+  groupId?: string;
 }
 
 export interface Track {
@@ -66,4 +77,11 @@ export interface DawProject {
   sampleRate: number;
   tracks: Track[];
   audioAssets: Record<string, AudioAsset>;
+  timeMarkers: TimeMarker[];
+}
+
+export interface TimeMarker {
+  id: string;
+  time: number;
+  name: string;
 }

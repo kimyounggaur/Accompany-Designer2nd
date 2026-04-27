@@ -183,6 +183,14 @@ button {
   min-height: 0;
 }
 
+.workspace.detached {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workspace.detached .inspector {
+  display: none;
+}
+
 .playlist {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
@@ -276,10 +284,40 @@ button {
   box-shadow: 0 18px 38px rgba(0, 0, 0, 0.35);
 }
 
+.menu-dropdown {
+  width: 300px;
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  align-content: start;
+  gap: 5px;
+}
+
+.toolbar-dropdown-section {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.toolbar-dropdown-section:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.toolbar-dropdown-label {
+  padding: 5px 10px 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
 .toolbar-dropdown button {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
+  gap: 14px;
   height: 30px;
   padding: 0 10px;
   color: #eff8ef;
@@ -289,14 +327,33 @@ button {
   font-size: 12px;
 }
 
+.toolbar-dropdown button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-dropdown button small {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .toolbar-dropdown button:hover,
 .toolbar-dropdown button.selected {
   color: #101311;
   background: var(--mint);
 }
 
+.toolbar-dropdown button:hover small,
+.toolbar-dropdown button.selected small {
+  color: #183028;
+}
+
 .snap-dropdown {
-  min-width: 130px;
+  min-width: 150px;
 }
 
 .track-column {
@@ -421,6 +478,26 @@ button {
   font-weight: 800;
 }
 
+.ruler-marker {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  width: 1px;
+  height: 100%;
+  background: var(--mint);
+}
+
+.ruler-marker span {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  max-width: 84px;
+  color: #dfffee;
+  font-size: 10px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
 .lanes {
   position: relative;
   overflow: hidden;
@@ -465,6 +542,28 @@ button {
   clip-path: polygon(0 0, 100% 0, 50% 100%);
 }
 
+.time-marker {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+  width: 1px;
+  background: rgba(55, 217, 158, 0.6);
+  pointer-events: none;
+}
+
+.selection-box {
+  position: absolute;
+  z-index: 5;
+  border: 1px solid rgba(55, 217, 158, 0.9);
+  background: rgba(55, 217, 158, 0.13);
+  pointer-events: none;
+}
+
+.selection-box.zoom-box {
+  border-color: rgba(240, 180, 75, 0.95);
+  background: rgba(240, 180, 75, 0.13);
+}
+
 .clip {
   position: absolute;
   z-index: 2;
@@ -490,6 +589,31 @@ button {
   box-shadow:
     0 0 0 1px rgba(240, 180, 75, 0.38),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.clip.muted {
+  border-color: rgba(174, 184, 174, 0.35);
+  background:
+    linear-gradient(180deg, rgba(174, 184, 174, 0.1), rgba(174, 184, 174, 0.03)),
+    #1d2320;
+  opacity: 0.68;
+}
+
+.clip.grouped::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px dashed rgba(240, 180, 75, 0.7);
+  border-radius: 5px;
+  pointer-events: none;
+}
+
+.playlist.performance-mode .clip {
+  box-shadow: none;
+}
+
+.playlist.performance-mode .clip canvas {
+  opacity: 0.45;
 }
 
 .clip canvas {

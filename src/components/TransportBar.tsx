@@ -54,7 +54,15 @@ export function TransportBar({
       </div>
 
       <div className="transport-group">
-        <button className="icon-button primary" onClick={onPlayPause} title="Play/Pause">
+        <button
+          className="icon-button primary"
+          onClick={onPlayPause}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            onStop();
+          }}
+          title="Play/Pause"
+        >
           {isPlaying ? <Pause size={18} /> : <Play size={18} />}
         </button>
         <button className="icon-button" onClick={onStop} title="Stop">

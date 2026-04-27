@@ -86,6 +86,10 @@ class BrowserAudioEngine {
       const trackInput = this.createTrackInput(track);
 
       for (const clip of track.clips) {
+        if (clip.muted) {
+          continue;
+        }
+
         const buffer = this.buffers.get(clip.audioBufferId);
         if (!buffer) {
           continue;

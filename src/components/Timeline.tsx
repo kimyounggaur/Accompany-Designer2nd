@@ -1,25 +1,79 @@
 import { Plus } from "lucide-react";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useDawStore } from "../store/useDawStore";
-import { getBeatSeconds, getProjectDuration, snapTime } from "../utils/audioMath";
+import type { PlaylistTool } from "../types";
+import {
+  clamp,
+  getBeatSeconds,
+  getClipTimelineDuration,
+  getProjectDuration,
+  snapTime,
+} from "../utils/audioMath";
 import { ClipView } from "./ClipView";
 import { PlaylistToolbar } from "./PlaylistToolbar";
 
 const TRACK_HEIGHT = 116;
+const CLIP_TOP_OFFSET = 15;
+const CLIP_HEIGHT = 84;
+
+interface PointerPosition {
+  x: number;
+  y: number;
+  time: number;
+  trackId: string;
+  trackIndex: number;
+}
+
+interface DragBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface LanePointerSession {
+  mode: Extract<PlaylistTool, "draw" | "paint" | "select" | "zoom">;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  sourceClipId?: string;
+  clipId?: string;
+  lastPaintKey?: string;
+  additive?: boolean;
+}
+
+function makeBox(startX: number, startY: number, endX: number, endY: number): DragBox {
+  return {
+    left: Math.min(startX, endX),
+    top: Math.min(startY, endY),
+    width: Math.abs(endX - startX),
+    height: Math.abs(endY - startY),
+  };
+}
 
 export function Timeline() {
   const lanesRef = useRef<HTMLDivElement>(null);
+  const sessionRef = useRef<LanePointerSession | undefined>(undefined);
+  const [dragBox, setDragBox] = useState<DragBox | undefined>();
   const tracks = useDawStore((state) => state.tracks);
   const audioAssets = useDawStore((state) => state.audioAssets);
+  const timeMarkers = useDawStore((state) => state.timeMarkers);
   const bpm = useDawStore((state) => state.bpm);
   const playhead = useDawStore((state) => state.playhead);
   const zoomPxPerSecond = useDawStore((state) => state.zoomPxPerSecond);
   const snapEnabled = useDawStore((state) => state.snapEnabled);
   const gridDivision = useDawStore((state) => state.gridDivision);
+  const playlistTool = useDawStore((state) => state.playlistTool);
+  const selectedClipId = useDawStore((state) => state.selectedClipId);
+  const performanceMode = useDawStore((state) => state.performanceMode);
   const setPlayhead = useDawStore((state) => state.setPlayhead);
-  const selectClip = useDawStore((state) => state.selectClip);
+  const clearSelection = useDawStore((state) => state.clearSelection);
+  const setSelectedClips = useDawStore((state) => state.setSelectedClips);
+  const addClipFromSource = useDawStore((state) => state.addClipFromSource);
+  const moveClip = useDawStore((state) => state.moveClip);
   const addTrack = useDawStore((state) => state.addTrack);
   const updateTrack = useDawStore((state) => state.updateTrack);
+  const setZoom = useDawStore((state) => state.setZoom);
 
   const projectDuration = useMemo(
     () => getProjectDuration({ bpm, tracks }),
@@ -50,18 +104,202 @@ export function Timeline() {
   );
   const trackIds = useMemo(() => tracks.map((track) => track.id), [tracks]);
 
-  function seekFromPointer(clientX: number) {
+  function getPointerPosition(event: React.PointerEvent<HTMLElement>): PointerPosition | undefined {
     const rect = lanesRef.current?.getBoundingClientRect();
-    if (!rect) {
+    if (!rect || !tracks.length) {
+      return undefined;
+    }
+
+    const x = Math.max(0, event.clientX - rect.left);
+    const y = Math.max(0, event.clientY - rect.top);
+    const rawTime = x / zoomPxPerSecond;
+    const trackIndex = clamp(
+      Math.floor(y / TRACK_HEIGHT),
+      0,
+      Math.max(0, tracks.length - 1),
+    );
+    const trackId = tracks[trackIndex]?.id ?? tracks[0].id;
+
+    return {
+      x,
+      y,
+      time: snapTime(rawTime, bpm, snapEnabled && !event.altKey, gridDivision),
+      trackId,
+      trackIndex,
+    };
+  }
+
+  function getPaintKey(position: PointerPosition) {
+    const snapStep = snapEnabled ? beatSeconds / gridDivision : 0.25;
+    return `${position.trackId}:${Math.round(position.time / snapStep)}`;
+  }
+
+  function seekFromPointer(event: React.PointerEvent<HTMLElement>) {
+    const position = getPointerPosition(event);
+    if (!position) {
       return;
     }
 
-    const seconds = Math.max(0, (clientX - rect.left) / zoomPxPerSecond);
-    setPlayhead(snapTime(seconds, bpm, snapEnabled, gridDivision));
+    setPlayhead(position.time);
+  }
+
+  function getClipIdsInsideBox(box: DragBox) {
+    const boxRight = box.left + box.width;
+    const boxBottom = box.top + box.height;
+
+    return timelineClips
+      .filter(({ clip, trackIndex }) => {
+        const clipLeft = clip.startTime * zoomPxPerSecond;
+        const clipRight =
+          clipLeft + getClipTimelineDuration(bpm, clip) * zoomPxPerSecond;
+        const clipTop = trackIndex * TRACK_HEIGHT + CLIP_TOP_OFFSET;
+        const clipBottom = clipTop + CLIP_HEIGHT;
+
+        return (
+          clipLeft <= boxRight &&
+          clipRight >= box.left &&
+          clipTop <= boxBottom &&
+          clipBottom >= box.top
+        );
+      })
+      .map(({ clip }) => clip.id);
+  }
+
+  function beginLanePointer(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const position = getPointerPosition(event);
+    if (!position) {
+      return;
+    }
+
+    if (playlistTool === "draw" || playlistTool === "paint") {
+      event.preventDefault();
+      const sourceClipId = selectedClipId;
+      const clipId = addClipFromSource(sourceClipId, position.trackId, position.time);
+
+      if (!clipId) {
+        return;
+      }
+
+      sessionRef.current = {
+        mode: playlistTool,
+        pointerId: event.pointerId,
+        startX: position.x,
+        startY: position.y,
+        sourceClipId,
+        clipId,
+        lastPaintKey: getPaintKey(position),
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
+
+    if (playlistTool === "select" || event.ctrlKey || event.shiftKey) {
+      event.preventDefault();
+      if (!event.shiftKey && !event.ctrlKey) {
+        clearSelection();
+      }
+
+      sessionRef.current = {
+        mode: "select",
+        pointerId: event.pointerId,
+        startX: position.x,
+        startY: position.y,
+        additive: event.shiftKey || event.ctrlKey,
+      };
+      setDragBox(makeBox(position.x, position.y, position.x, position.y));
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
+
+    if (playlistTool === "zoom") {
+      event.preventDefault();
+      sessionRef.current = {
+        mode: "zoom",
+        pointerId: event.pointerId,
+        startX: position.x,
+        startY: position.y,
+      };
+      setDragBox(makeBox(position.x, position.y, position.x, position.y));
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
+
+    clearSelection();
+    seekFromPointer(event);
+  }
+
+  function updateLanePointer(event: React.PointerEvent<HTMLDivElement>) {
+    const session = sessionRef.current;
+    if (!session || session.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const position = getPointerPosition(event);
+    if (!position) {
+      return;
+    }
+
+    if (session.mode === "draw" && session.clipId) {
+      moveClip(session.clipId, position.trackId, { startTime: position.time });
+      return;
+    }
+
+    if (session.mode === "paint") {
+      const paintKey = getPaintKey(position);
+      if (paintKey !== session.lastPaintKey) {
+        addClipFromSource(session.sourceClipId, position.trackId, position.time);
+        session.lastPaintKey = paintKey;
+      }
+      return;
+    }
+
+    setDragBox(makeBox(session.startX, session.startY, position.x, position.y));
+  }
+
+  function endLanePointer(event: React.PointerEvent<HTMLDivElement>) {
+    const session = sessionRef.current;
+    if (!session || session.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const finalBox = dragBox;
+
+    if (finalBox && session.mode === "select") {
+      const selectedIds =
+        finalBox.width > 4 || finalBox.height > 4 ? getClipIdsInsideBox(finalBox) : [];
+      const currentIds = session.additive
+        ? useDawStore.getState().selectedClipIds
+        : [];
+      setSelectedClips([...currentIds, ...selectedIds]);
+    }
+
+    if (finalBox && session.mode === "zoom") {
+      if (finalBox.width > 8) {
+        const viewportWidth = lanesRef.current?.parentElement?.clientWidth ?? 760;
+        const startTime = finalBox.left / zoomPxPerSecond;
+        const endTime = (finalBox.left + finalBox.width) / zoomPxPerSecond;
+        const duration = Math.max(0.25, endTime - startTime);
+
+        setPlayhead(Math.max(0, startTime));
+        setZoom(viewportWidth / duration);
+      } else {
+        setZoom(zoomPxPerSecond + 24);
+      }
+    }
+
+    sessionRef.current = undefined;
+    setDragBox(undefined);
   }
 
   return (
-    <section className="playlist" aria-label="Playlist">
+    <section
+      className={`playlist ${performanceMode ? "performance-mode" : ""}`}
+      aria-label="Playlist"
+    >
       <PlaylistToolbar />
       <div className="track-column">
         <div className="ruler-corner">
@@ -119,6 +357,15 @@ export function Timeline() {
               {tick.label && <span>{tick.label}</span>}
             </div>
           ))}
+          {timeMarkers.map((marker) => (
+            <div
+              className="ruler-marker"
+              key={marker.id}
+              style={{ left: marker.time * zoomPxPerSecond }}
+            >
+              <span>{marker.name}</span>
+            </div>
+          ))}
         </div>
 
         <div
@@ -129,13 +376,21 @@ export function Timeline() {
             minHeight: tracks.length * TRACK_HEIGHT,
             backgroundSize: `${subdivisionWidth}px 100%`,
           }}
-          onPointerDown={(event) => {
-            if (event.target === event.currentTarget) {
-              selectClip(undefined);
-            }
-            seekFromPointer(event.clientX);
-          }}
+          onPointerDown={beginLanePointer}
+          onPointerMove={updateLanePointer}
+          onPointerUp={endLanePointer}
+          onPointerCancel={endLanePointer}
         >
+          {timeMarkers.map((marker) => (
+            <div
+              className="time-marker"
+              key={marker.id}
+              style={{
+                left: marker.time * zoomPxPerSecond,
+                height: tracks.length * TRACK_HEIGHT,
+              }}
+            />
+          ))}
           <div
             className="playhead"
             style={{
@@ -151,12 +406,6 @@ export function Timeline() {
                 height: TRACK_HEIGHT,
                 top: index * TRACK_HEIGHT,
               }}
-              onPointerDown={(event) => {
-                if (event.target === event.currentTarget) {
-                  selectClip(undefined);
-                }
-                seekFromPointer(event.clientX);
-              }}
             />
           ))}
           {timelineClips.map(({ clip, trackIndex }) => (
@@ -170,6 +419,12 @@ export function Timeline() {
               trackIds={trackIds}
             />
           ))}
+          {dragBox && (
+            <div
+              className={`selection-box ${playlistTool === "zoom" ? "zoom-box" : ""}`}
+              style={dragBox}
+            />
+          )}
         </div>
       </div>
     </section>
