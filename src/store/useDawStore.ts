@@ -1,5 +1,12 @@
 import { create } from "zustand";
-import type { AudioAsset, Clip, DawProject, Track } from "../types";
+import type {
+  AudioAsset,
+  Clip,
+  DawProject,
+  PlaylistSnap,
+  PlaylistTool,
+  Track,
+} from "../types";
 import { clamp, createId } from "../utils/audioMath";
 
 interface DawStore extends DawProject {
@@ -9,12 +16,16 @@ interface DawStore extends DawProject {
   zoomPxPerSecond: number;
   snapEnabled: boolean;
   gridDivision: number;
+  playlistTool: PlaylistTool;
+  playlistSnap: PlaylistSnap;
   setBpm: (bpm: number) => void;
   setProjectName: (name: string) => void;
   setPlayhead: (playhead: number) => void;
   setIsPlaying: (isPlaying: boolean) => void;
   setZoom: (zoomPxPerSecond: number) => void;
   setSnapEnabled: (enabled: boolean) => void;
+  setPlaylistTool: (tool: PlaylistTool) => void;
+  setPlaylistSnap: (snap: PlaylistSnap) => void;
   addAudioAsset: (asset: AudioAsset) => void;
   updateAudioAsset: (assetId: string, patch: Partial<AudioAsset>) => void;
   addClip: (trackId: string, clip: Clip) => void;
@@ -63,6 +74,18 @@ function createDefaultProject(): DawProject {
   };
 }
 
+function getSnapDivision(snap: PlaylistSnap) {
+  if (snap === "beat") {
+    return 1;
+  }
+
+  if (snap === "quarterBeat") {
+    return 4;
+  }
+
+  return 2;
+}
+
 export const useDawStore = create<DawStore>((set) => ({
   ...createDefaultProject(),
   selectedClipId: undefined,
@@ -71,13 +94,27 @@ export const useDawStore = create<DawStore>((set) => ({
   zoomPxPerSecond: 96,
   snapEnabled: true,
   gridDivision: 2,
+  playlistTool: "draw",
+  playlistSnap: "line",
   setBpm: (bpm) => set({ bpm: clamp(Number(bpm) || 120, 20, 300) }),
   setProjectName: (name) => set({ name }),
   setPlayhead: (playhead) => set({ playhead: Math.max(0, playhead) }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setZoom: (zoomPxPerSecond) =>
     set({ zoomPxPerSecond: clamp(zoomPxPerSecond, 40, 320) }),
-  setSnapEnabled: (snapEnabled) => set({ snapEnabled }),
+  setSnapEnabled: (snapEnabled) =>
+    set({
+      snapEnabled,
+      playlistSnap: snapEnabled ? "line" : "none",
+      gridDivision: snapEnabled ? getSnapDivision("line") : 2,
+    }),
+  setPlaylistTool: (playlistTool) => set({ playlistTool }),
+  setPlaylistSnap: (playlistSnap) =>
+    set({
+      playlistSnap,
+      snapEnabled: playlistSnap !== "none",
+      gridDivision: getSnapDivision(playlistSnap),
+    }),
   addAudioAsset: (asset) =>
     set((state) => ({
       audioAssets: {
@@ -181,6 +218,10 @@ export const useDawStore = create<DawStore>((set) => ({
       selectedClipId: undefined,
       isPlaying: false,
       playhead: 0,
+      snapEnabled: true,
+      gridDivision: getSnapDivision("line"),
+      playlistTool: "draw",
+      playlistSnap: "line",
     }),
   resetProject: () =>
     set({
@@ -191,5 +232,7 @@ export const useDawStore = create<DawStore>((set) => ({
       zoomPxPerSecond: 96,
       snapEnabled: true,
       gridDivision: 2,
+      playlistTool: "draw",
+      playlistSnap: "line",
     }),
 }));

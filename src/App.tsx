@@ -30,6 +30,7 @@ export default function App() {
   const importProject = useDawStore((state) => state.importProject);
   const deleteClip = useDawStore((state) => state.deleteClip);
   const selectedClipId = useDawStore((state) => state.selectedClipId);
+  const setPlaylistTool = useDawStore((state) => state.setPlaylistTool);
   const [status, setStatus] = useState("오디오 파일을 업로드하면 첫 트랙에 클립이 생성됩니다.");
   const animationRef = useRef<number | undefined>(undefined);
 
@@ -101,6 +102,19 @@ export default function App() {
         deleteClip(selectedClipId);
       }
 
+      const shortcut = event.key.toLowerCase();
+      if (shortcut === "p") {
+        setPlaylistTool("draw");
+      } else if (shortcut === "b") {
+        setPlaylistTool("paint");
+      } else if (shortcut === "d") {
+        setPlaylistTool("delete");
+      } else if (shortcut === "t") {
+        setPlaylistTool("mute");
+      } else if (shortcut === "y") {
+        setPlaylistTool("play-selected");
+      }
+
       if (event.code === "Space") {
         event.preventDefault();
         void handlePlayPause();
@@ -109,7 +123,7 @@ export default function App() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [deleteClip, selectedClipId]);
+  }, [deleteClip, selectedClipId, setPlaylistTool]);
 
   useEffect(() => {
     return () => audioEngine.stop();

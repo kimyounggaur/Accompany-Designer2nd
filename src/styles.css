@@ -186,12 +186,122 @@ button {
 .playlist {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   background: var(--surface-1);
 }
 
+.playlist-toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  background: #171c19;
+}
+
+.playlist-toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding-right: 8px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.playlist-toolbar-section:last-child {
+  border-right: 0;
+}
+
+.toolbar-menu-wrapper {
+  position: relative;
+}
+
+.playlist-tool-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 32px;
+  min-width: 36px;
+  padding: 0 7px;
+  color: #eff8ef;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.playlist-tool-button:hover,
+.playlist-tool-button.active {
+  border-color: rgba(55, 217, 158, 0.55);
+  background: #2d3832;
+}
+
+.playlist-tool-button.active {
+  box-shadow: inset 0 -2px 0 var(--mint);
+}
+
+.playlist-tool-button img {
+  width: 19px;
+  height: 19px;
+  object-fit: contain;
+  filter: invert(1) brightness(1.8);
+  opacity: 0.88;
+}
+
+.playlist-tool-button.snap-tool {
+  min-width: 92px;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.toolbar-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 10;
+  display: grid;
+  min-width: 180px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #101311;
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.35);
+}
+
+.toolbar-dropdown button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 30px;
+  padding: 0 10px;
+  color: #eff8ef;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.toolbar-dropdown button:hover,
+.toolbar-dropdown button.selected {
+  color: #101311;
+  background: var(--mint);
+}
+
+.snap-dropdown {
+  min-width: 130px;
+}
+
 .track-column {
+  grid-column: 1;
+  grid-row: 2;
   z-index: 4;
   border-right: 1px solid var(--line);
   background: #151916;
@@ -276,6 +386,8 @@ button {
 }
 
 .timeline-scroll {
+  grid-column: 2;
+  grid-row: 2;
   min-width: 0;
   min-height: 0;
   overflow: auto;
@@ -528,6 +640,7 @@ input[type="range"] {
   }
 
   .playlist {
+    grid-template-columns: 180px minmax(0, 1fr);
     min-height: 430px;
   }
 

@@ -3,6 +3,7 @@ import { useMemo, useRef } from "react";
 import { useDawStore } from "../store/useDawStore";
 import { getBeatSeconds, getProjectDuration, snapTime } from "../utils/audioMath";
 import { ClipView } from "./ClipView";
+import { PlaylistToolbar } from "./PlaylistToolbar";
 
 const TRACK_HEIGHT = 116;
 
@@ -61,6 +62,7 @@ export function Timeline() {
 
   return (
     <section className="playlist" aria-label="Playlist">
+      <PlaylistToolbar />
       <div className="track-column">
         <div className="ruler-corner">
           <span>Playlist</span>

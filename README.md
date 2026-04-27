@@ -15,6 +15,7 @@ npm run dev
 - AudioBuffer 기반 파형 피크 생성 및 Canvas 렌더링
 - 단일 트랙 Playlist UI
 - 트랙 추가
+- FL Studio 스타일 Playlist 핵심 툴바 UI
 - 클립 이동, 트랙 간 드래그 앤 드롭, 좌우 trim, 선택, 삭제
 - play, pause, stop, playhead 표시
 - 프로젝트 BPM 입력, snap grid, zoom

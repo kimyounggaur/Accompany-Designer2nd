@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 function run(command, args) {
@@ -16,11 +16,21 @@ function run(command, args) {
   }
 }
 
+function copyPagesAssets() {
+  const assetNames = readdirSync("dist/assets").filter(
+    (name) =>
+      name === "index.css" || name === "index.js" || name.startsWith("flicon_"),
+  );
+
+  mkdirSync("assets", { recursive: true });
+  for (const assetName of assetNames) {
+    copyFileSync(`dist/assets/${assetName}`, `assets/${assetName}`);
+  }
+}
+
 copyFileSync("source-index.html", "index.html");
 run(process.execPath, ["node_modules/typescript/bin/tsc", "--noEmit"]);
 run(process.execPath, ["node_modules/vite/bin/vite.js", "build", "--emptyOutDir=false"]);
 
-mkdirSync("assets", { recursive: true });
 copyFileSync("dist/index.html", "index.html");
-copyFileSync("dist/assets/index.css", "assets/index.css");
-copyFileSync("dist/assets/index.js", "assets/index.js");
+copyPagesAssets();

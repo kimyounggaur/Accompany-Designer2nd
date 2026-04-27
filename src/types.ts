@@ -1,4 +1,12 @@
 export type StretchMode = "none" | "resample";
+export type PlaylistTool = "draw" | "paint" | "delete" | "mute" | "play-selected";
+export type PlaylistSnap =
+  | "main"
+  | "line"
+  | "beat"
+  | "halfBeat"
+  | "quarterBeat"
+  | "none";
 
 export interface EqSettings {
   lowGain: number;
