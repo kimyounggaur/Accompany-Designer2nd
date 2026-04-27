@@ -317,16 +317,16 @@ export function Timeline() {
   return (
     <section
       className={`playlist ${performanceMode ? "performance-mode" : ""}`}
-      aria-label="Playlist"
+      aria-label="플레이리스트"
       style={playlistCursorStyle}
     >
       <PlaylistToolbar />
       <div className="track-column">
         <div className="ruler-corner">
-          <span>Playlist</span>
-          <button className="add-track-button" onClick={addTrack} title="Add track">
+          <span>플레이리스트</span>
+          <button className="add-track-button" onClick={addTrack} title="트랙 추가">
             <Plus size={15} />
-            <span>Track</span>
+            <span>트랙</span>
           </button>
         </div>
         {tracks.map((track) => (

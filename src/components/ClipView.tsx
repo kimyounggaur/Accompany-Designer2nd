@@ -280,7 +280,7 @@ export function ClipView({
       onPointerCancel={endDrag}
     >
       <button
-        aria-label="Trim clip start"
+        aria-label="클립 시작점 다듬기"
         className="trim-handle left"
         onPointerDown={(event) => beginTrim("trim-left", event)}
         onPointerMove={updateDrag}
@@ -290,10 +290,10 @@ export function ClipView({
       <canvas ref={canvasRef} />
       <div className="clip-label">
         <strong>{clip.name}</strong>
-        <span>{clip.muted ? "Muted" : `${playbackRate.toFixed(2)}x`}</span>
+        <span>{clip.muted ? "음소거" : `${playbackRate.toFixed(2)}x`}</span>
       </div>
       <button
-        aria-label="Trim clip end"
+        aria-label="클립 끝점 다듬기"
         className="trim-handle right"
         onPointerDown={(event) => beginTrim("trim-right", event)}
         onPointerMove={updateDrag}

@@ -47,7 +47,7 @@ export function TransportBar({
     <header className="transport">
       <div className="transport-group session-name">
         <input
-          aria-label="Project name"
+          aria-label="프로젝트 이름"
           value={projectName}
           onChange={(event) => setProjectName(event.target.value)}
         />
@@ -61,11 +61,11 @@ export function TransportBar({
             event.preventDefault();
             onStop();
           }}
-          title="Play/Pause"
+          title="재생/일시정지"
         >
           {isPlaying ? <Pause size={18} /> : <Play size={18} />}
         </button>
-        <button className="icon-button" onClick={onStop} title="Stop">
+        <button className="icon-button" onClick={onStop} title="정지">
           <Square size={17} />
         </button>
         <output className="time-display">{formatTime(playhead)}</output>
@@ -73,7 +73,7 @@ export function TransportBar({
 
       <div className="transport-group">
         <label className="number-control">
-          <span>BPM</span>
+          <span>템포</span>
           <input
             type="number"
             min={20}
@@ -85,7 +85,7 @@ export function TransportBar({
         <button
           className={`icon-button ${snapEnabled ? "active" : ""}`}
           onClick={() => setSnapEnabled(!snapEnabled)}
-          title="Snap"
+          title="스냅"
         >
           <Magnet size={17} />
         </button>
@@ -95,14 +95,14 @@ export function TransportBar({
         <button
           className="icon-button"
           onClick={() => setZoom(zoomPxPerSecond - 16)}
-          title="Zoom out"
+          title="축소"
         >
           <ZoomOut size={17} />
         </button>
         <button
           className="icon-button"
           onClick={() => setZoom(zoomPxPerSecond + 16)}
-          title="Zoom in"
+          title="확대"
         >
           <ZoomIn size={17} />
         </button>
@@ -125,10 +125,10 @@ export function TransportBar({
         <button
           className="text-button"
           onClick={() => fileInputRef.current?.click()}
-          title="Upload audio"
+          title="오디오 업로드"
         >
           <Upload size={17} />
-          <span>Upload</span>
+          <span>업로드</span>
         </button>
 
         <input
@@ -147,11 +147,11 @@ export function TransportBar({
         <button
           className="icon-button"
           onClick={() => projectInputRef.current?.click()}
-          title="Load project"
+          title="프로젝트 불러오기"
         >
           <FolderOpen size={17} />
         </button>
-        <button className="icon-button" onClick={onSaveProject} title="Save project">
+        <button className="icon-button" onClick={onSaveProject} title="프로젝트 저장">
           <Save size={17} />
         </button>
       </div>

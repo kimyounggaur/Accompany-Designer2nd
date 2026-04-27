@@ -80,12 +80,12 @@ export function Inspector() {
     <aside className="inspector">
       <section className="panel">
         <div className="panel-heading">
-          <h2>Clip</h2>
+          <h2>클립</h2>
           {selectedClip && (
             <button
               className="icon-button danger"
               onClick={() => deleteClip(selectedClip.id)}
-              title="Delete clip"
+              title="클립 삭제"
             >
               <Trash2 size={16} />
             </button>
@@ -95,7 +95,7 @@ export function Inspector() {
         {selectedClip ? (
           <div className="control-stack">
             <label>
-              Name
+              이름
               <input
                 value={selectedClip.name}
                 onChange={(event) =>
@@ -104,7 +104,7 @@ export function Inspector() {
               />
             </label>
             <label>
-              Source BPM
+              소스 BPM
               <input
                 min={20}
                 max={300}
@@ -118,7 +118,7 @@ export function Inspector() {
               />
             </label>
             <label>
-              Gain
+              게인
               <input
                 max={2}
                 min={0}
@@ -136,10 +136,10 @@ export function Inspector() {
                 updateClip(selectedClip.id, { muted: !selectedClip.muted })
               }
             >
-              Clip Mute
+              클립 음소거
             </button>
             <label>
-              Stretch
+              스트레치
               <select
                 value={selectedClip.stretchMode}
                 onChange={(event) =>
@@ -148,22 +148,22 @@ export function Inspector() {
                   })
                 }
               >
-                <option value="resample">Realtime playbackRate</option>
-                <option value="none">Original speed</option>
+                <option value="resample">실시간 재생 속도</option>
+                <option value="none">원본 속도</option>
               </select>
             </label>
             <div className="mini-readout">
-              <span>Rate {getClipPlaybackRate(bpm, selectedClip).toFixed(2)}x</span>
+              <span>속도 {getClipPlaybackRate(bpm, selectedClip).toFixed(2)}x</span>
               <span>
-                Length {getClipTimelineDuration(bpm, selectedClip).toFixed(2)}s
+                길이 {getClipTimelineDuration(bpm, selectedClip).toFixed(2)}초
               </span>
             </div>
             <button className="text-button full" onClick={detectClipBpm}>
-              Detect BPM
+              BPM 감지
             </button>
             {asset && (
               <p className="asset-meta">
-                {asset.fileName} · {asset.duration.toFixed(2)}s · {asset.sampleRate}Hz
+                {asset.fileName} · {asset.duration.toFixed(2)}초 · {asset.sampleRate}Hz
               </p>
             )}
             {bpmStatus && <p className="asset-meta">{bpmStatus}</p>}
@@ -174,10 +174,10 @@ export function Inspector() {
       </section>
 
       <section className="panel">
-        <h2>Track Mix</h2>
+        <h2>트랙 믹스</h2>
         <div className="control-stack">
           <label>
-            Volume
+            볼륨
             <input
               max={1}
               min={0}
@@ -190,7 +190,7 @@ export function Inspector() {
             />
           </label>
           <label>
-            Pan
+            팬
             <input
               max={1}
               min={-1}
@@ -209,7 +209,7 @@ export function Inspector() {
                 updateTrack(selectedTrack.id, { muted: !selectedTrack.muted })
               }
             >
-              Mute
+              음소거
             </button>
             <button
               className={selectedTrack.solo ? "toggle active" : "toggle"}
@@ -217,17 +217,17 @@ export function Inspector() {
                 updateTrack(selectedTrack.id, { solo: !selectedTrack.solo })
               }
             >
-              Solo
+              솔로
             </button>
           </div>
         </div>
       </section>
 
       <section className="panel">
-        <h2>EQ</h2>
+        <h2>이퀄라이저</h2>
         <div className="control-stack">
           <label>
-            Low
+            저음
             <input
               max={12}
               min={-12}
@@ -238,7 +238,7 @@ export function Inspector() {
             />
           </label>
           <label>
-            Mid
+            중음
             <input
               max={12}
               min={-12}
@@ -249,7 +249,7 @@ export function Inspector() {
             />
           </label>
           <label>
-            High
+            고음
             <input
               max={12}
               min={-12}
@@ -264,19 +264,19 @@ export function Inspector() {
 
       <section className="panel">
         <div className="panel-heading">
-          <h2>Compressor</h2>
+          <h2>컴프레서</h2>
           <button
             className={selectedTrack.compressor.enabled ? "toggle active" : "toggle"}
             onClick={() =>
               updateCompressor({ enabled: !selectedTrack.compressor.enabled })
             }
           >
-            On
+            켜기
           </button>
         </div>
         <div className="control-stack">
           <label>
-            Threshold
+            임계값
             <input
               max={0}
               min={-60}
@@ -289,7 +289,7 @@ export function Inspector() {
             />
           </label>
           <label>
-            Ratio
+            비율
             <input
               max={20}
               min={1}
@@ -302,7 +302,7 @@ export function Inspector() {
             />
           </label>
           <label>
-            Attack
+            어택
             <input
               max={1}
               min={0.001}
@@ -315,7 +315,7 @@ export function Inspector() {
             />
           </label>
           <label>
-            Release
+            릴리즈
             <input
               max={1}
               min={0.01}

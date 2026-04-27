@@ -12,29 +12,29 @@ const toolButtons: Array<{
   shortcut: string;
   icon: string;
 }> = [
-  { tool: "draw", label: "Draw", shortcut: "P", icon: playlistToolIcons.draw },
-  { tool: "paint", label: "Paint", shortcut: "B", icon: playlistToolIcons.paint },
-  { tool: "delete", label: "Delete", shortcut: "D", icon: playlistToolIcons.delete },
-  { tool: "mute", label: "Mute", shortcut: "T", icon: playlistToolIcons.mute },
-  { tool: "slip", label: "Slip Edit", shortcut: "S", icon: playlistToolIcons.slip },
-  { tool: "slice", label: "Slice", shortcut: "C", icon: playlistToolIcons.slice },
-  { tool: "select", label: "Select", shortcut: "E", icon: playlistToolIcons.select },
-  { tool: "zoom", label: "Zoom", shortcut: "Z", icon: playlistToolIcons.zoom },
+  { tool: "draw", label: "그리기", shortcut: "P", icon: playlistToolIcons.draw },
+  { tool: "paint", label: "페인트", shortcut: "B", icon: playlistToolIcons.paint },
+  { tool: "delete", label: "삭제", shortcut: "D", icon: playlistToolIcons.delete },
+  { tool: "mute", label: "음소거", shortcut: "T", icon: playlistToolIcons.mute },
+  { tool: "slip", label: "슬립 편집", shortcut: "S", icon: playlistToolIcons.slip },
+  { tool: "slice", label: "자르기", shortcut: "C", icon: playlistToolIcons.slice },
+  { tool: "select", label: "선택", shortcut: "E", icon: playlistToolIcons.select },
+  { tool: "zoom", label: "확대/축소", shortcut: "Z", icon: playlistToolIcons.zoom },
   {
     tool: "play-selected",
-    label: "Play Selected",
+    label: "선택 재생",
     shortcut: "Y",
     icon: playlistToolIcons["play-selected"],
   },
 ];
 
 const snapOptions: Array<{ value: PlaylistSnap; label: string }> = [
-  { value: "main", label: "Main" },
-  { value: "line", label: "Line" },
-  { value: "beat", label: "Beat" },
-  { value: "halfBeat", label: "1/2 beat" },
-  { value: "quarterBeat", label: "1/4 beat" },
-  { value: "none", label: "None" },
+  { value: "main", label: "메인" },
+  { value: "line", label: "라인" },
+  { value: "beat", label: "박" },
+  { value: "halfBeat", label: "1/2박" },
+  { value: "quarterBeat", label: "1/4박" },
+  { value: "none", label: "없음" },
 ];
 
 const globalSnapOptions = snapOptions.filter(
@@ -93,9 +93,9 @@ export function PlaylistToolbar() {
       snapOptions.find((option) => option.value === playlistSnap)?.label ?? "Line";
     const globalLabel =
       globalSnapOptions.find((option) => option.value === globalSnap)?.label ??
-      "Line";
+      "라인";
 
-    return playlistSnap === "main" ? `Main: ${globalLabel}` : localLabel;
+    return playlistSnap === "main" ? `메인: ${globalLabel}` : localLabel;
   }, [globalSnap, playlistSnap]);
 
   const goToSelectionStart = () => {
@@ -113,101 +113,101 @@ export function PlaylistToolbar() {
 
   const commandSections: CommandSection[] = [
     {
-      title: "Edit",
+      title: "편집",
       items: [
-        { label: "Quantize selected", shortcut: "Alt+Q", action: quantizeSelectedClips },
-        { label: "Delete selected", shortcut: "Delete", action: deleteSelectedClips },
+        { label: "선택 항목 퀀타이즈", shortcut: "Alt+Q", action: quantizeSelectedClips },
+        { label: "선택 항목 삭제", shortcut: "Delete", action: deleteSelectedClips },
       ],
     },
     {
-      title: "Tools",
+      title: "도구",
       items: [
-        { label: "Draw", shortcut: "P", selected: playlistTool === "draw", action: () => setPlaylistTool("draw") },
-        { label: "Paint", shortcut: "B", selected: playlistTool === "paint", action: () => setPlaylistTool("paint") },
-        { label: "Delete", shortcut: "D", selected: playlistTool === "delete", action: () => setPlaylistTool("delete") },
-        { label: "Mute", shortcut: "T", selected: playlistTool === "mute", action: () => setPlaylistTool("mute") },
-        { label: "Slip Edit", shortcut: "S", selected: playlistTool === "slip", action: () => setPlaylistTool("slip") },
-        { label: "Slice", shortcut: "C", selected: playlistTool === "slice", action: () => setPlaylistTool("slice") },
-        { label: "Select", shortcut: "E", selected: playlistTool === "select", action: () => setPlaylistTool("select") },
-        { label: "Zoom", shortcut: "Z", selected: playlistTool === "zoom", action: () => setPlaylistTool("zoom") },
-        { label: "Play selected", shortcut: "Y", selected: playlistTool === "play-selected", action: () => setPlaylistTool("play-selected") },
+        { label: "그리기", shortcut: "P", selected: playlistTool === "draw", action: () => setPlaylistTool("draw") },
+        { label: "페인트", shortcut: "B", selected: playlistTool === "paint", action: () => setPlaylistTool("paint") },
+        { label: "삭제", shortcut: "D", selected: playlistTool === "delete", action: () => setPlaylistTool("delete") },
+        { label: "음소거", shortcut: "T", selected: playlistTool === "mute", action: () => setPlaylistTool("mute") },
+        { label: "슬립 편집", shortcut: "S", selected: playlistTool === "slip", action: () => setPlaylistTool("slip") },
+        { label: "자르기", shortcut: "C", selected: playlistTool === "slice", action: () => setPlaylistTool("slice") },
+        { label: "선택", shortcut: "E", selected: playlistTool === "select", action: () => setPlaylistTool("select") },
+        { label: "확대/축소", shortcut: "Z", selected: playlistTool === "zoom", action: () => setPlaylistTool("zoom") },
+        { label: "선택 재생", shortcut: "Y", selected: playlistTool === "play-selected", action: () => setPlaylistTool("play-selected") },
       ],
     },
     {
-      title: "View",
+      title: "보기",
       items: [
-        { label: "Zoom in", shortcut: "Page Up", action: () => setZoom(useDawStore.getState().zoomPxPerSecond + 16) },
-        { label: "Zoom out", shortcut: "Page Down", action: () => setZoom(useDawStore.getState().zoomPxPerSecond - 16) },
-        { label: "Quick zoom 1", shortcut: "Shift+1", action: () => setZoom(72) },
-        { label: "Quick zoom 2", shortcut: "Shift+2", action: () => setZoom(132) },
-        { label: "Quick zoom 3", shortcut: "Shift+3", action: () => setZoom(220) },
+        { label: "확대", shortcut: "Page Up", action: () => setZoom(useDawStore.getState().zoomPxPerSecond + 16) },
+        { label: "축소", shortcut: "Page Down", action: () => setZoom(useDawStore.getState().zoomPxPerSecond - 16) },
+        { label: "빠른 줌 1", shortcut: "Shift+1", action: () => setZoom(72) },
+        { label: "빠른 줌 2", shortcut: "Shift+2", action: () => setZoom(132) },
+        { label: "빠른 줌 3", shortcut: "Shift+3", action: () => setZoom(220) },
       ],
     },
     {
-      title: "Snap",
+      title: "스냅",
       items: [
         {
-          label: "Open snap selector",
+          label: "스냅 선택 열기",
           action: () => setOpenMenu("snap"),
         },
       ],
     },
     {
-      title: "Select",
+      title: "선택",
       items: [
-        { label: "Select all clips", action: selectAllClips },
-        { label: "Clear selection", action: clearSelection },
+        { label: "모든 클립 선택", action: selectAllClips },
+        { label: "선택 해제", action: clearSelection },
       ],
     },
     {
-      title: "Group",
+      title: "그룹",
       items: [
-        { label: "Group selected", action: groupSelectedClips },
-        { label: "Ungroup selected", action: ungroupSelectedClips },
+        { label: "선택 항목 그룹화", action: groupSelectedClips },
+        { label: "선택 항목 그룹 해제", action: ungroupSelectedClips },
       ],
     },
     {
-      title: "Zoom",
+      title: "확대/축소",
       items: [
-        { label: "On selection", shortcut: "Shift+5", action: zoomToSelectedClips },
-        { label: "Zoom out", shortcut: "Shift+4", action: () => setZoom(72) },
+        { label: "선택 항목으로 확대", shortcut: "Shift+5", action: zoomToSelectedClips },
+        { label: "축소", shortcut: "Shift+4", action: () => setZoom(72) },
       ],
     },
     {
-      title: "Time Marker",
+      title: "타임 마커",
       items: [
-        { label: "Add at playhead", action: () => addTimeMarker(playhead) },
-        { label: "Clear markers", action: clearTimeMarkers },
+        { label: "재생 헤드에 추가", action: () => addTimeMarker(playhead) },
+        { label: "마커 지우기", action: clearTimeMarkers },
       ],
     },
     {
-      title: "Clip Source",
+      title: "클립 소스",
       items: [
-        { label: "Reset selected source", action: resetSelectedClipSource },
+        { label: "선택 소스 초기화", action: resetSelectedClipSource },
       ],
     },
     {
-      title: "Performance Mode",
+      title: "퍼포먼스 모드",
       items: [
         {
-          label: performanceMode ? "Disable performance mode" : "Enable performance mode",
+          label: performanceMode ? "퍼포먼스 모드 끄기" : "퍼포먼스 모드 켜기",
           selected: performanceMode,
           action: togglePerformanceMode,
         },
       ],
     },
     {
-      title: "Playhead",
+      title: "재생 헤드",
       items: [
-        { label: "Go to song start", action: () => setPlayhead(0) },
-        { label: "Go to selection start", action: goToSelectionStart },
+        { label: "곡 처음으로 이동", action: () => setPlayhead(0) },
+        { label: "선택 시작점으로 이동", action: goToSelectionStart },
       ],
     },
     {
-      title: "Detach",
+      title: "분리",
       items: [
         {
-          label: playlistDetached ? "Attach playlist" : "Detach playlist",
+          label: playlistDetached ? "플레이리스트 붙이기" : "플레이리스트 분리",
           selected: playlistDetached,
           action: togglePlaylistDetached,
         },
@@ -217,19 +217,19 @@ export function PlaylistToolbar() {
 
   function runCommand(command: CommandItem) {
     command.action();
-    if (command.label !== "Open snap selector") {
+    if (command.label !== "스냅 선택 열기") {
       setOpenMenu(undefined);
     }
   }
 
   return (
-    <div className="playlist-toolbar" aria-label="Playlist tools">
+    <div className="playlist-toolbar" aria-label="플레이리스트 도구">
       <div className="playlist-toolbar-section">
         <div className="toolbar-menu-wrapper">
           <button
             className={`playlist-tool-button ${openMenu === "menu" ? "active" : ""}`}
             onClick={() => setOpenMenu(openMenu === "menu" ? undefined : "menu")}
-            title="Playlist Menu"
+            title="플레이리스트 메뉴"
           >
             <img alt="" src={menuIcon} />
             <ChevronDown size={13} />
@@ -261,7 +261,7 @@ export function PlaylistToolbar() {
               playlistSnap !== "none" ? "active" : ""
             }`}
             onClick={() => setOpenMenu(openMenu === "snap" ? undefined : "snap")}
-            title={`Snap: ${selectedSnapLabel}`}
+            title={`스냅: ${selectedSnapLabel}`}
           >
             <img alt="" src={snapIcon} />
             <span>{selectedSnapLabel}</span>
@@ -269,7 +269,7 @@ export function PlaylistToolbar() {
           </button>
           {openMenu === "snap" && (
             <div className="toolbar-dropdown snap-dropdown">
-              <div className="toolbar-dropdown-label">Local Snap</div>
+              <div className="toolbar-dropdown-label">로컬 스냅</div>
               {snapOptions.map((option) => (
                 <button
                   className={playlistSnap === option.value ? "selected" : ""}
@@ -282,7 +282,7 @@ export function PlaylistToolbar() {
                   <span>{option.label}</span>
                 </button>
               ))}
-              <div className="toolbar-dropdown-label">Global Snap</div>
+              <div className="toolbar-dropdown-label">글로벌 스냅</div>
               {globalSnapOptions.map((option) => (
                 <button
                   className={globalSnap === option.value ? "selected" : ""}

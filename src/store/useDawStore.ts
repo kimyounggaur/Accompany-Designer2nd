@@ -17,6 +17,27 @@ import {
   snapTime,
 } from "../utils/audioMath";
 
+const playlistToolLabels: Record<PlaylistTool, string> = {
+  draw: "그리기",
+  paint: "페인트",
+  delete: "삭제",
+  mute: "음소거",
+  slip: "슬립 편집",
+  slice: "자르기",
+  select: "선택",
+  zoom: "확대/축소",
+  "play-selected": "선택 재생",
+};
+
+const snapLabels: Record<PlaylistSnap, string> = {
+  main: "메인",
+  line: "라인",
+  beat: "박",
+  halfBeat: "1/2박",
+  quarterBeat: "1/4박",
+  none: "없음",
+};
+
 interface DawStore extends DawProject {
   selectedClipId?: string;
   selectedClipIds: string[];
@@ -78,7 +99,7 @@ interface DawStore extends DawProject {
 function createDefaultTrack(index = 1): Track {
   return {
     id: createId("track"),
-    name: `Track ${index}`,
+    name: `트랙 ${index}`,
     volume: 0.86,
     pan: 0,
     muted: false,
@@ -102,7 +123,7 @@ function createDefaultTrack(index = 1): Track {
 function createDefaultProject(): DawProject {
   return {
     id: createId("project"),
-    name: "Untitled Session",
+    name: "새 세션",
     bpm: 120,
     sampleRate: 44100,
     tracks: [createDefaultTrack(1)],
@@ -157,7 +178,7 @@ function cloneClipFromSource(
     return {
       ...selection.clip,
       id: createId("clip"),
-      name: `${selection.clip.name} copy`,
+      name: `${selection.clip.name} 복사본`,
       trackId,
       startTime,
       muted: false,
@@ -217,7 +238,7 @@ export const useDawStore = create<DawStore>((set) => ({
   setPlaylistTool: (playlistTool) =>
     set({
       playlistTool,
-      commandMessage: `${playlistTool.replace("-", " ")} tool selected`,
+      commandMessage: `${playlistToolLabels[playlistTool]} 도구 선택됨`,
     }),
   setPlaylistSnap: (playlistSnap) =>
     set((state) => {
@@ -226,7 +247,7 @@ export const useDawStore = create<DawStore>((set) => ({
         playlistSnap,
         snapEnabled: effectiveSnap !== "none",
         gridDivision: getSnapDivision(effectiveSnap),
-        commandMessage: `Snap set to ${playlistSnap}`,
+        commandMessage: `스냅: ${snapLabels[playlistSnap]}`,
       };
     }),
   setGlobalSnap: (globalSnap) =>
@@ -236,7 +257,7 @@ export const useDawStore = create<DawStore>((set) => ({
         globalSnap,
         snapEnabled: effectiveSnap !== "none",
         gridDivision: getSnapDivision(effectiveSnap),
-        commandMessage: `Global snap set to ${globalSnap}`,
+        commandMessage: `글로벌 스냅: ${snapLabels[globalSnap]}`,
       };
     }),
   setCommandMessage: (commandMessage) => set({ commandMessage }),
@@ -266,7 +287,7 @@ export const useDawStore = create<DawStore>((set) => ({
       ),
       selectedClipId: clip.id,
       selectedClipIds: [clip.id],
-      commandMessage: `Added ${clip.name}`,
+      commandMessage: `${clip.name} 추가됨`,
     })),
   addClipFromSource: (sourceClipId, trackId, startTime) => {
     let createdId: string | undefined;
@@ -279,7 +300,7 @@ export const useDawStore = create<DawStore>((set) => ({
 
       if (!clip) {
         return {
-          commandMessage: "Upload audio or select a clip before drawing.",
+          commandMessage: "오디오를 업로드하거나 클립을 선택한 뒤 그리세요.",
         };
       }
 
@@ -292,7 +313,7 @@ export const useDawStore = create<DawStore>((set) => ({
         ),
         selectedClipId: clip.id,
         selectedClipIds: [clip.id],
-        commandMessage: `Added ${clip.name}`,
+        commandMessage: `${clip.name} 추가됨`,
       };
     });
 
@@ -355,13 +376,13 @@ export const useDawStore = create<DawStore>((set) => ({
       })),
       selectedClipId: state.selectedClipId === clipId ? undefined : state.selectedClipId,
       selectedClipIds: state.selectedClipIds.filter((selectedId) => selectedId !== clipId),
-      commandMessage: "Deleted clip",
+      commandMessage: "클립 삭제됨",
     })),
   deleteSelectedClips: () =>
     set((state) => {
       const deleting = new Set(state.selectedClipIds);
       if (!deleting.size) {
-        return { commandMessage: "No clips selected." };
+        return { commandMessage: "선택된 클립이 없습니다." };
       }
 
       return {
@@ -371,7 +392,7 @@ export const useDawStore = create<DawStore>((set) => ({
         })),
         selectedClipId: undefined,
         selectedClipIds: [],
-        commandMessage: `Deleted ${deleting.size} clip${deleting.size === 1 ? "" : "s"}`,
+        commandMessage: `클립 ${deleting.size}개 삭제됨`,
       };
     }),
   toggleClipMuted: (clipId) =>
@@ -386,13 +407,13 @@ export const useDawStore = create<DawStore>((set) => ({
       selectedClipIds: state.selectedClipIds.includes(clipId)
         ? state.selectedClipIds
         : [clipId],
-      commandMessage: "Toggled clip mute",
+      commandMessage: "클립 음소거 전환됨",
     })),
   sliceClipAt: (clipId, splitTime) =>
     set((state) => {
       const selection = findClip(state.tracks, clipId);
       if (!selection) {
-        return { commandMessage: "Select a clip to slice." };
+        return { commandMessage: "자를 클립을 선택하세요." };
       }
 
       const { clip } = selection;
@@ -401,7 +422,7 @@ export const useDawStore = create<DawStore>((set) => ({
       const localTime = splitTime - clip.startTime;
 
       if (localTime <= 0.03 || localTime >= timelineDuration - 0.03) {
-        return { commandMessage: "Slice inside the clip body." };
+        return { commandMessage: "클립 내부를 클릭해 자르세요." };
       }
 
       const sourceDelta = localTime * playbackRate;
@@ -410,7 +431,7 @@ export const useDawStore = create<DawStore>((set) => ({
       const rightClip: Clip = {
         ...clip,
         id: createId("clip"),
-        name: `${clip.name} slice`,
+        name: `${clip.name} 조각`,
         startTime: clip.startTime + leftDuration / playbackRate,
         offset: clip.offset + leftDuration,
         duration: rightDuration,
@@ -432,7 +453,7 @@ export const useDawStore = create<DawStore>((set) => ({
         ),
         selectedClipId: rightClip.id,
         selectedClipIds: [rightClip.id],
-        commandMessage: "Sliced clip",
+        commandMessage: "클립 자르기 완료",
       };
     }),
   selectClip: (clipId, additive = false) =>
@@ -468,8 +489,8 @@ export const useDawStore = create<DawStore>((set) => ({
         selectedClipId: selectedClipIds[selectedClipIds.length - 1],
         selectedClipIds,
         commandMessage: selectedClipIds.length
-          ? `Selected ${selectedClipIds.length} clip${selectedClipIds.length === 1 ? "" : "s"}`
-          : "Selection cleared",
+          ? `클립 ${selectedClipIds.length}개 선택됨`
+          : "선택 해제됨",
       };
     }),
   toggleClipSelection: (clipId) =>
@@ -489,20 +510,20 @@ export const useDawStore = create<DawStore>((set) => ({
       return {
         selectedClipId: selectedClipIds[selectedClipIds.length - 1],
         selectedClipIds,
-        commandMessage: `Selected ${selectedClipIds.length} clip${selectedClipIds.length === 1 ? "" : "s"}`,
+        commandMessage: `클립 ${selectedClipIds.length}개 선택됨`,
       };
     }),
   clearSelection: () =>
     set({
       selectedClipId: undefined,
       selectedClipIds: [],
-      commandMessage: "Selection cleared",
+      commandMessage: "선택 해제됨",
     }),
   quantizeSelectedClips: () =>
     set((state) => {
       const selected = new Set(state.selectedClipIds);
       if (!selected.size) {
-        return { commandMessage: "No clips selected to quantize." };
+        return { commandMessage: "퀀타이즈할 클립이 없습니다." };
       }
 
       const division = state.snapEnabled ? state.gridDivision : getSnapDivision("line");
@@ -518,13 +539,13 @@ export const useDawStore = create<DawStore>((set) => ({
               : clip,
           ),
         })),
-        commandMessage: `Quantized ${selected.size} clip${selected.size === 1 ? "" : "s"}`,
+        commandMessage: `클립 ${selected.size}개 퀀타이즈됨`,
       };
     }),
   groupSelectedClips: () =>
     set((state) => {
       if (state.selectedClipIds.length < 2) {
-        return { commandMessage: "Select two or more clips to group." };
+        return { commandMessage: "그룹화할 클립을 두 개 이상 선택하세요." };
       }
 
       const groupId = createId("group");
@@ -536,14 +557,14 @@ export const useDawStore = create<DawStore>((set) => ({
             selected.has(clip.id) ? { ...clip, groupId } : clip,
           ),
         })),
-        commandMessage: `Grouped ${selected.size} clips`,
+        commandMessage: `클립 ${selected.size}개 그룹화됨`,
       };
     }),
   ungroupSelectedClips: () =>
     set((state) => {
       const selected = new Set(state.selectedClipIds);
       if (!selected.size) {
-        return { commandMessage: "No selected group to clear." };
+        return { commandMessage: "해제할 선택 그룹이 없습니다." };
       }
 
       return {
@@ -553,14 +574,14 @@ export const useDawStore = create<DawStore>((set) => ({
             selected.has(clip.id) ? { ...clip, groupId: undefined } : clip,
           ),
         })),
-        commandMessage: "Ungrouped selected clips",
+        commandMessage: "선택 클립 그룹 해제됨",
       };
     }),
   zoomToSelectedClips: () =>
     set((state) => {
       const selected = getClipsByIds(state.tracks, state.selectedClipIds);
       if (!selected.length) {
-        return { commandMessage: "Select clips before zooming." };
+        return { commandMessage: "확대할 클립을 선택하세요." };
       }
 
       const start = Math.min(...selected.map(({ clip }) => clip.startTime));
@@ -574,14 +595,14 @@ export const useDawStore = create<DawStore>((set) => ({
       return {
         playhead: start,
         zoomPxPerSecond: clamp(760 / span, 40, 320),
-        commandMessage: "Zoomed to selection",
+        commandMessage: "선택 항목으로 확대됨",
       };
     }),
   resetSelectedClipSource: () =>
     set((state) => {
       const selected = getClipsByIds(state.tracks, state.selectedClipIds);
       if (!selected.length) {
-        return { commandMessage: "Select a clip to reset its source." };
+        return { commandMessage: "소스를 초기화할 클립을 선택하세요." };
       }
 
       const selectedIds = new Set(selected.map(({ clip }) => clip.id));
@@ -601,7 +622,7 @@ export const useDawStore = create<DawStore>((set) => ({
             };
           }),
         })),
-        commandMessage: "Reset selected clip source",
+        commandMessage: "선택 클립 소스 초기화됨",
       };
     }),
   addTimeMarker: (time) =>
@@ -610,32 +631,32 @@ export const useDawStore = create<DawStore>((set) => ({
       const marker: TimeMarker = {
         id: createId("marker"),
         time: markerTime,
-        name: `Marker ${state.timeMarkers.length + 1}`,
+        name: `마커 ${state.timeMarkers.length + 1}`,
       };
 
       return {
         timeMarkers: [...state.timeMarkers, marker],
-        commandMessage: `Added ${marker.name}`,
+        commandMessage: `${marker.name} 추가됨`,
       };
     }),
   clearTimeMarkers: () =>
     set({
       timeMarkers: [],
-      commandMessage: "Cleared time markers",
+      commandMessage: "타임 마커 삭제됨",
     }),
   togglePerformanceMode: () =>
     set((state) => ({
       performanceMode: !state.performanceMode,
       commandMessage: state.performanceMode
-        ? "Performance mode off"
-        : "Performance mode on",
+        ? "퍼포먼스 모드 꺼짐"
+        : "퍼포먼스 모드 켜짐",
     })),
   togglePlaylistDetached: () =>
     set((state) => ({
       playlistDetached: !state.playlistDetached,
       commandMessage: state.playlistDetached
-        ? "Playlist attached"
-        : "Playlist detached",
+        ? "플레이리스트 붙음"
+        : "플레이리스트 분리됨",
     })),
   addTrack: () =>
     set((state) => ({
@@ -652,7 +673,7 @@ export const useDawStore = create<DawStore>((set) => ({
   importProject: (project) =>
     set({
       id: project.id || createId("project"),
-      name: project.name || "Imported Session",
+      name: project.name || "가져온 세션",
       bpm: clamp(project.bpm || 120, 20, 300),
       sampleRate: project.sampleRate || 44100,
       tracks: project.tracks?.length ? project.tracks : [createDefaultTrack(1)],
@@ -669,7 +690,7 @@ export const useDawStore = create<DawStore>((set) => ({
       globalSnap: "line",
       performanceMode: false,
       playlistDetached: false,
-      commandMessage: "Project loaded",
+      commandMessage: "프로젝트 불러옴",
     }),
   resetProject: () =>
     set({
@@ -686,6 +707,6 @@ export const useDawStore = create<DawStore>((set) => ({
       globalSnap: "line",
       performanceMode: false,
       playlistDetached: false,
-      commandMessage: "Project reset",
+      commandMessage: "프로젝트 초기화됨",
     }),
 }));
