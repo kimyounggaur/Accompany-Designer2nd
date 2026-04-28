@@ -1,0 +1,20 @@
+
+> browser-daw-mvp@0.1.0 dev
+> vite --host 127.0.0.1
+
+
+  [32m[1mVITE[22m v5.4.11[39m  [2mready in [0m[1m316[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5173[22m/Accompany-Designer2nd/[39m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+[2mPM 11:04:51[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
+[2mPM 11:04:55[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
+[2mPM 11:07:03[22m [36m[1m[vite][22m[39m changed tsconfig file detected: D:\256G 1\01 레슨디자이너-반응형 웹사이트\반주 디자이너02\반주 디자이너02\tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2mPM 11:07:03[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
+[2mPM 11:07:03[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msource-index.html[22m
+[2mPM 11:07:03[22m [36m[1m[vite][22m[39m [32mvite.config.ts changed, restarting server...[39m
+[2mPM 11:07:03[22m [36m[1m[vite][22m[39m server restarted.
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5173[22m/[39m
+[2mPM 11:09:15[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mindex.html[22m
+[2mPM 11:09:15[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msource-index.html[22m
