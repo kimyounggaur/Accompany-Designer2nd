@@ -49,25 +49,28 @@ export function Inspector() {
     color: string;
     onChange: (v: number) => void;
   }) {
-    const dragging = useRef(false);
+    const containerRef = useRef<HTMLDivElement>(null);
     const startY = useRef(0);
     const startVal = useRef(0);
 
-    const onPointerDown = useCallback((e: React.PointerEvent) => {
-      dragging.current = true;
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
       startY.current = e.clientY;
       startVal.current = value;
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    }, [value]);
 
-    const onPointerMove = useCallback((e: React.PointerEvent) => {
-      if (!dragging.current) return;
-      const delta = (startY.current - e.clientY) * 0.25;
-      const next = Math.max(-12, Math.min(12, startVal.current + delta));
-      onChange(Math.round(next * 2) / 2);
-    }, [onChange]);
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        const delta = (startY.current - moveEvent.clientY) * 0.15;
+        const next = Math.max(-12, Math.min(12, startVal.current + delta));
+        onChange(Math.round(next * 2) / 2);
+      };
 
-    const onPointerUp = useCallback(() => { dragging.current = false; }, []);
+      const handleMouseUp = () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }, [value, onChange]);
 
     const angle = (value / 12) * 135;
     const rad = (angle - 90) * (Math.PI / 180);
@@ -76,14 +79,12 @@ export function Inspector() {
     const ty = cy + r * Math.sin(rad);
 
     return (
-      <div className="eq-band" style={{ background: color }}>
+      <div className="eq-band" style={{ background: color }} ref={containerRef}>
         <svg
           className="eq-knob"
           viewBox="0 0 64 64"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          style={{ cursor: "ns-resize", touchAction: "none" }}
+          onMouseDown={handleMouseDown}
+          style={{ cursor: "ns-resize", touchAction: "none", userSelect: "none" }}
         >
           <circle cx={cx} cy={cy} r={28} fill="#2a2a2a" />
           <circle cx={cx} cy={cy} r={22} fill="#3a3a3a" />
