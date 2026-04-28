@@ -97,6 +97,85 @@ export function Inspector() {
     );
   }
 
+  function CompKnob({
+    label, sub, value, min, max, onChange,
+  }: {
+    label: string; sub: string; value: number;
+    min: number; max: number; onChange: (v: number) => void;
+  }) {
+    const startY = useRef(0);
+    const startVal = useRef(0);
+
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+      startY.current = e.clientY;
+      startVal.current = value;
+      const range = max - min;
+      const handleMouseMove = (ev: MouseEvent) => {
+        const delta = (startY.current - ev.clientY) * (range / 200);
+        const next = Math.max(min, Math.min(max, startVal.current + delta));
+        onChange(Math.round(next * 100) / 100);
+      };
+      const handleMouseUp = () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }, [value, min, max, onChange]);
+
+    const norm = (value - min) / (max - min);
+    const angle = -135 + norm * 270;
+    const tickAngles = [-135, -90, -45, 0, 45, 90, 135];
+
+    return (
+      <div className="comp-knob-wrap">
+        <svg
+          className="comp-knob-svg"
+          viewBox="0 0 80 80"
+          onMouseDown={handleMouseDown}
+          style={{ cursor: "ns-resize", userSelect: "none" }}
+        >
+          {/* 틱 마크 */}
+          {tickAngles.map((a, i) => {
+            const r1 = 37, r2 = 33;
+            const rad = (a - 90) * Math.PI / 180;
+            return (
+              <line
+                key={i}
+                x1={40 + r1 * Math.cos(rad)} y1={40 + r1 * Math.sin(rad)}
+                x2={40 + r2 * Math.cos(rad)} y2={40 + r2 * Math.sin(rad)}
+                stroke="#888" strokeWidth="1.5" strokeLinecap="round"
+              />
+            );
+          })}
+          {/* 노브 본체 */}
+          <circle cx="40" cy="40" r="28" fill="url(#compKnobGrad)" />
+          <circle cx="40" cy="40" r="24" fill="#1a1a1a" />
+          <circle cx="40" cy="40" r="22" fill="#222" />
+          {/* 지시선 */}
+          {(() => {
+            const rad = (angle - 90) * Math.PI / 180;
+            return (
+              <line
+                x1="40" y1="40"
+                x2={40 + 17 * Math.cos(rad)} y2={40 + 17 * Math.sin(rad)}
+                stroke="#ddd" strokeWidth="2.5" strokeLinecap="round"
+              />
+            );
+          })()}
+          <defs>
+            <radialGradient id="compKnobGrad" cx="40%" cy="35%" r="60%" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#555" />
+              <stop offset="100%" stopColor="#1c1c1c" />
+            </radialGradient>
+          </defs>
+        </svg>
+        <span className="comp-knob-label">{label}</span>
+        <span className="comp-knob-sub">{sub}</span>
+      </div>
+    );
+  }
+
   function updateCompressor(patch: Partial<CompressorSettings>) {
     updateTrack(selectedTrack.id, {
       compressor: {
@@ -306,71 +385,85 @@ export function Inspector() {
         </div>
       </section>
 
-      <section className="panel">
-        <div className="panel-heading">
-          <h2>컴프레서</h2>
-          <button
-            className={selectedTrack.compressor.enabled ? "toggle active" : "toggle"}
-            onClick={() =>
-              updateCompressor({ enabled: !selectedTrack.compressor.enabled })
-            }
-          >
-            켜기
-          </button>
-        </div>
-        <div className="control-stack">
-          <label>
-            임계값
-            <input
-              max={0}
-              min={-60}
-              step={1}
-              type="range"
-              value={selectedTrack.compressor.threshold}
-              onChange={(event) =>
-                updateCompressor({ threshold: Number(event.target.value) })
-              }
-            />
-          </label>
-          <label>
-            비율
-            <input
-              max={20}
-              min={1}
-              step={0.5}
-              type="range"
-              value={selectedTrack.compressor.ratio}
-              onChange={(event) =>
-                updateCompressor({ ratio: Number(event.target.value) })
-              }
-            />
-          </label>
-          <label>
-            어택
-            <input
-              max={1}
-              min={0.001}
-              step={0.001}
-              type="range"
-              value={selectedTrack.compressor.attack}
-              onChange={(event) =>
-                updateCompressor({ attack: Number(event.target.value) })
-              }
-            />
-          </label>
-          <label>
-            릴리즈
-            <input
-              max={1}
-              min={0.01}
-              step={0.01}
-              type="range"
-              value={selectedTrack.compressor.release}
-              onChange={(event) =>
-                updateCompressor({ release: Number(event.target.value) })
-              }
-            />
-          </label>
+      <section className="panel comp-panel">
+        <div className="comp-rack">
+          {/* 상단 VU 미터 */}
+          <div className="comp-vu-row">
+            <span className="comp-title">COMPRESSOR</span>
+            <div className="comp-vu-meter">
+              <div className="comp-vu-scale">
+                {["20","15","10","7","5","3","1","0"].map(v => (
+                  <span key={v}>{v}</span>
+                ))}
+              </div>
+              <div className="comp-vu-needle-wrap">
+                <div
+                  className="comp-vu-needle"
+                  style={{
+                    transform: `rotate(${selectedTrack.compressor.enabled
+                      ? Math.min(80, Math.max(-80, ((selectedTrack.compressor.threshold + 60) / 60) * -80))
+                      : -80}deg)`
+                  }}
+                />
+              </div>
+              <div className="comp-vu-label">DB GAIN REDUCTION</div>
+            </div>
+            <button
+              className={`comp-power-btn ${selectedTrack.compressor.enabled ? "on" : ""}`}
+              onClick={() => updateCompressor({ enabled: !selectedTrack.compressor.enabled })}
+            >
+              <span className="comp-power-ring">
+                <span className="comp-power-dot" />
+              </span>
+              <span className="comp-power-label">{selectedTrack.compressor.enabled ? "ON" : "OFF"}</span>
+            </button>
+          </div>
+
+          {/* 하단 노브 열 */}
+          <div className="comp-knobs-row">
+            {(
+              [
+                {
+                  label: "THRESHOLD",
+                  sub: `${selectedTrack.compressor.threshold}dB`,
+                  value: selectedTrack.compressor.threshold,
+                  min: -60, max: 0,
+                  onChange: (v: number) => updateCompressor({ threshold: v }),
+                },
+                {
+                  label: "RATIO",
+                  sub: `${selectedTrack.compressor.ratio}:1`,
+                  value: selectedTrack.compressor.ratio,
+                  min: 1, max: 20,
+                  onChange: (v: number) => updateCompressor({ ratio: v }),
+                },
+                {
+                  label: "ATTACK",
+                  sub: `${Math.round(selectedTrack.compressor.attack * 1000)}ms`,
+                  value: selectedTrack.compressor.attack,
+                  min: 0.001, max: 1,
+                  onChange: (v: number) => updateCompressor({ attack: v }),
+                },
+                {
+                  label: "RELEASE",
+                  sub: `${Math.round(selectedTrack.compressor.release * 1000)}ms`,
+                  value: selectedTrack.compressor.release,
+                  min: 0.01, max: 1,
+                  onChange: (v: number) => updateCompressor({ release: v }),
+                },
+              ] as const
+            ).map(({ label, sub, value, min, max, onChange }) => (
+              <CompKnob
+                key={label}
+                label={label}
+                sub={sub}
+                value={value}
+                min={min}
+                max={max}
+                onChange={onChange}
+              />
+            ))}
+          </div>
         </div>
       </section>
     </aside>
