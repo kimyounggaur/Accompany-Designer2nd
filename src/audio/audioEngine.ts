@@ -13,6 +13,7 @@ interface DecodedAudio {
 class BrowserAudioEngine {
   private context?: AudioContext;
   private master?: GainNode;
+  private analyser?: AnalyserNode;
   private buffers = new Map<string, AudioBuffer>();
   private sources: AudioBufferSourceNode[] = [];
   private startedAt = 0;
@@ -28,6 +29,10 @@ class BrowserAudioEngine {
       this.context = new AudioContextCtor();
       this.master = this.context.createGain();
       this.master.gain.value = 0.92;
+      this.analyser = this.context.createAnalyser();
+      this.analyser.fftSize = 2048;
+      this.analyser.smoothingTimeConstant = 0.8;
+      this.master.connect(this.analyser);
       this.master.connect(this.context.destination);
     }
 
@@ -61,6 +66,10 @@ class BrowserAudioEngine {
 
   getBuffer(assetId: string) {
     return this.buffers.get(assetId);
+  }
+
+  getAnalyser(): AnalyserNode | undefined {
+    return this.analyser;
   }
 
   async play(project: DawProject, playhead: number) {

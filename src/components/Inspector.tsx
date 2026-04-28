@@ -1,8 +1,9 @@
 import { Trash2 } from "lucide-react";
-import { useMemo, useState, useRef, useCallback } from "react";
+import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import { estimateBpm } from "../audio/bpmDetector";
 import { audioEngine } from "../audio/audioEngine";
 import { useDawStore } from "../store/useDawStore";
+import { SpectrumAnalyzer } from "./SpectrumAnalyzer";
 import type { CompressorSettings, EqSettings } from "../types";
 import {
   findClip,
@@ -12,6 +13,7 @@ import {
 
 export function Inspector() {
   const [bpmStatus, setBpmStatus] = useState("");
+  const [analyserNode, setAnalyserNode] = useState<AnalyserNode | undefined>(undefined);
   const tracks = useDawStore((state) => state.tracks);
   const audioAssets = useDawStore((state) => state.audioAssets);
   const selectedClipId = useDawStore((state) => state.selectedClipId);
@@ -20,6 +22,20 @@ export function Inspector() {
   const updateTrack = useDawStore((state) => state.updateTrack);
   const updateAudioAsset = useDawStore((state) => state.updateAudioAsset);
   const deleteClip = useDawStore((state) => state.deleteClip);
+
+  // AnalyserNode를 AudioContext 초기화 후 연결
+  useEffect(() => {
+    const tryGetAnalyser = () => {
+      const node = audioEngine.getAnalyser();
+      if (node) {
+        setAnalyserNode(node);
+      } else {
+        // AudioContext가 아직 초기화 안 됐으면 잠시 후 재시도
+        setTimeout(tryGetAnalyser, 500);
+      }
+    };
+    tryGetAnalyser();
+  }, []);
 
   const selection = useMemo(
     () => findClip(tracks, selectedClipId),
@@ -580,6 +596,10 @@ export function Inspector() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section className="panel spec-panel">
+        <SpectrumAnalyzer analyser={analyserNode} />
       </section>
     </aside>
   );
