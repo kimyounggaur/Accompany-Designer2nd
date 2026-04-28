@@ -97,6 +97,119 @@ export function Inspector() {
     );
   }
 
+  function TraxKnob({
+    label, value, min, max, displayVal, large = false, onChange,
+  }: {
+    label: string; value: number; min: number; max: number;
+    displayVal: string; large?: boolean; onChange: (v: number) => void;
+  }) {
+    const startY = useRef(0);
+    const startVal = useRef(0);
+
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+      startY.current = e.clientY;
+      startVal.current = value;
+      const range = max - min;
+      const handleMouseMove = (ev: MouseEvent) => {
+        const delta = (startY.current - ev.clientY) * (range / 180);
+        onChange(Math.max(min, Math.min(max, startVal.current + delta)));
+      };
+      const handleMouseUp = () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }, [value, min, max, onChange]);
+
+    const norm = (value - min) / (max - min);
+    const startAngle = -135;
+    const endAngle = 135;
+    const angle = startAngle + norm * (endAngle - startAngle);
+
+    const size = large ? 80 : 64;
+    const cx = size / 2, cy = size / 2;
+    const tickR = large ? 36 : 28;
+    const knobR = large ? 26 : 20;
+    const innerR = large ? 22 : 17;
+    const indicatorR = large ? 18 : 14;
+
+    // 점선 아크 (T-RackS 스타일 흰 점선)
+    const arcR = large ? 34 : 27;
+    const toRad = (deg: number) => (deg - 90) * Math.PI / 180;
+    const arcStart = toRad(startAngle);
+    const arcEnd = toRad(endAngle);
+    const arcX1 = cx + arcR * Math.cos(arcStart);
+    const arcY1 = cy + arcR * Math.sin(arcStart);
+    const arcX2 = cx + arcR * Math.cos(arcEnd);
+    const arcY2 = cy + arcR * Math.sin(arcEnd);
+
+    // 틱 마크 개수
+    const ticks = large ? 13 : 11;
+    const tickAngles = Array.from({ length: ticks }, (_, i) =>
+      startAngle + (i / (ticks - 1)) * 270
+    );
+
+    // 인디케이터 선 (오렌지 스트라이프)
+    const indRad = toRad(angle);
+    const ix = cx + indicatorR * Math.cos(indRad);
+    const iy = cy + indicatorR * Math.sin(indRad);
+
+    return (
+      <div className={`trax-knob-wrap ${large ? "large" : ""}`}>
+        <svg
+          width={size} height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          onMouseDown={handleMouseDown}
+          style={{ cursor: "ns-resize", userSelect: "none", display: "block" }}
+        >
+          {/* 틱 마크 */}
+          {tickAngles.map((a, i) => {
+            const r1 = tickR, r2 = tickR - (large ? 5 : 4);
+            const rad = toRad(a);
+            const isActive = i / (ticks - 1) <= norm;
+            return (
+              <line key={i}
+                x1={cx + r1 * Math.cos(rad)} y1={cy + r1 * Math.sin(rad)}
+                x2={cx + r2 * Math.cos(rad)} y2={cy + r2 * Math.sin(rad)}
+                stroke={isActive ? "#f5a623" : "#5a4a2a"}
+                strokeWidth={large ? "2" : "1.5"} strokeLinecap="round"
+              />
+            );
+          })}
+          {/* 점선 아크 */}
+          <path
+            d={`M ${arcX1} ${arcY1} A ${arcR} ${arcR} 0 1 1 ${arcX2} ${arcY2}`}
+            fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1"
+            strokeDasharray="2 3" strokeLinecap="round"
+          />
+          {/* 노브 그라디언트 정의 */}
+          <defs>
+            <radialGradient id={`traxGrad_${label}`} cx="40%" cy="30%" r="65%" gradientUnits="userSpaceOnUse"
+              x1="0" y1="0" x2={size} y2={size}>
+              <stop offset="0%" stopColor="#4a3a1a" />
+              <stop offset="50%" stopColor="#1a1510" />
+              <stop offset="100%" stopColor="#0d0b08" />
+            </radialGradient>
+          </defs>
+          {/* 노브 테두리 */}
+          <circle cx={cx} cy={cy} r={knobR + 2} fill="#5a4a20" />
+          {/* 노브 본체 */}
+          <circle cx={cx} cy={cy} r={knobR} fill={`url(#traxGrad_${label})`} />
+          <circle cx={cx} cy={cy} r={innerR} fill="#0f0d09" />
+          {/* 오렌지 인디케이터 선 (T-RackS 스트라이프) */}
+          <line
+            x1={cx} y1={cy} x2={ix} y2={iy}
+            stroke="#f5a623" strokeWidth={large ? "3" : "2.5"} strokeLinecap="round"
+          />
+          <circle cx={ix} cy={iy} r={large ? 2 : 1.5} fill="#f5a623" />
+        </svg>
+        <span className="trax-knob-label">{label}</span>
+        <span className="trax-knob-val">{displayVal}</span>
+      </div>
+    );
+  }
+
   function CompKnob({
     label, sub, value, min, max, onChange,
   }: {
@@ -311,52 +424,54 @@ export function Inspector() {
         )}
       </section>
 
-      <section className="panel">
-        <h2>트랙 믹스</h2>
-        <div className="control-stack">
-          <label>
-            볼륨
-            <input
-              max={1}
-              min={0}
-              step={0.01}
-              type="range"
+      <section className="panel trax-panel">
+        <div className="trax-rack">
+          {/* 헤더 */}
+          <div className="trax-header">
+            <span className="trax-brand">TRACK MIX</span>
+            <div className="trax-toggles">
+              <div className="trax-toggle-group">
+                <button
+                  className={`trax-switch ${selectedTrack.muted ? "on danger" : ""}`}
+                  onClick={() => updateTrack(selectedTrack.id, { muted: !selectedTrack.muted })}
+                >
+                  <span className="trax-switch-lever" />
+                </button>
+                <span className="trax-switch-label">MUTE</span>
+              </div>
+              <div className="trax-toggle-group">
+                <button
+                  className={`trax-switch ${selectedTrack.solo ? "on solo" : ""}`}
+                  onClick={() => updateTrack(selectedTrack.id, { solo: !selectedTrack.solo })}
+                >
+                  <span className="trax-switch-lever" />
+                </button>
+                <span className="trax-switch-label">SOLO</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 노브 영역 */}
+          <div className="trax-knobs">
+            <TraxKnob
+              label="VOLUME"
               value={selectedTrack.volume}
-              onChange={(event) =>
-                updateTrack(selectedTrack.id, { volume: Number(event.target.value) })
-              }
+              min={0} max={1}
+              displayVal={`${Math.round(selectedTrack.volume * 100)}%`}
+              large
+              onChange={(v) => updateTrack(selectedTrack.id, { volume: v })}
             />
-          </label>
-          <label>
-            팬
-            <input
-              max={1}
-              min={-1}
-              step={0.01}
-              type="range"
+            <TraxKnob
+              label="PAN"
               value={selectedTrack.pan}
-              onChange={(event) =>
-                updateTrack(selectedTrack.id, { pan: Number(event.target.value) })
+              min={-1} max={1}
+              displayVal={
+                selectedTrack.pan === 0 ? "C"
+                : selectedTrack.pan > 0 ? `R${Math.round(selectedTrack.pan * 100)}`
+                : `L${Math.round(Math.abs(selectedTrack.pan) * 100)}`
               }
+              onChange={(v) => updateTrack(selectedTrack.id, { pan: Math.round(v * 100) / 100 })}
             />
-          </label>
-          <div className="button-row">
-            <button
-              className={selectedTrack.muted ? "toggle active danger" : "toggle"}
-              onClick={() =>
-                updateTrack(selectedTrack.id, { muted: !selectedTrack.muted })
-              }
-            >
-              음소거
-            </button>
-            <button
-              className={selectedTrack.solo ? "toggle active" : "toggle"}
-              onClick={() =>
-                updateTrack(selectedTrack.id, { solo: !selectedTrack.solo })
-              }
-            >
-              솔로
-            </button>
           </div>
         </div>
       </section>

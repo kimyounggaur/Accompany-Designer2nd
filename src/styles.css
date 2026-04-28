@@ -801,6 +801,124 @@ input[type="range"] {
   background: var(--mint);
 }
 
+/* T-RackS Style Track Mix Panel */
+.trax-panel {
+  padding: 0;
+  overflow: hidden;
+  border-color: #8a6a20;
+}
+
+.trax-rack {
+  background: linear-gradient(160deg, #e8920a 0%, #d4800a 40%, #b86c08 100%);
+  border-radius: 7px;
+}
+
+.trax-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid rgba(0,0,0,0.2);
+}
+
+.trax-brand {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  color: rgba(0,0,0,0.55);
+  text-transform: uppercase;
+}
+
+.trax-toggles {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.trax-toggle-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.trax-switch {
+  width: 20px;
+  height: 34px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #2a2010 0%, #1a1508 100%);
+  border: 1px solid #0a0805;
+  cursor: pointer;
+  position: relative;
+  padding: 0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.trax-switch-lever {
+  display: block;
+  width: 16px;
+  height: 12px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #888 0%, #555 100%);
+  position: absolute;
+  left: 2px;
+  bottom: 4px;
+  transition: bottom 0.1s, background 0.15s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+.trax-switch.on .trax-switch-lever {
+  bottom: 18px;
+}
+
+.trax-switch.on.danger .trax-switch-lever {
+  background: linear-gradient(180deg, #f26d65 0%, #c0392b 100%);
+  box-shadow: 0 0 6px rgba(242,109,101,0.5);
+}
+
+.trax-switch.on.solo .trax-switch-lever {
+  background: linear-gradient(180deg, #f5a623 0%, #d4800a 100%);
+  box-shadow: 0 0 6px rgba(245,166,35,0.5);
+}
+
+.trax-switch-label {
+  font-size: 7px;
+  font-weight: 900;
+  color: rgba(0,0,0,0.5);
+  letter-spacing: 0.08em;
+}
+
+.trax-knobs {
+  display: flex;
+  justify-content: space-around;
+  align-items: flex-end;
+  padding: 12px 8px 14px;
+}
+
+.trax-knob-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.trax-knob-label {
+  font-size: 9px;
+  font-weight: 900;
+  color: rgba(0,0,0,0.55);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.trax-knob-val {
+  font-size: 10px;
+  font-weight: 800;
+  color: rgba(0,0,0,0.7);
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+  text-align: center;
+}
+
 /* Compressor Rack Panel */
 .comp-panel {
   padding: 0;
