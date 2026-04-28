@@ -405,9 +405,27 @@ button {
   display: grid;
   align-content: center;
   gap: 10px;
-  height: 116px;
   padding: 13px;
   border-bottom: 1px solid var(--line-soft);
+  position: relative;
+  /* height는 JS에서 동적으로 설정 */
+}
+
+.track-resize-handle {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  cursor: ns-resize;
+  background: transparent;
+  transition: background 0.15s;
+  z-index: 5;
+}
+
+.track-resize-handle:hover {
+  background: var(--mint);
+  opacity: 0.5;
 }
 
 .track-header input:not([type="range"]) {
