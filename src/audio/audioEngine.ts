@@ -16,6 +16,8 @@ class BrowserAudioEngine {
   private analyser?: AnalyserNode;
   private buffers = new Map<string, AudioBuffer>();
   private sources: AudioBufferSourceNode[] = [];
+  // 매 play마다 생성되는 트랙 체인 출력 노드를 추적해 stop() 시 완전 해제
+  private trackOutputs: GainNode[] = [];
   private startedAt = 0;
   private playheadAtStart = 0;
   private playing = false;
@@ -74,12 +76,7 @@ class BrowserAudioEngine {
 
   async play(project: DawProject, playhead: number) {
     const context = await this.ensureContext();
-    this.stop();
-
-    if (!this.master) {
-      this.master = context.createGain();
-      this.master.connect(context.destination);
-    }
+    this.stop(); // 이전 체인 완전 해제 후 재생 시작
 
     this.startedAt = context.currentTime;
     this.playheadAtStart = playhead;
@@ -149,8 +146,18 @@ class BrowserAudioEngine {
       }
       source.disconnect();
     }
-
     this.sources = [];
+
+    // 트랙 처리 체인(EQ·컴프레서·팬)을 master에서 완전히 해제
+    for (const output of this.trackOutputs) {
+      try {
+        output.disconnect();
+      } catch {
+        // ignore
+      }
+    }
+    this.trackOutputs = [];
+
     this.playing = false;
   }
 
@@ -210,6 +217,9 @@ class BrowserAudioEngine {
 
     pan.connect(output);
     output.connect(this.master!);
+
+    // stop() 시 master에서 분리할 수 있도록 추적
+    this.trackOutputs.push(output);
 
     return input;
   }
