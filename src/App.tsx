@@ -28,6 +28,7 @@ export default function App() {
   const setPlayhead = useDawStore((state) => state.setPlayhead);
   const addAudioAsset = useDawStore((state) => state.addAudioAsset);
   const addClip = useDawStore((state) => state.addClip);
+  const addTrack = useDawStore((state) => state.addTrack);
   const importProject = useDawStore((state) => state.importProject);
   const deleteSelectedClips = useDawStore((state) => state.deleteSelectedClips);
   const selectedClipIds = useDawStore((state) => state.selectedClipIds);
@@ -239,23 +240,33 @@ export default function App() {
 
   async function handleFiles(files: FileList | File[]) {
     const fileArray = Array.from(files);
-    if (!fileArray.length) {
-      return;
-    }
+    if (!fileArray.length) return;
 
-    setStatus("오디오를 디코딩하고 파형을 만드는 중입니다...");
+    setStatus(`${fileArray.length}개 파일 디코딩 중...`);
 
-    for (const file of fileArray) {
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
       try {
         const { asset } = await audioEngine.decodeFile(file);
+
+        // 매번 최신 state를 읽어 트랙/플레이헤드 정보 반영
         const state = useDawStore.getState();
-        const targetTrack = state.tracks[0];
+        const startTime = state.playhead;
+
+        // 첫 번째 파일은 트랙 0 재사용, 이후 파일은 새 트랙 생성
+        let targetTrack = state.tracks[i];
+        if (!targetTrack) {
+          addTrack();
+          // addTrack은 동기 zustand set이지만 state 스냅샷은 즉시 반영됨
+          targetTrack = useDawStore.getState().tracks[i];
+        }
+
         const clip: Clip = {
           id: createId("clip"),
           audioBufferId: asset.id,
           name: asset.fileName,
           trackId: targetTrack.id,
-          startTime: state.playhead,
+          startTime,
           offset: 0,
           duration: asset.duration,
           sourceBpm: state.bpm,
@@ -268,10 +279,18 @@ export default function App() {
 
         addAudioAsset(asset);
         addClip(targetTrack.id, clip);
-        setStatus(`${asset.fileName} 업로드 완료`);
+        setStatus(
+          fileArray.length > 1
+            ? `(${i + 1}/${fileArray.length}) ${asset.fileName} 완료`
+            : `${asset.fileName} 업로드 완료`,
+        );
       } catch (error) {
         setStatus(`${file.name} 디코딩 실패: ${(error as Error).message}`);
       }
+    }
+
+    if (fileArray.length > 1) {
+      setStatus(`${fileArray.length}개 파일 업로드 완료`);
     }
   }
 
