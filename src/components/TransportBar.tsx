@@ -1,6 +1,7 @@
 import {
   Circle,
   FolderOpen,
+  Headphones,
   Magnet,
   Pause,
   Play,
@@ -10,7 +11,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDawStore } from "../store/useDawStore";
 import { findClip, formatTime, getClipPlaybackRate } from "../utils/audioMath";
 
@@ -50,6 +51,14 @@ export function TransportBar({
   const tracks = useDawStore((state) => state.tracks);
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const updateClip = useDawStore((state) => state.updateClip);
+  const recording = useDawStore((state) => state.recording);
+  const setRecordingInputDevice = useDawStore(
+    (state) => state.setRecordingInputDevice,
+  );
+  const setRecordingMonitoring = useDawStore(
+    (state) => state.setRecordingMonitoring,
+  );
+  const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
 
   const selectedClip = useMemo(
     () => findClip(tracks, selectedClipId)?.clip,
@@ -57,6 +66,31 @@ export function TransportBar({
   );
   const playbackRate = selectedClip ? getClipPlaybackRate(bpm, selectedClip) : 1;
   const warpOn = selectedClip?.stretchMode === "resample";
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadInputs() {
+      if (!navigator.mediaDevices?.enumerateDevices) {
+        return;
+      }
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      if (!mounted) {
+        return;
+      }
+
+      setInputDevices(devices.filter((device) => device.kind === "audioinput"));
+    }
+
+    void loadInputs();
+    navigator.mediaDevices?.addEventListener?.("devicechange", loadInputs);
+
+    return () => {
+      mounted = false;
+      navigator.mediaDevices?.removeEventListener?.("devicechange", loadInputs);
+    };
+  }, []);
 
   return (
     <header className="transport">
@@ -92,7 +126,38 @@ export function TransportBar({
         >
           <Circle size={16} fill="currentColor" />
         </button>
+        <button
+          className={`icon-button monitor-button ${
+            recording.monitoringEnabled ? "active" : ""
+          }`}
+          disabled={isRecording}
+          onClick={() => setRecordingMonitoring(!recording.monitoringEnabled)}
+          title="입력 모니터링"
+          type="button"
+        >
+          <Headphones size={16} />
+        </button>
         <output className="time-display">{formatTime(playhead)}</output>
+      </div>
+
+      <div className="transport-group input-device-group">
+        <label className="input-select-control">
+          <span>INPUT</span>
+          <select
+            disabled={isRecording}
+            onChange={(event) =>
+              setRecordingInputDevice(event.target.value || undefined)
+            }
+            value={recording.inputDeviceId ?? ""}
+          >
+            <option value="">Default Mic</option>
+            {inputDevices.map((device, index) => (
+              <option key={device.deviceId} value={device.deviceId}>
+                {device.label || `Input ${index + 1}`}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="transport-group">

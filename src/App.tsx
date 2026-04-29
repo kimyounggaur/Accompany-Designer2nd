@@ -279,8 +279,11 @@ export default function App() {
     try {
       const context = await audioEngine.ensureContext();
       const state = useDawStore.getState();
+      const armedTrack = state.tracks.find(
+        (track) => track.id === state.recording.armedTrackId,
+      );
       let targetTrack =
-        findClip(state.tracks, state.selectedClipId)?.track ?? state.tracks[0];
+        armedTrack ?? findClip(state.tracks, state.selectedClipId)?.track ?? state.tracks[0];
 
       if (!targetTrack) {
         addTrack();
@@ -300,29 +303,36 @@ export default function App() {
       const clipId = createId("clip");
       const startTime = state.playhead;
 
-      await vocalRecorder.start(context, {
-        onPeaks: (waveformPeaks, elapsed) => {
-          const session = recordingRef.current;
-          if (!session) {
-            return;
-          }
+      await vocalRecorder.start(
+        context,
+        {
+          onPeaks: (waveformPeaks, elapsed) => {
+            const session = recordingRef.current;
+            if (!session) {
+              return;
+            }
 
-          const duration = Math.max(0.05, elapsed);
-          updateAudioAsset(session.assetId, {
-            duration,
-            waveformPeaks,
-          });
-          updateClip(session.clipId, { duration });
-          setRecordingState({
-            elapsed: duration,
-            waveformPeaks,
-          });
+            const duration = Math.max(0.05, elapsed);
+            updateAudioAsset(session.assetId, {
+              duration,
+              waveformPeaks,
+            });
+            updateClip(session.clipId, { duration });
+            setRecordingState({
+              elapsed: duration,
+              waveformPeaks,
+            });
 
-          if (!useDawStore.getState().isPlaying) {
-            setPlayhead(session.startTime + elapsed);
-          }
+            if (!useDawStore.getState().isPlaying) {
+              setPlayhead(session.startTime + elapsed);
+            }
+          },
         },
-      });
+        {
+          inputDeviceId: state.recording.inputDeviceId,
+          monitoringEnabled: state.recording.monitoringEnabled,
+        },
+      );
 
       const tempAsset: AudioAsset = {
         id: assetId,
@@ -365,6 +375,7 @@ export default function App() {
         clipId,
         startedAtProjectTime: startTime,
         elapsed: 0,
+        inputDeviceId: state.recording.inputDeviceId,
         waveformPeaks: [],
       });
       setStatus(`${fileName} 녹음 중...`);

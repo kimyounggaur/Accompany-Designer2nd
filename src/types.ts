@@ -122,11 +122,13 @@ export interface AudioAsset {
 
 export interface RecordingState {
   status: RecordingStatus;
+  armedTrackId?: string;
   trackId?: string;
   clipId?: string;
   startedAtProjectTime: number;
   elapsed: number;
   inputDeviceId?: string;
+  monitoringEnabled: boolean;
   waveformPeaks: number[];
 }
 

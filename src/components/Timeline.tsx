@@ -75,6 +75,7 @@ export function Timeline() {
   const playlistTool = useDawStore((state) => state.playlistTool);
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const performanceMode = useDawStore((state) => state.performanceMode);
+  const recording = useDawStore((state) => state.recording);
   const setPlayhead = useDawStore((state) => state.setPlayhead);
   const clearSelection = useDawStore((state) => state.clearSelection);
   const setSelectedClips = useDawStore((state) => state.setSelectedClips);
@@ -82,6 +83,7 @@ export function Timeline() {
   const moveClip = useDawStore((state) => state.moveClip);
   const addTrack = useDawStore((state) => state.addTrack);
   const updateTrack = useDawStore((state) => state.updateTrack);
+  const toggleRecordingArm = useDawStore((state) => state.toggleRecordingArm);
   const setZoom = useDawStore((state) => state.setZoom);
 
   const CLIP_HEIGHT = TRACK_HEIGHT - 32;
@@ -371,14 +373,31 @@ export function Timeline() {
             />
             <div className="track-toggles">
               <button
+                className={
+                  recording.armedTrackId === track.id
+                    ? "toggle arm-toggle active"
+                    : "toggle arm-toggle"
+                }
+                disabled={
+                  recording.status === "recording" || recording.status === "stopping"
+                }
+                onClick={() => toggleRecordingArm(track.id)}
+                title="Arm this track for vocal recording"
+                type="button"
+              >
+                ARM
+              </button>
+              <button
                 className={track.muted ? "toggle active danger" : "toggle"}
                 onClick={() => updateTrack(track.id, { muted: !track.muted })}
+                type="button"
               >
                 M
               </button>
               <button
                 className={track.solo ? "toggle active" : "toggle"}
                 onClick={() => updateTrack(track.id, { solo: !track.solo })}
+                type="button"
               >
                 S
               </button>

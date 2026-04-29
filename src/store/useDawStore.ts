@@ -29,6 +29,7 @@ const DEFAULT_RECORDING_STATE: RecordingState = {
   status: "idle",
   startedAtProjectTime: 0,
   elapsed: 0,
+  monitoringEnabled: false,
   waveformPeaks: [],
 };
 
@@ -80,6 +81,9 @@ interface DawStore extends DawProject {
   setCommandMessage: (message: string) => void;
   setRecordingState: (patch: Partial<RecordingState>) => void;
   resetRecordingState: () => void;
+  toggleRecordingArm: (trackId: string) => void;
+  setRecordingInputDevice: (inputDeviceId?: string) => void;
+  setRecordingMonitoring: (monitoringEnabled: boolean) => void;
   addAudioAsset: (asset: AudioAsset) => void;
   updateAudioAsset: (assetId: string, patch: Partial<AudioAsset>) => void;
   addClip: (trackId: string, clip: Clip) => void;
@@ -332,12 +336,59 @@ export const useDawStore = create<DawStore>((set) => ({
       },
     })),
   resetRecordingState: () =>
-    set({
+    set((state) => ({
       recording: {
         ...DEFAULT_RECORDING_STATE,
+        armedTrackId: state.recording.armedTrackId,
+        inputDeviceId: state.recording.inputDeviceId,
+        monitoringEnabled: state.recording.monitoringEnabled,
+        status: state.recording.armedTrackId ? "armed" : "idle",
         waveformPeaks: [],
       },
+    })),
+  toggleRecordingArm: (trackId) =>
+    set((state) => {
+      if (state.recording.status === "recording" || state.recording.status === "stopping") {
+        return {
+          commandMessage: "Stop recording before changing armed track.",
+        };
+      }
+
+      const armedTrackId =
+        state.recording.armedTrackId === trackId ? undefined : trackId;
+
+      return {
+        recording: {
+          ...state.recording,
+          armedTrackId,
+          trackId: undefined,
+          clipId: undefined,
+          status: armedTrackId ? "armed" : "idle",
+          startedAtProjectTime: 0,
+          elapsed: 0,
+          waveformPeaks: [],
+        },
+        commandMessage: armedTrackId ? "Track armed for recording." : "Recording arm cleared.",
+      };
     }),
+  setRecordingInputDevice: (inputDeviceId) =>
+    set((state) => ({
+      recording: {
+        ...state.recording,
+        inputDeviceId,
+      },
+      commandMessage: "Recording input changed.",
+    })),
+  setRecordingMonitoring: (monitoringEnabled) =>
+    set((state) => ({
+      recording: {
+        ...state.recording,
+        monitoringEnabled,
+      },
+      commandMessage: monitoringEnabled
+        ? "Input monitoring enabled."
+        : "Input monitoring disabled.",
+    })),
   addAudioAsset: (asset) =>
     set((state) => ({
       audioAssets: {

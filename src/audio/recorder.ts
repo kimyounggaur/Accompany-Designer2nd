@@ -4,6 +4,11 @@ interface RecorderCallbacks {
   onPeaks: (peaks: number[], elapsed: number) => void;
 }
 
+interface RecorderOptions {
+  inputDeviceId?: string;
+  monitoringEnabled?: boolean;
+}
+
 interface RecorderResult {
   blob: Blob;
   duration: number;
@@ -15,6 +20,7 @@ class VocalRecorder {
   private stream?: MediaStream;
   private source?: MediaStreamAudioSourceNode;
   private processor?: ScriptProcessorNode;
+  private monitorGain?: GainNode;
   private chunks: Float32Array[] = [];
   private peaks: number[] = [];
   private sampleRate = 44100;
@@ -22,7 +28,11 @@ class VocalRecorder {
   private lastPeakUpdate = 0;
   private recording = false;
 
-  async start(context: AudioContext, callbacks: RecorderCallbacks) {
+  async start(
+    context: AudioContext,
+    callbacks: RecorderCallbacks,
+    options: RecorderOptions = {},
+  ) {
     if (this.recording) {
       throw new Error("이미 녹음 중입니다.");
     }
@@ -31,12 +41,18 @@ class VocalRecorder {
       throw new Error("이 브라우저는 마이크 녹음을 지원하지 않습니다.");
     }
 
+    const audioConstraints: MediaTrackConstraints = {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    };
+
+    if (options.inputDeviceId) {
+      audioConstraints.deviceId = { exact: options.inputDeviceId };
+    }
+
     this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-      },
+      audio: audioConstraints,
     });
     this.source = context.createMediaStreamSource(this.stream);
     this.processor = context.createScriptProcessor(4096, 1, 1);
@@ -85,6 +101,13 @@ class VocalRecorder {
 
     this.source.connect(this.processor);
     this.processor.connect(context.destination);
+
+    if (options.monitoringEnabled) {
+      this.monitorGain = context.createGain();
+      this.monitorGain.gain.value = 0.85;
+      this.source.connect(this.monitorGain);
+      this.monitorGain.connect(context.destination);
+    }
   }
 
   stop(): RecorderResult {
@@ -120,6 +143,7 @@ class VocalRecorder {
   }
 
   private cleanup() {
+    this.monitorGain?.disconnect();
     this.processor?.disconnect();
     this.source?.disconnect();
     for (const track of this.stream?.getTracks() ?? []) {
@@ -127,6 +151,7 @@ class VocalRecorder {
     }
 
     this.processor = undefined;
+    this.monitorGain = undefined;
     this.source = undefined;
     this.stream = undefined;
   }
