@@ -58,6 +58,7 @@ const snapLabels: Record<PlaylistSnap, string> = {
 };
 
 interface DawStore extends DawProject {
+  selectedTrackId?: string;
   selectedClipId?: string;
   selectedClipIds: string[];
   isPlaying: boolean;
@@ -104,6 +105,7 @@ interface DawStore extends DawProject {
   toggleClipMuted: (clipId: string) => void;
   sliceClipAt: (clipId: string, splitTime: number) => void;
   selectClip: (clipId?: string, additive?: boolean) => void;
+  selectTrack: (trackId?: string) => void;
   setSelectedClips: (clipIds: string[]) => void;
   toggleClipSelection: (clipId: string) => void;
   selectAllClips: () => void;
@@ -132,6 +134,7 @@ function createDefaultTrack(index = 1): Track {
     muted: false,
     solo: false,
     eq: {
+      enabled: true,
       bassGain: 0,
       middleLowGain: 0,
       middleHighGain: 0,
@@ -203,6 +206,7 @@ function normalizeEqSettings(
   return {
     ...fallback,
     ...eq,
+    enabled: eq?.enabled ?? fallback.enabled,
     bassGain: clamp(eq?.bassGain ?? eq?.lowGain ?? fallback.bassGain, -12, 12),
     middleLowGain: clamp(
       eq?.middleLowGain ?? eq?.midGain ?? fallback.middleLowGain,
@@ -281,6 +285,7 @@ function cloneClipFromSource(
 
 export const useDawStore = create<DawStore>((set) => ({
   ...createDefaultProject(),
+  selectedTrackId: undefined,
   selectedClipId: undefined,
   selectedClipIds: [],
   isPlaying: false,
@@ -677,6 +682,14 @@ export const useDawStore = create<DawStore>((set) => ({
       selectedClipIds: [],
       commandMessage: "선택 해제됨",
     }),
+  selectTrack: (trackId) =>
+    set((state) => ({
+      selectedTrackId: trackId,
+      selectedClipId: undefined,
+      selectedClipIds: [],
+      commandMessage:
+        state.tracks.find((track) => track.id === trackId)?.name ?? "트랙 선택됨",
+    })),
   quantizeSelectedClips: () =>
     set((state) => {
       const selected = new Set(state.selectedClipIds);
@@ -817,11 +830,15 @@ export const useDawStore = create<DawStore>((set) => ({
         : "플레이리스트 분리됨",
     })),
   addTrack: () =>
-    set((state) => ({
-      tracks: [...state.tracks, createDefaultTrack(state.tracks.length + 1)],
-      selectedClipId: undefined,
-      selectedClipIds: [],
-    })),
+    set((state) => {
+      const track = createDefaultTrack(state.tracks.length + 1);
+      return {
+        tracks: [...state.tracks, track],
+        selectedTrackId: track.id,
+        selectedClipId: undefined,
+        selectedClipIds: [],
+      };
+    }),
   updateTrack: (trackId, patch) =>
     set((state) => ({
       tracks: state.tracks.map((track) =>
@@ -839,6 +856,7 @@ export const useDawStore = create<DawStore>((set) => ({
         : [createDefaultTrack(1)],
       audioAssets: project.audioAssets || {},
       timeMarkers: project.timeMarkers || [],
+      selectedTrackId: undefined,
       selectedClipId: undefined,
       selectedClipIds: [],
       isPlaying: false,
@@ -859,6 +877,7 @@ export const useDawStore = create<DawStore>((set) => ({
   resetProject: () =>
     set({
       ...createDefaultProject(),
+      selectedTrackId: undefined,
       selectedClipId: undefined,
       selectedClipIds: [],
       isPlaying: false,

@@ -33,6 +33,7 @@ export type DelaySyncDivision =
 export type ReverbMode = "plate" | "room" | "hall";
 
 export interface EqSettings {
+  enabled: boolean;
   bassGain: number;
   middleLowGain: number;
   middleHighGain: number;

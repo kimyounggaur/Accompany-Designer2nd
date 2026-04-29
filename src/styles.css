@@ -713,6 +713,14 @@ button {
   height: 116px;
   padding: 13px;
   border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+
+.track-header.selected {
+  background:
+    linear-gradient(90deg, rgba(55, 217, 158, 0.14), transparent 62%),
+    rgba(255, 255, 255, 0.025);
+  box-shadow: inset 3px 0 0 var(--mint);
 }
 
 .track-header input:not([type="range"]) {
@@ -1086,6 +1094,36 @@ input[type="range"] {
 /* EQ Knob Panel */
 .eq-panel {
   overflow: hidden;
+}
+
+.plugin-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.plugin-panel-heading h2 {
+  margin: 0;
+}
+
+.plugin-power-button {
+  height: 28px;
+  min-width: 48px;
+  color: var(--text-muted);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: #101311;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.plugin-power-button.on {
+  color: #101311;
+  border-color: transparent;
+  background: var(--mint);
 }
 
 .eq-bands {

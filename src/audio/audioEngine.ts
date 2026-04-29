@@ -248,19 +248,24 @@ class BrowserAudioEngine {
     pan.pan.value = track.pan;
     output.gain.value = track.volume;
 
-    input.connect(bass);
-    bass.connect(middleLow);
-    middleLow.connect(middleHigh);
-    middleHigh.connect(high);
-    high.connect(presence);
+    let effectOutput: AudioNode = input;
 
-    const postDynamics = track.compressor.enabled ? compressor : presence;
-
-    if (track.compressor.enabled) {
-      presence.connect(compressor);
+    if (track.eq.enabled) {
+      input.connect(bass);
+      bass.connect(middleLow);
+      middleLow.connect(middleHigh);
+      middleHigh.connect(high);
+      high.connect(presence);
+      effectOutput = presence;
     }
 
-    let effectOutput: AudioNode = postDynamics;
+    const postDynamics = track.compressor.enabled ? compressor : effectOutput;
+
+    if (track.compressor.enabled) {
+      effectOutput.connect(compressor);
+    }
+
+    effectOutput = postDynamics;
 
     if (track.delay?.enabled) {
       const delayInsert = createDelayInsert(context, track.delay, bpm);

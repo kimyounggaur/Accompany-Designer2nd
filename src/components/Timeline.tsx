@@ -73,6 +73,7 @@ export function Timeline() {
   const snapEnabled = useDawStore((state) => state.snapEnabled);
   const gridDivision = useDawStore((state) => state.gridDivision);
   const playlistTool = useDawStore((state) => state.playlistTool);
+  const selectedTrackId = useDawStore((state) => state.selectedTrackId);
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const performanceMode = useDawStore((state) => state.performanceMode);
   const recording = useDawStore((state) => state.recording);
@@ -83,6 +84,7 @@ export function Timeline() {
   const moveClip = useDawStore((state) => state.moveClip);
   const addTrack = useDawStore((state) => state.addTrack);
   const updateTrack = useDawStore((state) => state.updateTrack);
+  const selectTrack = useDawStore((state) => state.selectTrack);
   const toggleRecordingArm = useDawStore((state) => state.toggleRecordingArm);
   const setZoom = useDawStore((state) => state.setZoom);
 
@@ -366,7 +368,11 @@ export function Timeline() {
           </button>
         </div>
         {tracks.map((track) => (
-          <div className="track-header" key={track.id}>
+          <div
+            className={`track-header ${selectedTrackId === track.id ? "selected" : ""}`}
+            key={track.id}
+            onClick={() => selectTrack(track.id)}
+          >
             <input
               value={track.name}
               onChange={(event) => updateTrack(track.id, { name: event.target.value })}

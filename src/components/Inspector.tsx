@@ -23,6 +23,7 @@ export function Inspector() {
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | undefined>(undefined);
   const tracks = useDawStore((state) => state.tracks);
   const audioAssets = useDawStore((state) => state.audioAssets);
+  const selectedTrackId = useDawStore((state) => state.selectedTrackId);
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const bpm = useDawStore((state) => state.bpm);
   const updateClip = useDawStore((state) => state.updateClip);
@@ -48,7 +49,10 @@ export function Inspector() {
     () => findClip(tracks, selectedClipId),
     [selectedClipId, tracks],
   );
-  const selectedTrack = selection?.track ?? tracks[0];
+  const selectedTrack =
+    selection?.track ??
+    tracks.find((track) => track.id === selectedTrackId) ??
+    tracks[0];
   const selectedClip = selection?.clip;
   const asset = selectedClip ? audioAssets[selectedClip.audioBufferId] : undefined;
 
@@ -564,7 +568,16 @@ export function Inspector() {
       </section>
 
       <section className="panel eq-panel">
-        <h2>이퀄라이저</h2>
+        <div className="plugin-panel-heading">
+          <h2>이퀄라이저</h2>
+          <button
+            className={`plugin-power-button ${selectedTrack.eq.enabled ? "on" : ""}`}
+            onClick={() => updateEq({ enabled: !selectedTrack.eq.enabled })}
+            type="button"
+          >
+            {selectedTrack.eq.enabled ? "ON" : "OFF"}
+          </button>
+        </div>
         <div className="eq-bands">
           <EqKnob
             label="BASS"
