@@ -9,9 +9,9 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import { useDawStore } from "../store/useDawStore";
-import { formatTime } from "../utils/audioMath";
+import { formatTime, findClip, getClipPlaybackRate } from "../utils/audioMath";
 
 interface TransportBarProps {
   status: string;
@@ -42,6 +42,18 @@ export function TransportBar({
   const setSnapEnabled = useDawStore((state) => state.setSnapEnabled);
   const projectName = useDawStore((state) => state.name);
   const setProjectName = useDawStore((state) => state.setProjectName);
+  const tracks = useDawStore((state) => state.tracks);
+  const selectedClipId = useDawStore((state) => state.selectedClipId);
+  const updateClip = useDawStore((state) => state.updateClip);
+
+  const selectedClip = useMemo(
+    () => findClip(tracks, selectedClipId)?.clip,
+    [tracks, selectedClipId],
+  );
+  const playbackRate = selectedClip
+    ? getClipPlaybackRate(bpm, selectedClip)
+    : 1;
+  const warpOn = selectedClip?.stretchMode === "resample";
 
   return (
     <header className="transport">
@@ -154,6 +166,57 @@ export function TransportBar({
         <button className="icon-button" onClick={onSaveProject} title="프로젝트 저장">
           <Save size={17} />
         </button>
+      </div>
+
+      {/* ── Warp 패널 ── */}
+      <div className={`transport-group warp-group ${!selectedClip ? "warp-inactive" : ""}`}>
+        {/* WARP 토글 */}
+        <button
+          className={`warp-btn ${warpOn ? "on" : ""}`}
+          disabled={!selectedClip}
+          title={warpOn ? "Warp 끄기 (원본 속도 재생)" : "Warp 켜기 (BPM에 맞게 늘이기)"}
+          onClick={() =>
+            selectedClip &&
+            updateClip(selectedClip.id, {
+              stretchMode: warpOn ? "none" : "resample",
+            })
+          }
+        >
+          <span className="warp-led" />
+          WARP
+        </button>
+
+        {/* 원본 BPM */}
+        <label className="warp-field">
+          <span className="warp-label">원본 BPM</span>
+          <input
+            className="warp-input"
+            type="number"
+            min={20}
+            max={300}
+            step={0.1}
+            disabled={!selectedClip}
+            value={selectedClip?.sourceBpm ?? bpm}
+            onChange={(e) =>
+              selectedClip &&
+              updateClip(selectedClip.id, {
+                sourceBpm: Number(e.target.value) || bpm,
+              })
+            }
+          />
+        </label>
+
+        {/* 배속 표시 */}
+        <div className="warp-rate" title="현재 재생 배속">
+          <span className="warp-label">배속</span>
+          <span
+            className={`warp-rate-val ${
+              warpOn && Math.abs(playbackRate - 1) > 0.01 ? "warp-rate-active" : ""
+            }`}
+          >
+            {warpOn ? `${playbackRate.toFixed(2)}×` : "1.00×"}
+          </span>
+        </div>
       </div>
 
       <p className="status-line">{status}</p>
