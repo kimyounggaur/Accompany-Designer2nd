@@ -187,6 +187,108 @@ button {
   color: var(--amber);
 }
 
+/* Ableton-style Warp header */
+.warp-header {
+  display: grid;
+  grid-template-columns: 72px 64px 45px;
+  align-items: center;
+  gap: 8px;
+  width: 212px;
+  height: 57px;
+  padding: 6px;
+  border: 1px solid #333525;
+  border-radius: 7px;
+  background: #181b14;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.34);
+}
+
+.warp-header.warp-inactive {
+  opacity: 0.56;
+}
+
+.warp-header .warp-btn {
+  justify-content: center;
+  gap: 5px;
+  width: 72px;
+  height: 34px;
+  padding: 0;
+  color: #747a71;
+  border: 1px solid #2b332e;
+  border-radius: 6px;
+  background: #1b211d;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  transition: none;
+}
+
+.warp-header .warp-btn.on {
+  color: #cbd4c4;
+  border-color: #3f4a3d;
+  background: #20291f;
+}
+
+.warp-header .warp-led {
+  width: 6px;
+  height: 6px;
+  background: #374037;
+  transition: none;
+}
+
+.warp-header .warp-btn.on .warp-led {
+  background: #67d48b;
+  box-shadow: 0 0 6px rgba(103, 212, 139, 0.7);
+}
+
+.warp-header .warp-field,
+.warp-header .warp-rate {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+  height: 40px;
+}
+
+.warp-header .warp-label {
+  color: #777d70;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.warp-header .warp-input {
+  width: 64px;
+  height: 26px;
+  color: #777d70;
+  border: 0;
+  border-radius: 3px;
+  background: #101410;
+  padding: 2px 6px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.warp-header .warp-input:focus {
+  color: #b9c1b2;
+  box-shadow: inset 0 0 0 1px #4a543f;
+}
+
+.warp-header .warp-rate-val {
+  color: #777d70;
+  font-size: 14px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.warp-header .warp-rate-active {
+  color: #b9c1b2;
+}
+
 .session-name input,
 .number-control input,
 .control-stack input:not([type="range"]),

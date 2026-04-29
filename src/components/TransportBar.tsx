@@ -9,9 +9,9 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useRef, useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useDawStore } from "../store/useDawStore";
-import { formatTime, findClip, getClipPlaybackRate } from "../utils/audioMath";
+import { findClip, formatTime, getClipPlaybackRate } from "../utils/audioMath";
 
 interface TransportBarProps {
   status: string;
@@ -50,9 +50,7 @@ export function TransportBar({
     () => findClip(tracks, selectedClipId)?.clip,
     [tracks, selectedClipId],
   );
-  const playbackRate = selectedClip
-    ? getClipPlaybackRate(bpm, selectedClip)
-    : 1;
+  const playbackRate = selectedClip ? getClipPlaybackRate(bpm, selectedClip) : 1;
   const warpOn = selectedClip?.stretchMode === "resample";
 
   return (
@@ -74,10 +72,11 @@ export function TransportBar({
             onStop();
           }}
           title="재생/일시정지"
+          type="button"
         >
           {isPlaying ? <Pause size={18} /> : <Play size={18} />}
         </button>
-        <button className="icon-button" onClick={onStop} title="정지">
+        <button className="icon-button" onClick={onStop} title="정지" type="button">
           <Square size={17} />
         </button>
         <output className="time-display">{formatTime(playhead)}</output>
@@ -87,17 +86,18 @@ export function TransportBar({
         <label className="number-control">
           <span>템포</span>
           <input
-            type="number"
-            min={20}
             max={300}
-            value={bpm}
+            min={20}
             onChange={(event) => setBpm(Number(event.target.value))}
+            type="number"
+            value={bpm}
           />
         </label>
         <button
           className={`icon-button ${snapEnabled ? "active" : ""}`}
           onClick={() => setSnapEnabled(!snapEnabled)}
           title="스냅"
+          type="button"
         >
           <Magnet size={17} />
         </button>
@@ -108,6 +108,7 @@ export function TransportBar({
           className="icon-button"
           onClick={() => setZoom(zoomPxPerSecond - 16)}
           title="축소"
+          type="button"
         >
           <ZoomOut size={17} />
         </button>
@@ -115,6 +116,7 @@ export function TransportBar({
           className="icon-button"
           onClick={() => setZoom(zoomPxPerSecond + 16)}
           title="확대"
+          type="button"
         >
           <ZoomIn size={17} />
         </button>
@@ -124,20 +126,21 @@ export function TransportBar({
         <input
           ref={fileInputRef}
           accept="audio/*,.mp3,.wav,.m4a"
-          multiple
-          type="file"
           hidden
+          multiple
           onChange={(event) => {
             if (event.target.files) {
               onFiles(event.target.files);
               event.target.value = "";
             }
           }}
+          type="file"
         />
         <button
           className="text-button"
           onClick={() => fileInputRef.current?.click()}
           title="오디오 업로드"
+          type="button"
         >
           <Upload size={17} />
           <span>업로드</span>
@@ -146,7 +149,6 @@ export function TransportBar({
         <input
           ref={projectInputRef}
           accept="application/json,.json"
-          type="file"
           hidden
           onChange={(event) => {
             const file = event.target.files?.[0];
@@ -155,58 +157,62 @@ export function TransportBar({
               event.target.value = "";
             }
           }}
+          type="file"
         />
         <button
           className="icon-button"
           onClick={() => projectInputRef.current?.click()}
           title="프로젝트 불러오기"
+          type="button"
         >
           <FolderOpen size={17} />
         </button>
-        <button className="icon-button" onClick={onSaveProject} title="프로젝트 저장">
+        <button
+          className="icon-button"
+          onClick={onSaveProject}
+          title="프로젝트 저장"
+          type="button"
+        >
           <Save size={17} />
         </button>
       </div>
 
-      {/* ── Warp 패널 ── */}
-      <div className={`transport-group warp-group ${!selectedClip ? "warp-inactive" : ""}`}>
-        {/* WARP 토글 */}
+      <div className={`warp-header ${!selectedClip ? "warp-inactive" : ""}`}>
         <button
           className={`warp-btn ${warpOn ? "on" : ""}`}
           disabled={!selectedClip}
-          title={warpOn ? "Warp 끄기 (원본 속도 재생)" : "Warp 켜기 (BPM에 맞게 늘이기)"}
           onClick={() =>
             selectedClip &&
             updateClip(selectedClip.id, {
               stretchMode: warpOn ? "none" : "resample",
             })
           }
+          title={warpOn ? "Warp 끄기" : "Warp 켜기"}
+          type="button"
         >
           <span className="warp-led" />
-          WARP
+          <span>WARP</span>
         </button>
 
-        {/* 원본 BPM */}
         <label className="warp-field">
           <span className="warp-label">원본 BPM</span>
           <input
             className="warp-input"
-            type="number"
-            min={20}
-            max={300}
-            step={0.1}
             disabled={!selectedClip}
-            value={selectedClip?.sourceBpm ?? bpm}
-            onChange={(e) =>
+            max={300}
+            min={20}
+            onChange={(event) =>
               selectedClip &&
               updateClip(selectedClip.id, {
-                sourceBpm: Number(e.target.value) || bpm,
+                sourceBpm: Number(event.target.value) || bpm,
               })
             }
+            step={0.1}
+            type="number"
+            value={selectedClip?.sourceBpm ?? bpm}
           />
         </label>
 
-        {/* 배속 표시 */}
         <div className="warp-rate" title="현재 재생 배속">
           <span className="warp-label">배속</span>
           <span
