@@ -5,6 +5,7 @@ import type {
   DawProject,
   PlaylistSnap,
   PlaylistTool,
+  RecordingState,
   TimeMarker,
   Track,
 } from "../types";
@@ -22,6 +23,13 @@ import { DEFAULT_REVERB_SETTINGS, normalizeReverbSettings } from "../utils/rever
 type LegacyEqSettings = Partial<Track["eq"]> & {
   lowGain?: number;
   midGain?: number;
+};
+
+const DEFAULT_RECORDING_STATE: RecordingState = {
+  status: "idle",
+  startedAtProjectTime: 0,
+  elapsed: 0,
+  waveformPeaks: [],
 };
 
 const playlistToolLabels: Record<PlaylistTool, string> = {
@@ -58,6 +66,7 @@ interface DawStore extends DawProject {
   globalSnap: Exclude<PlaylistSnap, "main">;
   performanceMode: boolean;
   playlistDetached: boolean;
+  recording: RecordingState;
   commandMessage: string;
   setBpm: (bpm: number) => void;
   setProjectName: (name: string) => void;
@@ -69,6 +78,8 @@ interface DawStore extends DawProject {
   setPlaylistSnap: (snap: PlaylistSnap) => void;
   setGlobalSnap: (snap: Exclude<PlaylistSnap, "main">) => void;
   setCommandMessage: (message: string) => void;
+  setRecordingState: (patch: Partial<RecordingState>) => void;
+  resetRecordingState: () => void;
   addAudioAsset: (asset: AudioAsset) => void;
   updateAudioAsset: (assetId: string, patch: Partial<AudioAsset>) => void;
   addClip: (trackId: string, clip: Clip) => void;
@@ -273,6 +284,7 @@ export const useDawStore = create<DawStore>((set) => ({
   globalSnap: "line",
   performanceMode: false,
   playlistDetached: false,
+  recording: DEFAULT_RECORDING_STATE,
   commandMessage: "",
   setBpm: (bpm) => set({ bpm: clamp(Number(bpm) || 120, 20, 300) }),
   setProjectName: (name) => set({ name }),
@@ -312,6 +324,20 @@ export const useDawStore = create<DawStore>((set) => ({
       };
     }),
   setCommandMessage: (commandMessage) => set({ commandMessage }),
+  setRecordingState: (patch) =>
+    set((state) => ({
+      recording: {
+        ...state.recording,
+        ...patch,
+      },
+    })),
+  resetRecordingState: () =>
+    set({
+      recording: {
+        ...DEFAULT_RECORDING_STATE,
+        waveformPeaks: [],
+      },
+    }),
   addAudioAsset: (asset) =>
     set((state) => ({
       audioAssets: {
@@ -743,6 +769,10 @@ export const useDawStore = create<DawStore>((set) => ({
       globalSnap: "line",
       performanceMode: false,
       playlistDetached: false,
+      recording: {
+        ...DEFAULT_RECORDING_STATE,
+        waveformPeaks: [],
+      },
       commandMessage: "프로젝트 불러옴",
     }),
   resetProject: () =>
@@ -760,6 +790,10 @@ export const useDawStore = create<DawStore>((set) => ({
       globalSnap: "line",
       performanceMode: false,
       playlistDetached: false,
+      recording: {
+        ...DEFAULT_RECORDING_STATE,
+        waveformPeaks: [],
+      },
       commandMessage: "프로젝트 초기화됨",
     }),
 }));

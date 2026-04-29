@@ -42,8 +42,12 @@ export default function App() {
   const zoomPxPerSecond = useDawStore((state) => state.zoomPxPerSecond);
   const commandMessage = useDawStore((state) => state.commandMessage);
   const playlistDetached = useDawStore((state) => state.playlistDetached);
+  const recordingState = useDawStore((state) => state.recording);
+  const setRecordingState = useDawStore((state) => state.setRecordingState);
+  const resetRecordingState = useDawStore((state) => state.resetRecordingState);
   const [status, setStatus] = useState("오디오 파일을 업로드하면 첫 트랙에 클립이 생성됩니다.");
-  const [isRecording, setIsRecording] = useState(false);
+  const isRecording =
+    recordingState.status === "recording" || recordingState.status === "stopping";
   const animationRef = useRef<number | undefined>(undefined);
   const recordingRef = useRef<
     | {
@@ -302,6 +306,10 @@ export default function App() {
             waveformPeaks,
           });
           updateClip(session.clipId, { duration });
+          setRecordingState({
+            elapsed: duration,
+            waveformPeaks,
+          });
 
           if (!useDawStore.getState().isPlaying) {
             setPlayhead(session.startTime + elapsed);
@@ -344,12 +352,19 @@ export default function App() {
       };
       addAudioAsset(tempAsset);
       addClip(targetTrack.id, clip);
-      setIsRecording(true);
+      setRecordingState({
+        status: "recording",
+        trackId: targetTrack.id,
+        clipId,
+        startedAtProjectTime: startTime,
+        elapsed: 0,
+        waveformPeaks: [],
+      });
       setStatus(`${fileName} 녹음 중...`);
     } catch (error) {
       vocalRecorder.cancel();
       recordingRef.current = undefined;
-      setIsRecording(false);
+      resetRecordingState();
       setStatus(`녹음 시작 실패: ${(error as Error).message}`);
     }
   }
@@ -361,6 +376,7 @@ export default function App() {
     }
 
     try {
+      setRecordingState({ status: "stopping" });
       setStatus(`${session.fileName} 저장 중...`);
       const result = vocalRecorder.stop();
       const { asset } = await audioEngine.decodeBlob(
@@ -390,7 +406,7 @@ export default function App() {
       setStatus(`녹음 저장 실패: ${(error as Error).message}`);
     } finally {
       recordingRef.current = undefined;
-      setIsRecording(false);
+      resetRecordingState();
     }
   }
 

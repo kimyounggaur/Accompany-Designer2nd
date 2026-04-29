@@ -16,6 +16,7 @@ export type PlaylistSnap =
   | "halfBeat"
   | "quarterBeat"
   | "none";
+export type RecordingStatus = "idle" | "armed" | "recording" | "stopping";
 export type DelaySyncDivision =
   | "1/1"
   | "1/2"
@@ -114,6 +115,16 @@ export interface AudioAsset {
   detectedBpm?: number;
   sourceType?: "upload" | "recording";
   blobUrl?: string;
+}
+
+export interface RecordingState {
+  status: RecordingStatus;
+  trackId?: string;
+  clipId?: string;
+  startedAtProjectTime: number;
+  elapsed: number;
+  inputDeviceId?: string;
+  waveformPeaks: number[];
 }
 
 export interface DawProject {
