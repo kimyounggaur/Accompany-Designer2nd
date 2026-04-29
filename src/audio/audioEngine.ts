@@ -59,6 +59,8 @@ class BrowserAudioEngine {
       channels: buffer.numberOfChannels,
       waveformPeaks: createWaveformPeaks(buffer),
       sourceType: "upload",
+      mimeType: file.type || undefined,
+      byteSize: file.size,
     };
 
     this.buffers.set(asset.id, buffer);
@@ -83,6 +85,9 @@ class BrowserAudioEngine {
       waveformPeaks: createWaveformPeaks(buffer),
       sourceType,
       blobUrl: URL.createObjectURL(blob),
+      mimeType: blob.type || "audio/wav",
+      byteSize: blob.size,
+      recordedAt: sourceType === "recording" ? new Date().toISOString() : undefined,
     };
 
     this.buffers.set(asset.id, buffer);

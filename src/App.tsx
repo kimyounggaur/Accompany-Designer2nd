@@ -10,13 +10,20 @@ import { useDawStore } from "./store/useDawStore";
 
 function getProjectSnapshot(): DawProject {
   const state = useDawStore.getState();
+  const audioAssets = Object.fromEntries(
+    Object.entries(state.audioAssets).map(([assetId, asset]) => {
+      const { blobUrl, ...serializableAsset } = asset;
+      return [assetId, serializableAsset];
+    }),
+  );
+
   return {
     id: state.id,
     name: state.name,
     bpm: state.bpm,
     sampleRate: state.sampleRate,
     tracks: state.tracks,
-    audioAssets: state.audioAssets,
+    audioAssets,
     timeMarkers: state.timeMarkers,
   };
 }

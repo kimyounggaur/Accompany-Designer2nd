@@ -1,4 +1,4 @@
-import { Trash2 } from "lucide-react";
+import { Download, Trash2 } from "lucide-react";
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import { estimateBpm } from "../audio/bpmDetector";
 import { audioEngine } from "../audio/audioEngine";
@@ -364,6 +364,19 @@ export function Inspector() {
     }, 30);
   }
 
+  function downloadRecordingWav() {
+    if (!asset?.blobUrl) {
+      return;
+    }
+
+    const anchor = document.createElement("a");
+    anchor.href = asset.blobUrl;
+    anchor.download = asset.fileName.toLowerCase().endsWith(".wav")
+      ? asset.fileName
+      : `${asset.fileName}.wav`;
+    anchor.click();
+  }
+
   if (!selectedTrack) {
     return <aside className="inspector" />;
   }
@@ -457,6 +470,24 @@ export function Inspector() {
               <p className="asset-meta">
                 {asset.fileName} · {asset.duration.toFixed(2)}초 · {asset.sampleRate}Hz
               </p>
+            )}
+            {asset?.sourceType === "recording" && (
+              <div className="recording-save-box">
+                <p className="asset-meta">
+                  WAV {asset.byteSize ? `${(asset.byteSize / 1024).toFixed(1)}KB` : ""}
+                  {asset.recordedAt ? ` 쨌 ${new Date(asset.recordedAt).toLocaleString()}` : ""}
+                </p>
+                <button
+                  className="text-button full"
+                  disabled={!asset.blobUrl}
+                  onClick={downloadRecordingWav}
+                  title={asset.blobUrl ? "녹음 WAV 저장" : "이 세션에 WAV Blob이 없습니다"}
+                  type="button"
+                >
+                  <Download size={16} />
+                  WAV 저장
+                </button>
+              </div>
             )}
             {bpmStatus && <p className="asset-meta">{bpmStatus}</p>}
           </div>

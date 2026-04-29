@@ -115,6 +115,9 @@ export interface AudioAsset {
   detectedBpm?: number;
   sourceType?: "upload" | "recording";
   blobUrl?: string;
+  mimeType?: string;
+  byteSize?: number;
+  recordedAt?: string;
 }
 
 export interface RecordingState {
