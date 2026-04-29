@@ -1,9 +1,21 @@
+import type { CSSProperties } from "react";
 import type { ReverbSettings } from "../types";
 import { REVERB_MODE_OPTIONS } from "../utils/reverb";
 
 interface ReverbPluginPanelProps {
   reverb: ReverbSettings;
   onChange: (patch: Partial<ReverbSettings>) => void;
+}
+
+interface KnobProps {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  display: string;
+  size?: "small" | "medium";
+  onChange: (value: number) => void;
 }
 
 function formatPercent(value: number) {
@@ -14,7 +26,43 @@ function formatDb(value: number) {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)} dB`;
 }
 
+function Knob({
+  label,
+  value,
+  min,
+  max,
+  step,
+  display,
+  size = "medium",
+  onChange,
+}: KnobProps) {
+  const normalized = (value - min) / (max - min);
+  const angle = -135 + Math.max(0, Math.min(1, normalized)) * 270;
+
+  return (
+    <label className={`reverb-knob ${size}`}>
+      <span>{label}</span>
+      <span
+        className="reverb-knob-cap"
+        style={{ "--angle": `${angle}deg` } as CSSProperties}
+      >
+        <input
+          max={max}
+          min={min}
+          onChange={(event) => onChange(Number(event.target.value))}
+          step={step}
+          type="range"
+          value={value}
+        />
+      </span>
+      <strong>{display}</strong>
+    </label>
+  );
+}
+
 export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) {
+  const wetBlend = reverb.wet / Math.max(0.01, reverb.dry + reverb.wet);
+
   return (
     <div className={`reverb-rack ${reverb.enabled ? "on" : ""}`}>
       <div className="reverb-wood-frame">
@@ -26,35 +74,45 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
             <span />
           </div>
 
-          <div className="reverb-top-row">
-            <div className="reverb-brand-block">
-              <span className="reverb-brand">REV PLATE-140</span>
-              <span className="reverb-subtitle">REVERBERATION UNIT</span>
+          <div className="reverb-main-deck">
+            <section className="reverb-brand-module">
+              <div>
+                <span className="reverb-brand">REV PLATE-140</span>
+                <span className="reverb-subtitle">REVERBERATION UNIT</span>
+              </div>
               <button
                 className={`reverb-power ${reverb.enabled ? "on" : ""}`}
                 onClick={() => onChange({ enabled: !reverb.enabled })}
                 type="button"
               >
-                <span className="reverb-led" />
+                <span className="reverb-power-lamp" />
                 <span>POWER</span>
               </button>
-            </div>
+              <div className="reverb-nameplate">
+                <span>SOFTWARE MODEL</span>
+                <strong>ARTURIA</strong>
+                <span>MADE IN BROWSER</span>
+              </div>
+            </section>
 
-            <label className="reverb-tube-module">
-              <span>Drive</span>
-              <strong>{formatPercent(reverb.drive)}</strong>
-              <input
+            <section className="reverb-tube-module">
+              <div className="reverb-tube-window" aria-hidden="true">
+                <span />
+              </div>
+              <Knob
+                display={formatPercent(reverb.drive)}
+                label="Drive"
                 max={1}
                 min={0}
-                onChange={(event) => onChange({ drive: Number(event.target.value) })}
+                onChange={(drive) => onChange({ drive })}
                 step={0.01}
-                type="range"
                 value={reverb.drive}
               />
-            </label>
+            </section>
 
-            <div className="reverb-decay-module">
-              <label>
+            <section className="reverb-decay-module">
+              <span className="reverb-module-title">DECAY TIME</span>
+              <label className="reverb-model-select">
                 <span>Model</span>
                 <select
                   onChange={(event) =>
@@ -71,9 +129,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
                   ))}
                 </select>
               </label>
-              <label>
-                <span>Decay Time</span>
-                <strong>{reverb.decay.toFixed(1)} s</strong>
+              <div className="reverb-decay-fader">
                 <input
                   max={12}
                   min={0.2}
@@ -82,156 +138,133 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
                   type="range"
                   value={reverb.decay}
                 />
-              </label>
-            </div>
+                <div className="reverb-decay-scale" aria-hidden="true">
+                  <span>MAX</span>
+                  <span>8</span>
+                  <span>4</span>
+                  <span>2</span>
+                  <span>MIN</span>
+                </div>
+              </div>
+              <strong>{reverb.decay.toFixed(1)} s</strong>
+            </section>
 
-            <div className="reverb-blend-module">
-              <label>
-                <span>Dry</span>
-                <input
-                  max={1}
-                  min={0}
-                  onChange={(event) => onChange({ dry: Number(event.target.value) })}
-                  step={0.01}
-                  type="range"
-                  value={reverb.dry}
-                />
-                <strong>{formatPercent(reverb.dry)}</strong>
-              </label>
-              <label>
-                <span>Wet</span>
-                <input
-                  max={1}
-                  min={0}
-                  onChange={(event) => onChange({ wet: Number(event.target.value) })}
-                  step={0.01}
-                  type="range"
-                  value={reverb.wet}
-                />
-                <strong>{formatPercent(reverb.wet)}</strong>
-              </label>
-              <label>
-                <span>Width</span>
-                <input
-                  max={1}
-                  min={0}
-                  onChange={(event) => onChange({ width: Number(event.target.value) })}
-                  step={0.01}
-                  type="range"
-                  value={reverb.width}
-                />
-                <strong>{formatPercent(reverb.width)}</strong>
-              </label>
-            </div>
+            <section className="reverb-blend-module">
+              <Knob
+                display={formatPercent(wetBlend)}
+                label="Blend"
+                max={1}
+                min={0}
+                onChange={(blend) =>
+                  onChange({
+                    dry: Number((1 - blend).toFixed(2)),
+                    wet: Number(blend.toFixed(2)),
+                  })
+                }
+                step={0.01}
+                value={wetBlend}
+              />
+              <Knob
+                display={formatPercent(reverb.width)}
+                label="Width"
+                max={1}
+                min={0}
+                onChange={(width) => onChange({ width })}
+                step={0.01}
+                value={reverb.width}
+              />
+            </section>
           </div>
 
           <div className="reverb-bottom-strip">
-            <label className="reverb-strip-control">
-              <span>Pre-delay</span>
-              <strong>{Math.round(reverb.preDelayMs)} ms</strong>
-              <input
-                max={250}
-                min={0}
-                onChange={(event) => onChange({ preDelayMs: Number(event.target.value) })}
-                step={1}
-                type="range"
-                value={reverb.preDelayMs}
-              />
-            </label>
+            <div className="reverb-arturia-mark">A</div>
+            <Knob
+              display={`${Math.round(reverb.preDelayMs)} ms`}
+              label="Pre-delay"
+              max={250}
+              min={0}
+              onChange={(preDelayMs) => onChange({ preDelayMs })}
+              size="small"
+              step={1}
+              value={reverb.preDelayMs}
+            />
+            <Knob
+              display={`${Math.round(reverb.highPassHz)} Hz`}
+              label="HP Filter"
+              max={2000}
+              min={20}
+              onChange={(highPassHz) => onChange({ highPassHz })}
+              size="small"
+              step={10}
+              value={reverb.highPassHz}
+            />
+            <Knob
+              display={`${Math.round(reverb.lowPassHz)} Hz`}
+              label="LP Filter"
+              max={20000}
+              min={1000}
+              onChange={(lowPassHz) => onChange({ lowPassHz })}
+              size="small"
+              step={100}
+              value={reverb.lowPassHz}
+            />
 
-            <label className="reverb-strip-control">
-              <span>HP Filter</span>
-              <strong>{Math.round(reverb.highPassHz)} Hz</strong>
-              <input
-                max={2000}
-                min={20}
-                onChange={(event) => onChange({ highPassHz: Number(event.target.value) })}
-                step={10}
-                type="range"
-                value={reverb.highPassHz}
-              />
-            </label>
-
-            <label className="reverb-strip-control">
-              <span>LP Filter</span>
-              <strong>{Math.round(reverb.lowPassHz)} Hz</strong>
-              <input
-                max={20000}
-                min={1000}
-                onChange={(event) => onChange({ lowPassHz: Number(event.target.value) })}
-                step={100}
-                type="range"
-                value={reverb.lowPassHz}
-              />
-            </label>
-
-            <div className="reverb-mod-box">
-              <label className="reverb-check">
+            <section className="reverb-mod-section">
+              <span>MODULATION</span>
+              <label className="reverb-toggle">
                 <input
                   checked={reverb.modEnabled}
                   onChange={(event) => onChange({ modEnabled: event.target.checked })}
                   type="checkbox"
                 />
+                <i />
                 Active
               </label>
-              <label>
-                <span>Mod Amount</span>
-                <input
-                  max={1}
-                  min={0}
-                  onChange={(event) => onChange({ modAmount: Number(event.target.value) })}
-                  step={0.01}
-                  type="range"
-                  value={reverb.modAmount}
-                />
-              </label>
-            </div>
+              <Knob
+                display={formatPercent(reverb.modAmount)}
+                label="Amount"
+                max={1}
+                min={0}
+                onChange={(modAmount) => onChange({ modAmount })}
+                size="small"
+                step={0.01}
+                value={reverb.modAmount}
+              />
+            </section>
 
-            <div className="reverb-post-eq">
-              <span>Post Equalizer</span>
-              <label>
-                Low
-                <input
-                  max={12}
-                  min={-12}
-                  onChange={(event) =>
-                    onChange({ postEqLowGain: Number(event.target.value) })
-                  }
-                  step={0.5}
-                  type="range"
-                  value={reverb.postEqLowGain}
-                />
-                <strong>{formatDb(reverb.postEqLowGain)}</strong>
-              </label>
-              <label>
-                Mid
-                <input
-                  max={12}
-                  min={-12}
-                  onChange={(event) =>
-                    onChange({ postEqMidGain: Number(event.target.value) })
-                  }
-                  step={0.5}
-                  type="range"
-                  value={reverb.postEqMidGain}
-                />
-                <strong>{formatDb(reverb.postEqMidGain)}</strong>
-              </label>
-              <label>
-                High
-                <input
-                  max={12}
-                  min={-12}
-                  onChange={(event) =>
-                    onChange({ postEqHighGain: Number(event.target.value) })
-                  }
-                  step={0.5}
-                  type="range"
-                  value={reverb.postEqHighGain}
-                />
-                <strong>{formatDb(reverb.postEqHighGain)}</strong>
-              </label>
-            </div>
+            <section className="reverb-eq-section">
+              <span>POST EQUALIZER</span>
+              <Knob
+                display={formatDb(reverb.postEqLowGain)}
+                label="Low"
+                max={12}
+                min={-12}
+                onChange={(postEqLowGain) => onChange({ postEqLowGain })}
+                size="small"
+                step={0.5}
+                value={reverb.postEqLowGain}
+              />
+              <Knob
+                display={formatDb(reverb.postEqMidGain)}
+                label="Mid"
+                max={12}
+                min={-12}
+                onChange={(postEqMidGain) => onChange({ postEqMidGain })}
+                size="small"
+                step={0.5}
+                value={reverb.postEqMidGain}
+              />
+              <Knob
+                display={formatDb(reverb.postEqHighGain)}
+                label="High"
+                max={12}
+                min={-12}
+                onChange={(postEqHighGain) => onChange({ postEqHighGain })}
+                size="small"
+                step={0.5}
+                value={reverb.postEqHighGain}
+              />
+            </section>
           </div>
         </div>
       </div>

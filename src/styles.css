@@ -1315,16 +1315,16 @@ input[type="range"] {
   opacity: 0.68;
 }
 
-/* Vintage Plate Reverb Insert */
+/* REV PLATE-140 style reverb insert */
 .reverb-panel {
   padding: 0;
   overflow: hidden;
-  border-color: #7a4c25;
-  background: #20150d;
+  border-color: #70461f;
+  background: #1b1209;
 }
 
 .reverb-rack {
-  opacity: 0.74;
+  opacity: 0.78;
   transition: opacity 0.18s ease;
 }
 
@@ -1333,28 +1333,30 @@ input[type="range"] {
 }
 
 .reverb-wood-frame {
-  padding: 8px;
+  padding: 7px;
   border-radius: 7px;
   background:
-    linear-gradient(90deg, rgba(34, 17, 8, 0.5), transparent 22%, rgba(255,255,255,0.1) 51%, rgba(20, 10, 4, 0.55)),
-    linear-gradient(135deg, #8f5527 0%, #b86d32 38%, #653817 100%);
+    linear-gradient(90deg, rgba(0,0,0,0.22), rgba(255,255,255,0.12) 48%, rgba(0,0,0,0.28)),
+    repeating-linear-gradient(0deg, rgba(80, 38, 11, 0.36) 0 2px, transparent 2px 7px),
+    linear-gradient(135deg, #96551f 0%, #c17731 38%, #6d3a14 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 218, 154, 0.18),
-    inset 0 0 18px rgba(0, 0, 0, 0.48);
+    inset 0 0 0 1px rgba(255, 225, 160, 0.22),
+    inset 0 0 18px rgba(0, 0, 0, 0.5);
 }
 
 .reverb-faceplate {
   position: relative;
-  padding: 10px;
-  border: 1px solid #8b8171;
-  border-radius: 5px;
+  padding: 10px 9px 9px;
+  border: 1px solid #897a69;
+  border-radius: 4px;
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.28), rgba(0,0,0,0.08)),
-    #b8ad9b;
-  color: #2a251f;
+    linear-gradient(180deg, rgba(255,255,255,0.22), rgba(0,0,0,0.08)),
+    radial-gradient(circle at 28% 18%, rgba(65, 45, 25, 0.12), transparent 24%),
+    #b7ab96;
+  color: #2a241d;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.5),
-    inset 0 -1px 0 rgba(0,0,0,0.24);
+    inset 0 1px 0 rgba(255,255,255,0.46),
+    inset 0 -1px 0 rgba(0,0,0,0.3);
 }
 
 .reverb-screws {
@@ -1365,14 +1367,14 @@ input[type="range"] {
 
 .reverb-screws span {
   position: absolute;
-  width: 8px;
-  height: 8px;
-  border: 1px solid rgba(42, 37, 31, 0.58);
+  width: 9px;
+  height: 9px;
+  border: 1px solid rgba(45, 38, 30, 0.58);
   border-radius: 50%;
   background:
-    radial-gradient(circle at 35% 32%, rgba(255,255,255,0.5), transparent 28%),
-    #7d766d;
-  box-shadow: inset 0 -1px 1px rgba(0,0,0,0.45);
+    linear-gradient(135deg, rgba(255,255,255,0.5), transparent 45%),
+    #7d766e;
+  box-shadow: inset 0 -1px 1px rgba(0,0,0,0.5);
 }
 
 .reverb-screws span:nth-child(1) { left: 0; top: 0; }
@@ -1380,194 +1382,379 @@ input[type="range"] {
 .reverb-screws span:nth-child(3) { left: 0; bottom: 0; }
 .reverb-screws span:nth-child(4) { right: 0; bottom: 0; }
 
-.reverb-top-row {
+.reverb-main-deck {
   display: grid;
-  grid-template-columns: minmax(78px, 0.95fr) minmax(58px, 0.75fr) minmax(88px, 1fr) minmax(70px, 0.9fr);
-  gap: 8px;
+  grid-template-columns: 1.12fr 0.7fr 1.42fr 0.86fr;
+  gap: 9px;
+  min-height: 150px;
 }
 
-.reverb-brand-block,
+.reverb-brand-module,
 .reverb-tube-module,
 .reverb-decay-module,
 .reverb-blend-module {
   min-width: 0;
-  border: 1px solid rgba(42, 37, 31, 0.24);
-  border-radius: 4px;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.24), rgba(0,0,0,0.06)),
-    rgba(154, 146, 134, 0.72);
 }
 
-.reverb-brand-block {
+.reverb-brand-module {
   display: grid;
   align-content: center;
-  gap: 5px;
-  padding: 8px 7px;
+  justify-items: center;
+  gap: 13px;
+  padding: 16px 8px;
+}
+
+.reverb-brand-module > div {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  width: 88px;
 }
 
 .reverb-brand {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
   letter-spacing: 0.03em;
 }
 
 .reverb-subtitle {
-  color: rgba(42, 37, 31, 0.62);
+  color: rgba(42, 37, 31, 0.64);
   font-size: 7px;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-}
-
-.reverb-power {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  width: 70px;
-  height: 24px;
-  color: #2a251f;
-  border: 1px solid rgba(42, 37, 31, 0.28);
-  border-radius: 4px;
-  background: rgba(255,255,255,0.16);
-  cursor: pointer;
-  font-size: 8px;
   font-weight: 900;
   letter-spacing: 0.08em;
 }
 
-.reverb-led {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #35291f;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.65);
-}
-
-.reverb-power.on .reverb-led,
-.reverb-check input:checked {
-  accent-color: #58ff78;
-}
-
-.reverb-power.on .reverb-led {
-  background: #58ff78;
-  box-shadow: 0 0 9px rgba(88,255,120,0.85);
-}
-
-.reverb-tube-module {
+.reverb-power {
   display: grid;
-  gap: 5px;
-  padding: 8px 7px;
-}
-
-.reverb-tube-module::before {
-  content: "";
-  height: 44px;
-  border-radius: 4px;
-  border: 1px solid rgba(42, 37, 31, 0.4);
-  background:
-    radial-gradient(circle at 50% 58%, rgba(255, 101, 45, 0.9), transparent 16%),
-    radial-gradient(circle at 50% 44%, rgba(255, 230, 150, 0.65), transparent 11%),
-    repeating-linear-gradient(90deg, rgba(0,0,0,0.55) 0 2px, transparent 2px 6px),
-    #191816;
-  box-shadow: inset 0 0 10px rgba(0,0,0,0.75);
-}
-
-.reverb-decay-module {
-  display: grid;
-  gap: 8px;
-  padding: 8px;
-}
-
-.reverb-decay-module label,
-.reverb-blend-module label,
-.reverb-strip-control,
-.reverb-mod-box label,
-.reverb-post-eq label {
-  display: grid;
+  justify-items: center;
   gap: 4px;
-  min-width: 0;
-}
-
-.reverb-blend-module {
-  display: grid;
-  gap: 5px;
-  padding: 8px;
-}
-
-.reverb-faceplate span,
-.reverb-faceplate label {
-  font-size: 8px;
+  color: #2a241d;
+  background: transparent;
+  cursor: pointer;
+  font-size: 7px;
   font-weight: 900;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.reverb-faceplate strong {
-  color: #12100d;
+.reverb-power-lamp {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #28231e;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 38% 35%, rgba(255,255,255,0.4), transparent 20%),
+    #181612;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.4), inset 0 0 3px rgba(0,0,0,0.8);
+}
+
+.reverb-power.on .reverb-power-lamp {
+  background:
+    radial-gradient(circle at 50% 50%, #f1ffb0 0 12%, #71ff82 22%, #172016 58%);
+  box-shadow: 0 0 8px rgba(105,255,120,0.8), inset 0 0 3px rgba(0,0,0,0.8);
+}
+
+.reverb-nameplate {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  width: 78px;
+  padding: 5px 4px;
+  border: 1px solid #8f9696;
+  border-radius: 2px;
+  background: #c7d0ce;
+  color: #494a44;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.reverb-nameplate span {
+  font-size: 5px;
+  font-weight: 900;
+}
+
+.reverb-nameplate strong {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.reverb-tube-module,
+.reverb-decay-module,
+.reverb-blend-module {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 9px 7px;
+  border: 1px solid rgba(42, 37, 31, 0.35);
+  border-radius: 3px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.2), rgba(0,0,0,0.06)),
+    rgba(184, 180, 170, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.28);
+}
+
+.reverb-tube-window {
+  position: relative;
+  width: 42px;
+  height: 78px;
+  border: 1px solid #6d695f;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.62) 0 2px, transparent 2px 6px),
+    repeating-linear-gradient(0deg, rgba(0,0,0,0.45) 0 2px, transparent 2px 8px),
+    #141414;
+  box-shadow: inset 0 0 12px rgba(0,0,0,0.9);
+}
+
+.reverb-tube-window span {
+  position: absolute;
+  inset: 12px 11px;
+  border-radius: 45%;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255,255,210,0.9), transparent 10%),
+    radial-gradient(circle at 50% 56%, rgba(255,88,42,0.9), transparent 26%),
+    linear-gradient(90deg, transparent, rgba(255,150,60,0.32), transparent);
+  box-shadow: 0 0 13px rgba(255, 82, 32, 0.75);
+}
+
+.reverb-decay-module {
+  grid-template-columns: minmax(50px, 0.85fr) minmax(32px, 0.55fr) minmax(45px, 0.7fr);
+  gap: 7px;
+  padding: 10px;
+}
+
+.reverb-module-title {
+  grid-column: 1 / -1;
+  justify-self: end;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.reverb-model-select {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+}
+
+.reverb-model-select span,
+.reverb-knob > span,
+.reverb-mod-section > span,
+.reverb-eq-section > span {
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.reverb-model-select select {
+  width: 62px;
+  color: #2a241d;
+  border: 1px solid rgba(42, 37, 31, 0.28);
+  border-radius: 3px;
+  background: #d0c4ae;
+  padding: 3px 4px;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.reverb-decay-fader {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  width: 32px;
+  height: 92px;
+  border: 1px solid #6b6356;
+  background: #d4c6a8;
+}
+
+.reverb-decay-fader input {
+  position: absolute;
+  inset: 0;
+  width: 92px;
+  height: 32px;
+  margin: 30px 0 0 -30px;
+  opacity: 0;
+  transform: rotate(-90deg);
+  cursor: ns-resize;
+}
+
+.reverb-decay-scale {
+  display: grid;
+  align-content: space-around;
+  height: 100%;
+  padding: 5px 0;
+  font-size: 5px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.reverb-decay-scale::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 11px;
+  width: 14px;
+  height: 67px;
+  border: 1px solid rgba(42, 37, 31, 0.36);
+  background: linear-gradient(180deg, #6a5b3f, #e2c47b 28%, #e5d3a4 70%, #8c7956);
+  opacity: 0.45;
+}
+
+.reverb-decay-module > strong {
+  align-self: end;
+  color: #201b15;
   font-size: 10px;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
 }
 
-.reverb-faceplate input[type="range"] {
-  width: 100%;
-  accent-color: #50371f;
-}
-
-.reverb-faceplate select {
-  width: 100%;
-  color: #2a251f;
-  border: 1px solid rgba(42, 37, 31, 0.28);
-  border-radius: 4px;
-  background: #d5cbb9;
-  padding: 4px 5px;
-  font-size: 10px;
-  font-weight: 900;
+.reverb-blend-module {
+  gap: 14px;
 }
 
 .reverb-bottom-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 30px repeat(3, minmax(45px, 0.7fr)) minmax(86px, 1.2fr) minmax(140px, 1.8fr);
+  align-items: center;
   gap: 7px;
   margin-top: 8px;
-  padding: 7px;
-  border: 1px solid rgba(42, 37, 31, 0.35);
-  border-radius: 4px;
+  padding: 8px 9px;
+  border: 1px solid rgba(42, 37, 31, 0.42);
+  border-radius: 3px;
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.14), rgba(0,0,0,0.08)),
-    #9a948a;
+    linear-gradient(180deg, rgba(255,255,255,0.16), rgba(0,0,0,0.08)),
+    #c3bbb0;
 }
 
-.reverb-strip-control {
-  padding: 6px;
-  border-right: 1px solid rgba(42, 37, 31, 0.18);
-}
-
-.reverb-mod-box,
-.reverb-post-eq {
+.reverb-arturia-mark {
   display: grid;
-  gap: 5px;
-  padding: 6px;
-  border: 1px solid rgba(42, 37, 31, 0.22);
-  border-radius: 4px;
-  background: rgba(210, 202, 190, 0.22);
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #2f2b26;
+  border-radius: 50%;
+  font-family: Georgia, serif;
+  font-size: 15px;
+  font-weight: 900;
 }
 
-.reverb-check {
-  display: flex !important;
+.reverb-mod-section,
+.reverb-eq-section {
+  display: grid;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 7px;
+  border: 1px solid rgba(42, 37, 31, 0.28);
+  border-radius: 4px;
+  background: rgba(145, 139, 129, 0.18);
 }
 
-.reverb-post-eq {
+.reverb-mod-section {
+  grid-template-columns: 1fr 42px;
+}
+
+.reverb-mod-section > span {
   grid-column: 1 / -1;
+  text-align: center;
+}
+
+.reverb-eq-section {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.reverb-post-eq > span {
+.reverb-eq-section > span {
   grid-column: 1 / -1;
-  color: rgba(42, 37, 31, 0.66);
+  text-align: center;
+}
+
+.reverb-toggle {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  font-size: 7px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.reverb-toggle input {
+  position: absolute;
+  opacity: 0;
+}
+
+.reverb-toggle i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #333027;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.6);
+}
+
+.reverb-toggle input:checked + i {
+  background: #58ff78;
+  box-shadow: 0 0 8px rgba(88,255,120,0.85);
+}
+
+.reverb-knob {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.reverb-knob-cap {
+  position: relative;
+  display: block;
+  width: 40px;
+  height: 40px;
+  border: 2px solid #a59674;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255,255,225,0.22), transparent 24%),
+    radial-gradient(circle at 48% 52%, #3b362c 0 28%, #1b1712 62%, #0e0c0a 100%);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4), inset 0 1px 3px rgba(255,255,255,0.12);
+}
+
+.reverb-knob-cap::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 15px;
+  border-radius: 999px;
+  background: #e8d78d;
+  transform: translate(-50%, -92%) rotate(var(--angle));
+  transform-origin: 50% 92%;
+}
+
+.reverb-knob.small .reverb-knob-cap {
+  width: 32px;
+  height: 32px;
+}
+
+.reverb-knob.small .reverb-knob-cap::after {
+  height: 12px;
+}
+
+.reverb-knob input {
+  position: absolute;
+  inset: -6px;
+  width: calc(100% + 12px);
+  height: calc(100% + 12px);
+  opacity: 0;
+  cursor: ew-resize;
+}
+
+.reverb-knob strong {
+  color: rgba(32, 27, 21, 0.86);
+  font-size: 8px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-align: center;
+  white-space: nowrap;
 }
 
 /* Compressor Rack Panel */
