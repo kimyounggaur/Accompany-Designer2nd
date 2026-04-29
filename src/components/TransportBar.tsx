@@ -1,4 +1,5 @@
 import {
+  Circle,
   FolderOpen,
   Magnet,
   Pause,
@@ -14,19 +15,23 @@ import { useDawStore } from "../store/useDawStore";
 import { findClip, formatTime, getClipPlaybackRate } from "../utils/audioMath";
 
 interface TransportBarProps {
+  isRecording: boolean;
   status: string;
   onFiles: (files: FileList) => void;
   onLoadProject: (file: File) => void;
   onPlayPause: () => void;
+  onRecordToggle: () => void;
   onSaveProject: () => void;
   onStop: () => void;
 }
 
 export function TransportBar({
+  isRecording,
   status,
   onFiles,
   onLoadProject,
   onPlayPause,
+  onRecordToggle,
   onSaveProject,
   onStop,
 }: TransportBarProps) {
@@ -78,6 +83,14 @@ export function TransportBar({
         </button>
         <button className="icon-button" onClick={onStop} title="정지" type="button">
           <Square size={17} />
+        </button>
+        <button
+          className={`icon-button record-button ${isRecording ? "recording" : ""}`}
+          onClick={onRecordToggle}
+          title={isRecording ? "녹음 정지" : "보컬 녹음"}
+          type="button"
+        >
+          <Circle size={16} fill="currentColor" />
         </button>
         <output className="time-display">{formatTime(playhead)}</output>
       </div>

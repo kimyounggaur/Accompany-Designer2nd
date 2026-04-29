@@ -58,6 +58,31 @@ class BrowserAudioEngine {
       sampleRate: buffer.sampleRate,
       channels: buffer.numberOfChannels,
       waveformPeaks: createWaveformPeaks(buffer),
+      sourceType: "upload",
+    };
+
+    this.buffers.set(asset.id, buffer);
+    return { asset, buffer };
+  }
+
+  async decodeBlob(
+    blob: Blob,
+    fileName: string,
+    assetId = createId("asset"),
+    sourceType: AudioAsset["sourceType"] = "recording",
+  ): Promise<DecodedAudio> {
+    const context = await this.ensureContext();
+    const data = await blob.arrayBuffer();
+    const buffer = await context.decodeAudioData(data.slice(0));
+    const asset: AudioAsset = {
+      id: assetId,
+      fileName,
+      duration: buffer.duration,
+      sampleRate: buffer.sampleRate,
+      channels: buffer.numberOfChannels,
+      waveformPeaks: createWaveformPeaks(buffer),
+      sourceType,
+      blobUrl: URL.createObjectURL(blob),
     };
 
     this.buffers.set(asset.id, buffer);

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { audioEngine } from "./audio/audioEngine";
+import { vocalRecorder } from "./audio/recorder";
 import { Inspector } from "./components/Inspector";
 import { Timeline } from "./components/Timeline";
 import { TransportBar } from "./components/TransportBar";
-import type { Clip, DawProject } from "./types";
-import { createId, getProjectDuration } from "./utils/audioMath";
+import type { AudioAsset, Clip, DawProject } from "./types";
+import { createId, findClip, getProjectDuration } from "./utils/audioMath";
 import { useDawStore } from "./store/useDawStore";
 
 function getProjectSnapshot(): DawProject {
@@ -27,7 +28,9 @@ export default function App() {
   const setIsPlaying = useDawStore((state) => state.setIsPlaying);
   const setPlayhead = useDawStore((state) => state.setPlayhead);
   const addAudioAsset = useDawStore((state) => state.addAudioAsset);
+  const updateAudioAsset = useDawStore((state) => state.updateAudioAsset);
   const addClip = useDawStore((state) => state.addClip);
+  const updateClip = useDawStore((state) => state.updateClip);
   const addTrack = useDawStore((state) => state.addTrack);
   const importProject = useDawStore((state) => state.importProject);
   const deleteSelectedClips = useDawStore((state) => state.deleteSelectedClips);
@@ -40,7 +43,18 @@ export default function App() {
   const commandMessage = useDawStore((state) => state.commandMessage);
   const playlistDetached = useDawStore((state) => state.playlistDetached);
   const [status, setStatus] = useState("오디오 파일을 업로드하면 첫 트랙에 클립이 생성됩니다.");
+  const [isRecording, setIsRecording] = useState(false);
   const animationRef = useRef<number | undefined>(undefined);
+  const recordingRef = useRef<
+    | {
+        assetId: string;
+        clipId: string;
+        fileName: string;
+        startTime: number;
+        trackId: string;
+      }
+    | undefined
+  >(undefined);
 
   const schedulingSignature = useMemo(
     () =>
@@ -214,7 +228,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    return () => audioEngine.stop();
+    return () => {
+      vocalRecorder.cancel();
+      audioEngine.stop();
+    };
   }, []);
 
   async function handlePlayPause() {
@@ -236,6 +253,145 @@ export default function App() {
     audioEngine.stop();
     setPlayhead(0);
     setIsPlaying(false);
+  }
+
+  async function handleRecordToggle() {
+    if (recordingRef.current || vocalRecorder.isRecording()) {
+      await stopRecording();
+      return;
+    }
+
+    await startRecording();
+  }
+
+  async function startRecording() {
+    try {
+      const context = await audioEngine.ensureContext();
+      const state = useDawStore.getState();
+      let targetTrack =
+        findClip(state.tracks, state.selectedClipId)?.track ?? state.tracks[0];
+
+      if (!targetTrack) {
+        addTrack();
+        targetTrack = useDawStore.getState().tracks[0];
+      }
+
+      if (!targetTrack) {
+        throw new Error("녹음할 트랙이 없습니다.");
+      }
+
+      const recordingIndex =
+        Object.values(state.audioAssets).filter(
+          (asset) => asset.sourceType === "recording",
+        ).length + 1;
+      const fileName = `Vocal Recording ${String(recordingIndex).padStart(3, "0")}.wav`;
+      const assetId = createId("asset");
+      const clipId = createId("clip");
+      const startTime = state.playhead;
+
+      await vocalRecorder.start(context, {
+        onPeaks: (waveformPeaks, elapsed) => {
+          const session = recordingRef.current;
+          if (!session) {
+            return;
+          }
+
+          const duration = Math.max(0.05, elapsed);
+          updateAudioAsset(session.assetId, {
+            duration,
+            waveformPeaks,
+          });
+          updateClip(session.clipId, { duration });
+
+          if (!useDawStore.getState().isPlaying) {
+            setPlayhead(session.startTime + elapsed);
+          }
+        },
+      });
+
+      const tempAsset: AudioAsset = {
+        id: assetId,
+        fileName,
+        duration: 0.05,
+        sampleRate: context.sampleRate,
+        channels: 1,
+        waveformPeaks: [0],
+        sourceType: "recording",
+      };
+      const clip: Clip = {
+        id: clipId,
+        audioBufferId: assetId,
+        name: fileName,
+        trackId: targetTrack.id,
+        startTime,
+        offset: 0,
+        duration: 0.05,
+        sourceBpm: state.bpm,
+        stretchMode: "none",
+        gain: 1,
+        fadeIn: 0,
+        fadeOut: 0,
+        muted: false,
+        isRecording: true,
+      };
+
+      recordingRef.current = {
+        assetId,
+        clipId,
+        fileName,
+        startTime,
+        trackId: targetTrack.id,
+      };
+      addAudioAsset(tempAsset);
+      addClip(targetTrack.id, clip);
+      setIsRecording(true);
+      setStatus(`${fileName} 녹음 중...`);
+    } catch (error) {
+      vocalRecorder.cancel();
+      recordingRef.current = undefined;
+      setIsRecording(false);
+      setStatus(`녹음 시작 실패: ${(error as Error).message}`);
+    }
+  }
+
+  async function stopRecording() {
+    const session = recordingRef.current;
+    if (!session) {
+      return;
+    }
+
+    try {
+      setStatus(`${session.fileName} 저장 중...`);
+      const result = vocalRecorder.stop();
+      const { asset } = await audioEngine.decodeBlob(
+        result.blob,
+        session.fileName,
+        session.assetId,
+        "recording",
+      );
+
+      updateAudioAsset(session.assetId, {
+        ...asset,
+        duration: asset.duration || result.duration,
+        waveformPeaks: asset.waveformPeaks.length
+          ? asset.waveformPeaks
+          : result.peaks,
+      });
+      updateClip(session.clipId, {
+        audioBufferId: asset.id,
+        duration: asset.duration || result.duration,
+        isRecording: false,
+        name: asset.fileName,
+        stretchMode: "none",
+      });
+      setStatus(`${asset.fileName} 녹음 완료`);
+    } catch (error) {
+      updateClip(session.clipId, { isRecording: false });
+      setStatus(`녹음 저장 실패: ${(error as Error).message}`);
+    } finally {
+      recordingRef.current = undefined;
+      setIsRecording(false);
+    }
   }
 
   async function handleFiles(files: FileList | File[]) {
@@ -323,10 +479,12 @@ export default function App() {
   return (
     <main className="app-shell">
       <TransportBar
+        isRecording={isRecording}
         status={commandMessage || status}
         onFiles={handleFiles}
         onLoadProject={handleLoadProject}
         onPlayPause={handlePlayPause}
+        onRecordToggle={handleRecordToggle}
         onSaveProject={handleSaveProject}
         onStop={handleStop}
       />

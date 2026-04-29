@@ -87,6 +87,7 @@ export interface Clip {
   fadeOut: number;
   muted?: boolean;
   groupId?: string;
+  isRecording?: boolean;
 }
 
 export interface Track {
@@ -111,6 +112,8 @@ export interface AudioAsset {
   channels: number;
   waveformPeaks: number[];
   detectedBpm?: number;
+  sourceType?: "upload" | "recording";
+  blobUrl?: string;
 }
 
 export interface DawProject {

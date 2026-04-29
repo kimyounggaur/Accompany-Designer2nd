@@ -268,7 +268,7 @@ export function ClipView({
     <article
       className={`clip ${isSelected ? "selected" : ""} ${
         clip.muted ? "muted" : ""
-      } ${clip.groupId ? "grouped" : ""}`}
+      } ${clip.groupId ? "grouped" : ""} ${clip.isRecording ? "recording" : ""}`}
       style={{ left, top, width }}
       onContextMenu={(event) => {
         event.preventDefault();
