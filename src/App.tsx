@@ -54,8 +54,13 @@ export default function App() {
   const resetRecordingState = useDawStore((state) => state.resetRecordingState);
   const [status, setStatus] = useState("오디오 파일을 업로드하면 첫 트랙에 클립이 생성됩니다.");
   const isRecording =
-    recordingState.status === "recording" || recordingState.status === "stopping";
+    recordingState.status === "counting-in" ||
+    recordingState.status === "recording" ||
+    recordingState.status === "stopping";
   const animationRef = useRef<number | undefined>(undefined);
+  const countInTimerRef = useRef<number | undefined>(undefined);
+  const countInResolveRef = useRef<(() => void) | undefined>(undefined);
+  const metronomeTimerRef = useRef<number | undefined>(undefined);
   const recordingRef = useRef<
     | {
         assetId: string;
@@ -240,10 +245,94 @@ export default function App() {
 
   useEffect(() => {
     return () => {
+      clearRecordingTimers();
       vocalRecorder.cancel();
       audioEngine.stop();
     };
   }, []);
+
+  function clearRecordingTimers() {
+    if (countInTimerRef.current) {
+      window.clearTimeout(countInTimerRef.current);
+      countInTimerRef.current = undefined;
+    }
+    countInResolveRef.current?.();
+    countInResolveRef.current = undefined;
+
+    if (metronomeTimerRef.current) {
+      window.clearInterval(metronomeTimerRef.current);
+      metronomeTimerRef.current = undefined;
+    }
+  }
+
+  function playMetronomeClick(context: AudioContext, strong = false) {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const now = context.currentTime;
+
+    oscillator.type = "square";
+    oscillator.frequency.setValueAtTime(strong ? 1320 : 880, now);
+    gain.gain.setValueAtTime(strong ? 0.18 : 0.11, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.06);
+  }
+
+  function startRecordingMetronome(context: AudioContext) {
+    const state = useDawStore.getState();
+    if (!state.recording.metronomeEnabled) {
+      return;
+    }
+
+    const beatMs = Math.max(80, (60 / state.bpm) * 1000);
+    let beatIndex = 0;
+    playMetronomeClick(context, true);
+    metronomeTimerRef.current = window.setInterval(() => {
+      beatIndex += 1;
+      playMetronomeClick(context, beatIndex % 4 === 0);
+    }, beatMs);
+  }
+
+  async function runCountIn(context: AudioContext) {
+    const { recording, bpm } = useDawStore.getState();
+    const totalBeats = recording.countInBeats;
+
+    if (totalBeats <= 0) {
+      return;
+    }
+
+    const beatMs = Math.max(80, (60 / bpm) * 1000);
+    setRecordingState({
+      status: "counting-in",
+      countInRemaining: totalBeats,
+      elapsed: 0,
+      waveformPeaks: [],
+    });
+
+    for (let beat = totalBeats; beat > 0; beat -= 1) {
+      setRecordingState({
+        status: "counting-in",
+        countInRemaining: beat,
+      });
+      setStatus(`Recording starts in ${beat}...`);
+      useDawStore.getState().setCommandMessage(`Recording starts in ${beat}...`);
+      playMetronomeClick(context, beat === totalBeats);
+      await new Promise<void>((resolve) => {
+        countInResolveRef.current = resolve;
+        countInTimerRef.current = window.setTimeout(resolve, beatMs);
+      });
+      countInTimerRef.current = undefined;
+      countInResolveRef.current = undefined;
+
+      if (useDawStore.getState().recording.status !== "counting-in") {
+        throw new Error("Count-in cancelled.");
+      }
+    }
+
+    countInTimerRef.current = undefined;
+  }
 
   async function handlePlayPause() {
     const state = useDawStore.getState();
@@ -267,6 +356,14 @@ export default function App() {
   }
 
   async function handleRecordToggle() {
+    if (recordingState.status === "counting-in") {
+      clearRecordingTimers();
+      resetRecordingState();
+      setStatus("Recording count-in cancelled.");
+      useDawStore.getState().setCommandMessage("Recording count-in cancelled.");
+      return;
+    }
+
     if (recordingRef.current || vocalRecorder.isRecording()) {
       await stopRecording();
       return;
@@ -278,6 +375,7 @@ export default function App() {
   async function startRecording() {
     try {
       const context = await audioEngine.ensureContext();
+      await runCountIn(context);
       const state = useDawStore.getState();
       const armedTrack = state.tracks.find(
         (track) => track.id === state.recording.armedTrackId,
@@ -367,6 +465,7 @@ export default function App() {
         startTime,
         trackId: targetTrack.id,
       };
+      startRecordingMetronome(context);
       addAudioAsset(tempAsset);
       addClip(targetTrack.id, clip);
       setRecordingState({
@@ -376,14 +475,25 @@ export default function App() {
         startedAtProjectTime: startTime,
         elapsed: 0,
         inputDeviceId: state.recording.inputDeviceId,
+        countInRemaining: 0,
         waveformPeaks: [],
       });
       setStatus(`${fileName} 녹음 중...`);
+      useDawStore.getState().setCommandMessage(`${fileName} 녹음 중...`);
     } catch (error) {
+      clearRecordingTimers();
       vocalRecorder.cancel();
       recordingRef.current = undefined;
       resetRecordingState();
-      setStatus(`녹음 시작 실패: ${(error as Error).message}`);
+      if ((error as Error).message === "Count-in cancelled.") {
+        setStatus("Recording count-in cancelled.");
+        useDawStore.getState().setCommandMessage("Recording count-in cancelled.");
+      } else {
+        setStatus(`녹음 시작 실패: ${(error as Error).message}`);
+        useDawStore
+          .getState()
+          .setCommandMessage(`녹음 시작 실패: ${(error as Error).message}`);
+      }
     }
   }
 
@@ -419,10 +529,15 @@ export default function App() {
         stretchMode: "none",
       });
       setStatus(`${asset.fileName} 녹음 완료`);
+      useDawStore.getState().setCommandMessage(`${asset.fileName} 녹음 완료`);
     } catch (error) {
       updateClip(session.clipId, { isRecording: false });
       setStatus(`녹음 저장 실패: ${(error as Error).message}`);
+      useDawStore
+        .getState()
+        .setCommandMessage(`녹음 저장 실패: ${(error as Error).message}`);
     } finally {
+      clearRecordingTimers();
       recordingRef.current = undefined;
       resetRecordingState();
     }

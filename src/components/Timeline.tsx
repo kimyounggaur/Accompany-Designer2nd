@@ -379,7 +379,9 @@ export function Timeline() {
                     : "toggle arm-toggle"
                 }
                 disabled={
-                  recording.status === "recording" || recording.status === "stopping"
+                  recording.status === "counting-in" ||
+                  recording.status === "recording" ||
+                  recording.status === "stopping"
                 }
                 onClick={() => toggleRecordingArm(track.id)}
                 title="Arm this track for vocal recording"

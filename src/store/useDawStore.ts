@@ -30,6 +30,9 @@ const DEFAULT_RECORDING_STATE: RecordingState = {
   startedAtProjectTime: 0,
   elapsed: 0,
   monitoringEnabled: false,
+  metronomeEnabled: false,
+  countInBeats: 0,
+  countInRemaining: 0,
   waveformPeaks: [],
 };
 
@@ -84,6 +87,8 @@ interface DawStore extends DawProject {
   toggleRecordingArm: (trackId: string) => void;
   setRecordingInputDevice: (inputDeviceId?: string) => void;
   setRecordingMonitoring: (monitoringEnabled: boolean) => void;
+  setRecordingMetronome: (metronomeEnabled: boolean) => void;
+  setRecordingCountIn: (countInBeats: number) => void;
   addAudioAsset: (asset: AudioAsset) => void;
   updateAudioAsset: (assetId: string, patch: Partial<AudioAsset>) => void;
   addClip: (trackId: string, clip: Clip) => void;
@@ -342,13 +347,20 @@ export const useDawStore = create<DawStore>((set) => ({
         armedTrackId: state.recording.armedTrackId,
         inputDeviceId: state.recording.inputDeviceId,
         monitoringEnabled: state.recording.monitoringEnabled,
+        metronomeEnabled: state.recording.metronomeEnabled,
+        countInBeats: state.recording.countInBeats,
         status: state.recording.armedTrackId ? "armed" : "idle",
+        countInRemaining: 0,
         waveformPeaks: [],
       },
     })),
   toggleRecordingArm: (trackId) =>
     set((state) => {
-      if (state.recording.status === "recording" || state.recording.status === "stopping") {
+      if (
+        state.recording.status === "counting-in" ||
+        state.recording.status === "recording" ||
+        state.recording.status === "stopping"
+      ) {
         return {
           commandMessage: "Stop recording before changing armed track.",
         };
@@ -366,6 +378,7 @@ export const useDawStore = create<DawStore>((set) => ({
           status: armedTrackId ? "armed" : "idle",
           startedAtProjectTime: 0,
           elapsed: 0,
+          countInRemaining: 0,
           waveformPeaks: [],
         },
         commandMessage: armedTrackId ? "Track armed for recording." : "Recording arm cleared.",
@@ -388,6 +401,23 @@ export const useDawStore = create<DawStore>((set) => ({
       commandMessage: monitoringEnabled
         ? "Input monitoring enabled."
         : "Input monitoring disabled.",
+    })),
+  setRecordingMetronome: (metronomeEnabled) =>
+    set((state) => ({
+      recording: {
+        ...state.recording,
+        metronomeEnabled,
+      },
+      commandMessage: metronomeEnabled ? "Metronome enabled." : "Metronome disabled.",
+    })),
+  setRecordingCountIn: (countInBeats) =>
+    set((state) => ({
+      recording: {
+        ...state.recording,
+        countInBeats: clamp(Math.round(countInBeats), 0, 8),
+        countInRemaining: 0,
+      },
+      commandMessage: countInBeats > 0 ? "Count-in enabled." : "Count-in disabled.",
     })),
   addAudioAsset: (asset) =>
     set((state) => ({

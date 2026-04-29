@@ -16,7 +16,12 @@ export type PlaylistSnap =
   | "halfBeat"
   | "quarterBeat"
   | "none";
-export type RecordingStatus = "idle" | "armed" | "recording" | "stopping";
+export type RecordingStatus =
+  | "idle"
+  | "armed"
+  | "counting-in"
+  | "recording"
+  | "stopping";
 export type DelaySyncDivision =
   | "1/1"
   | "1/2"
@@ -129,6 +134,9 @@ export interface RecordingState {
   elapsed: number;
   inputDeviceId?: string;
   monitoringEnabled: boolean;
+  metronomeEnabled: boolean;
+  countInBeats: number;
+  countInRemaining: number;
   waveformPeaks: number[];
 }
 

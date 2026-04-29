@@ -3,10 +3,12 @@ import {
   FolderOpen,
   Headphones,
   Magnet,
+  Music2,
   Pause,
   Play,
   Save,
   Square,
+  Timer,
   Upload,
   ZoomIn,
   ZoomOut,
@@ -58,6 +60,10 @@ export function TransportBar({
   const setRecordingMonitoring = useDawStore(
     (state) => state.setRecordingMonitoring,
   );
+  const setRecordingMetronome = useDawStore(
+    (state) => state.setRecordingMetronome,
+  );
+  const setRecordingCountIn = useDawStore((state) => state.setRecordingCountIn);
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
 
   const selectedClip = useMemo(
@@ -138,6 +144,34 @@ export function TransportBar({
           <Headphones size={16} />
         </button>
         <output className="time-display">{formatTime(playhead)}</output>
+      </div>
+
+      <div className="transport-group record-options-group">
+        <button
+          className={`icon-button metronome-button ${
+            recording.metronomeEnabled ? "active" : ""
+          }`}
+          disabled={isRecording}
+          onClick={() => setRecordingMetronome(!recording.metronomeEnabled)}
+          title="녹음 메트로놈"
+          type="button"
+        >
+          <Music2 size={16} />
+        </button>
+        <label className="count-in-control">
+          <Timer size={14} />
+          <select
+            disabled={isRecording}
+            onChange={(event) => setRecordingCountIn(Number(event.target.value))}
+            value={recording.countInBeats}
+          >
+            <option value={0}>No count</option>
+            <option value={1}>1 beat</option>
+            <option value={2}>2 beats</option>
+            <option value={4}>1 bar</option>
+            <option value={8}>2 bars</option>
+          </select>
+        </label>
       </div>
 
       <div className="transport-group input-device-group">

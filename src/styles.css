@@ -328,6 +328,38 @@ button {
   max-width: 190px;
 }
 
+.record-options-group {
+  gap: 6px;
+}
+
+.count-in-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  min-width: 104px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: var(--surface-2);
+}
+
+.count-in-control select {
+  width: 72px;
+  min-width: 0;
+  color: #f3f5ee;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 800;
+  outline: none;
+}
+
+.count-in-control:focus-within {
+  border-color: var(--mint);
+}
+
 .input-select-control {
   display: grid;
   gap: 3px;
@@ -361,6 +393,12 @@ button {
   color: #101311;
   border-color: transparent;
   background: var(--mint);
+}
+
+.metronome-button.active {
+  color: #101311;
+  border-color: transparent;
+  background: var(--amber);
 }
 
 .icon-button,
