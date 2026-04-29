@@ -14,9 +14,7 @@ import { playlistToolIcons } from "../utils/playlistToolIcons";
 import { ClipView } from "./ClipView";
 import { PlaylistToolbar } from "./PlaylistToolbar";
 
-const MIN_TRACK_HEIGHT = 48;
-const MAX_TRACK_HEIGHT = 300;
-const DEFAULT_TRACK_HEIGHT = 116;
+const TRACK_HEIGHT = 116;
 const CLIP_TOP_OFFSET = 15;
 
 interface PointerPosition {
@@ -64,10 +62,8 @@ export function Timeline() {
   const sessionRef = useRef<LanePointerSession | undefined>(undefined);
   const [dragBox, setDragBox] = useState<DragBox | undefined>();
   const [cursorAccent, setCursorAccent] = useState<CursorAccent | undefined>();
-  const [trackHeight, setTrackHeight] = useState(DEFAULT_TRACK_HEIGHT);
-  const resizingRef = useRef(false);
-  const resizeStartYRef = useRef(0);
-  const resizeStartHeightRef = useRef(DEFAULT_TRACK_HEIGHT);
+  // 룰러 드래그 줌용
+  const rulerDragRef = useRef<{ startX: number; startZoom: number } | null>(null);
   const tracks = useDawStore((state) => state.tracks);
   const audioAssets = useDawStore((state) => state.audioAssets);
   const timeMarkers = useDawStore((state) => state.timeMarkers);
@@ -88,23 +84,23 @@ export function Timeline() {
   const updateTrack = useDawStore((state) => state.updateTrack);
   const setZoom = useDawStore((state) => state.setZoom);
 
-  const CLIP_HEIGHT = trackHeight - 32;
+  const CLIP_HEIGHT = TRACK_HEIGHT - 32;
 
-  // 트랙 높이 드래그 리사이즈 핸들러
-  function beginTrackResize(e: React.MouseEvent) {
+  // ── 수평 줌: 룰러 드래그 ──────────────────────────────
+  function beginRulerDrag(e: React.MouseEvent<HTMLDivElement>) {
+    if (e.button !== 0) return;
     e.preventDefault();
-    resizingRef.current = true;
-    resizeStartYRef.current = e.clientY;
-    resizeStartHeightRef.current = trackHeight;
+    rulerDragRef.current = { startX: e.clientX, startZoom: zoomPxPerSecond };
 
     function onMove(ev: MouseEvent) {
-      if (!resizingRef.current) return;
-      const delta = ev.clientY - resizeStartYRef.current;
-      const next = Math.max(MIN_TRACK_HEIGHT, Math.min(MAX_TRACK_HEIGHT, resizeStartHeightRef.current + delta));
-      setTrackHeight(next);
+      if (!rulerDragRef.current) return;
+      // 오른쪽으로 드래그 → 확대, 왼쪽 → 축소
+      const delta = ev.clientX - rulerDragRef.current.startX;
+      const factor = Math.pow(1.008, delta);          // 부드러운 지수 스케일
+      setZoom(rulerDragRef.current.startZoom * factor);
     }
     function onUp() {
-      resizingRef.current = false;
+      rulerDragRef.current = null;
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     }
@@ -112,18 +108,10 @@ export function Timeline() {
     document.addEventListener('mouseup', onUp);
   }
 
-  // 트랙 컬럼 휠: 트랙 높이 조절
-  function handleTrackColumnWheel(e: React.WheelEvent) {
+  // ── 수평 줌: 타임라인 마우스 휠 ──────────────────────
+  function handleTimelineWheel(e: React.WheelEvent) {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? -10 : 10;
-    setTrackHeight((h) => Math.max(MIN_TRACK_HEIGHT, Math.min(MAX_TRACK_HEIGHT, h + delta)));
-  }
-
-  // 타임라인 영역 휠: Ctrl+휠 → 수평 줌
-  function handleLanesWheel(e: React.WheelEvent) {
-    if (!e.ctrlKey) return;
-    e.preventDefault();
-    const factor = e.deltaY > 0 ? 0.85 : 1.18;
+    const factor = e.deltaY > 0 ? 0.88 : 1.14;
     setZoom(zoomPxPerSecond * factor);
   }
 
@@ -169,7 +157,7 @@ export function Timeline() {
     const y = Math.max(0, event.clientY - rect.top);
     const rawTime = x / zoomPxPerSecond;
     const trackIndex = clamp(
-      Math.floor(y / trackHeight),
+      Math.floor(y / TRACK_HEIGHT),
       0,
       Math.max(0, tracks.length - 1),
     );
@@ -207,7 +195,7 @@ export function Timeline() {
         const clipLeft = clip.startTime * zoomPxPerSecond;
         const clipRight =
           clipLeft + getClipTimelineDuration(bpm, clip) * zoomPxPerSecond;
-        const clipTop = trackIndex * trackHeight + CLIP_TOP_OFFSET;
+        const clipTop = trackIndex * TRACK_HEIGHT + CLIP_TOP_OFFSET;
         const clipBottom = clipTop + CLIP_HEIGHT;
 
         return (
@@ -365,12 +353,8 @@ export function Timeline() {
       style={playlistCursorStyle}
     >
       <PlaylistToolbar />
-      <div
-        className="track-column"
-        onWheel={handleTrackColumnWheel}
-        style={{ cursor: "ns-resize" } as CSSProperties}
-      >
-        <div className="ruler-corner" style={{ cursor: "default" }}>
+      <div className="track-column">
+        <div className="ruler-corner">
           <span>플레이리스트</span>
           <button className="add-track-button" onClick={addTrack} title="트랙 추가">
             <Plus size={15} />
@@ -378,24 +362,21 @@ export function Timeline() {
           </button>
         </div>
         {tracks.map((track) => (
-          <div className="track-header" key={track.id} style={{ height: trackHeight }}>
+          <div className="track-header" key={track.id}>
             <input
               value={track.name}
               onChange={(event) => updateTrack(track.id, { name: event.target.value })}
-              style={{ cursor: "text" }}
             />
             <div className="track-toggles">
               <button
                 className={track.muted ? "toggle active danger" : "toggle"}
                 onClick={() => updateTrack(track.id, { muted: !track.muted })}
-                style={{ cursor: "pointer" }}
               >
                 M
               </button>
               <button
                 className={track.solo ? "toggle active" : "toggle"}
                 onClick={() => updateTrack(track.id, { solo: !track.solo })}
-                style={{ cursor: "pointer" }}
               >
                 S
               </button>
@@ -411,21 +392,19 @@ export function Timeline() {
                 onChange={(event) =>
                   updateTrack(track.id, { volume: Number(event.target.value) })
                 }
-                style={{ cursor: "ew-resize" }}
               />
             </label>
-            {/* 트랙 높이 리사이즈 핸들 */}
-            <div
-              className="track-resize-handle"
-              onMouseDown={beginTrackResize}
-              title="드래그하여 트랙 높이 조절"
-            />
           </div>
         ))}
       </div>
 
       <div className="timeline-scroll">
-        <div className="ruler" style={{ width }}>
+        <div
+          className="ruler"
+          style={{ width, cursor: "ew-resize", userSelect: "none" }}
+          onMouseDown={beginRulerDrag}
+          title="좌우 드래그로 타임라인 확대/축소"
+        >
           {rulerTicks.map((tick) => (
             <div
               className={`ruler-tick ${tick.label ? "major" : ""}`}
@@ -451,7 +430,7 @@ export function Timeline() {
           ref={lanesRef}
           style={{
             width,
-            minHeight: tracks.length * trackHeight,
+            minHeight: tracks.length * TRACK_HEIGHT,
             backgroundSize: `${subdivisionWidth}px 100%`,
           }}
           onPointerDown={beginLanePointer}
@@ -459,7 +438,7 @@ export function Timeline() {
           onPointerUp={endLanePointer}
           onPointerCancel={endLanePointer}
           onPointerLeave={() => setCursorAccent(undefined)}
-          onWheel={handleLanesWheel}
+          onWheel={handleTimelineWheel}
         >
           {timeMarkers.map((marker) => (
             <div
@@ -467,7 +446,7 @@ export function Timeline() {
               key={marker.id}
               style={{
                 left: marker.time * zoomPxPerSecond,
-                height: tracks.length * trackHeight,
+                height: tracks.length * TRACK_HEIGHT,
               }}
             />
           ))}
@@ -475,7 +454,7 @@ export function Timeline() {
             className="playhead"
             style={{
               left: playhead * zoomPxPerSecond,
-              height: tracks.length * trackHeight,
+              height: tracks.length * TRACK_HEIGHT,
             }}
           />
           {tracks.map((track, index) => (
@@ -483,8 +462,8 @@ export function Timeline() {
               className="track-lane"
               key={track.id}
               style={{
-                height: trackHeight,
-                top: index * trackHeight,
+                height: TRACK_HEIGHT,
+                top: index * TRACK_HEIGHT,
               }}
             />
           ))}
@@ -494,7 +473,7 @@ export function Timeline() {
               clip={clip}
               key={clip.id}
               lanesRef={lanesRef}
-              trackHeight={trackHeight}
+              trackHeight={TRACK_HEIGHT}
               trackIndex={trackIndex}
               trackIds={trackIds}
             />
