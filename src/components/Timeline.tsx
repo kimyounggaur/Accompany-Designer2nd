@@ -125,13 +125,15 @@ export function Timeline() {
   const subdivisionWidth = beatWidth / gridDivision;
 
   const rulerTicks = useMemo(() => {
-    const totalBeats = Math.ceil(projectDuration / beatSeconds);
+    // projectDuration 대신 실제 표시 너비 기준으로 틱 생성 → 트랙 끝까지 번호 표시
+    const visibleDuration = width / zoomPxPerSecond;
+    const totalBeats = Math.ceil(visibleDuration / beatSeconds);
     return Array.from({ length: totalBeats + 1 }, (_, beat) => ({
       beat,
       left: beat * beatWidth,
       label: beat % 4 === 0 ? String(beat / 4 + 1) : "",
     }));
-  }, [beatSeconds, beatWidth, projectDuration]);
+  }, [beatSeconds, beatWidth, width, zoomPxPerSecond]);
   const timelineClips = useMemo(
     () =>
       tracks.flatMap((track, trackIndex) =>
