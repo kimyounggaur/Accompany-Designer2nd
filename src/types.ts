@@ -24,6 +24,7 @@ export type DelaySyncDivision =
   | "1/16"
   | "1/8d"
   | "1/8t";
+export type ReverbMode = "plate" | "room" | "hall";
 
 export interface EqSettings {
   lowGain: number;
@@ -49,6 +50,24 @@ export interface DelaySettings {
   syncEnabled: boolean;
   syncDivision: DelaySyncDivision;
   pingPong: boolean;
+}
+
+export interface ReverbSettings {
+  enabled: boolean;
+  mode: ReverbMode;
+  preDelayMs: number;
+  decay: number;
+  drive: number;
+  dry: number;
+  wet: number;
+  width: number;
+  highPassHz: number;
+  lowPassHz: number;
+  modEnabled: boolean;
+  modAmount: number;
+  postEqLowGain: number;
+  postEqMidGain: number;
+  postEqHighGain: number;
 }
 
 export interface Clip {
@@ -78,6 +97,7 @@ export interface Track {
   eq: EqSettings;
   compressor: CompressorSettings;
   delay: DelaySettings;
+  reverb: ReverbSettings;
   clips: Clip[];
 }
 

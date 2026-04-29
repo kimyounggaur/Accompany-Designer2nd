@@ -1,5 +1,6 @@
 import type { AudioAsset, DawProject, Track } from "../types";
 import { createDelayInsert } from "./delay";
+import { createReverbInsert } from "./reverb";
 import {
   createId,
   getClipPlaybackRate,
@@ -215,13 +216,21 @@ class BrowserAudioEngine {
       high.connect(compressor);
     }
 
+    let effectOutput: AudioNode = postDynamics;
+
     if (track.delay?.enabled) {
       const delayInsert = createDelayInsert(context, track.delay, bpm);
-      postDynamics.connect(delayInsert.input);
-      delayInsert.output.connect(pan);
-    } else {
-      postDynamics.connect(pan);
+      effectOutput.connect(delayInsert.input);
+      effectOutput = delayInsert.output;
     }
+
+    if (track.reverb?.enabled) {
+      const reverbInsert = createReverbInsert(context, track.reverb);
+      effectOutput.connect(reverbInsert.input);
+      effectOutput = reverbInsert.output;
+    }
+
+    effectOutput.connect(pan);
 
     pan.connect(output);
     output.connect(this.master!);

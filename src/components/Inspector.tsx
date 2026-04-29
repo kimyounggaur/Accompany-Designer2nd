@@ -5,7 +5,13 @@ import { audioEngine } from "../audio/audioEngine";
 import { useDawStore } from "../store/useDawStore";
 import { SpectrumAnalyzer } from "./SpectrumAnalyzer";
 import { DelayPluginPanel } from "./DelayPluginPanel";
-import type { CompressorSettings, DelaySettings, EqSettings } from "../types";
+import { ReverbPluginPanel } from "./ReverbPluginPanel";
+import type {
+  CompressorSettings,
+  DelaySettings,
+  EqSettings,
+  ReverbSettings,
+} from "../types";
 import {
   findClip,
   getClipPlaybackRate,
@@ -324,6 +330,15 @@ export function Inspector() {
     });
   }
 
+  function updateReverb(patch: Partial<ReverbSettings>) {
+    updateTrack(selectedTrack.id, {
+      reverb: {
+        ...selectedTrack.reverb,
+        ...patch,
+      },
+    });
+  }
+
   function detectClipBpm() {
     if (!selectedClip) {
       return;
@@ -507,6 +522,13 @@ export function Inspector() {
           bpm={bpm}
           delay={selectedTrack.delay}
           onChange={updateDelay}
+        />
+      </section>
+
+      <section className="panel reverb-panel">
+        <ReverbPluginPanel
+          reverb={selectedTrack.reverb}
+          onChange={updateReverb}
         />
       </section>
 

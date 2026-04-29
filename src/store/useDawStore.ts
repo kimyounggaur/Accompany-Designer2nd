@@ -17,6 +17,7 @@ import {
   snapTime,
 } from "../utils/audioMath";
 import { DEFAULT_DELAY_SETTINGS, normalizeDelaySettings } from "../utils/delay";
+import { DEFAULT_REVERB_SETTINGS, normalizeReverbSettings } from "../utils/reverb";
 
 const playlistToolLabels: Record<PlaylistTool, string> = {
   draw: "그리기",
@@ -118,6 +119,7 @@ function createDefaultTrack(index = 1): Track {
       release: 0.2,
     },
     delay: { ...DEFAULT_DELAY_SETTINGS },
+    reverb: { ...DEFAULT_REVERB_SETTINGS },
     clips: [],
   };
 }
@@ -165,6 +167,7 @@ function normalizeTrack(track: Track, index: number): Track {
       ...track.compressor,
     },
     delay: normalizeDelaySettings(track.delay),
+    reverb: normalizeReverbSettings(track.reverb),
     clips: track.clips ?? [],
   };
 }
