@@ -16,6 +16,14 @@ export type PlaylistSnap =
   | "halfBeat"
   | "quarterBeat"
   | "none";
+export type DelaySyncDivision =
+  | "1/1"
+  | "1/2"
+  | "1/4"
+  | "1/8"
+  | "1/16"
+  | "1/8d"
+  | "1/8t";
 
 export interface EqSettings {
   lowGain: number;
@@ -29,6 +37,18 @@ export interface CompressorSettings {
   ratio: number;
   attack: number;
   release: number;
+}
+
+export interface DelaySettings {
+  enabled: boolean;
+  delayTimeMs: number;
+  feedback: number;
+  dry: number;
+  wet: number;
+  highCutHz: number;
+  syncEnabled: boolean;
+  syncDivision: DelaySyncDivision;
+  pingPong: boolean;
 }
 
 export interface Clip {
@@ -57,6 +77,7 @@ export interface Track {
   solo: boolean;
   eq: EqSettings;
   compressor: CompressorSettings;
+  delay: DelaySettings;
   clips: Clip[];
 }
 

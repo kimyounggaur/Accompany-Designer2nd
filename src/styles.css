@@ -1028,6 +1028,191 @@ input[type="range"] {
   text-align: center;
 }
 
+/* Vintage Delay Insert */
+.delay-panel {
+  padding: 0;
+  overflow: hidden;
+  border-color: #6b4a22;
+  background: #1f150b;
+}
+
+.delay-rack {
+  opacity: 0.74;
+  transition: opacity 0.18s ease;
+}
+
+.delay-rack.on {
+  opacity: 1;
+}
+
+.delay-wood-frame {
+  padding: 9px;
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, rgba(0,0,0,0.18), transparent 18%, rgba(255,255,255,0.12) 50%, rgba(0,0,0,0.22)),
+    linear-gradient(135deg, #8a4f21 0%, #b06b2d 38%, #5c3316 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 220, 150, 0.18),
+    inset 0 0 18px rgba(0, 0, 0, 0.45);
+}
+
+.delay-faceplate {
+  padding: 11px;
+  border: 1px solid #8f8572;
+  border-radius: 5px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.25), rgba(0,0,0,0.08)),
+    #bcb3a3;
+  color: #2a251f;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.45),
+    inset 0 -1px 0 rgba(0,0,0,0.22);
+}
+
+.delay-top-row,
+.delay-bottom-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.delay-brand-block {
+  display: grid;
+  gap: 2px;
+}
+
+.delay-brand {
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.delay-subtitle {
+  color: rgba(42, 37, 31, 0.62);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.delay-power {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 27px;
+  padding: 0 9px;
+  color: #2a251f;
+  border: 1px solid rgba(42, 37, 31, 0.25);
+  border-radius: 4px;
+  background: rgba(255,255,255,0.18);
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.delay-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #36281f;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.65);
+}
+
+.delay-power.on .delay-led {
+  background: #58ff78;
+  box-shadow: 0 0 9px rgba(88,255,120,0.8);
+}
+
+.delay-modules {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.delay-module {
+  display: grid;
+  gap: 6px;
+  padding: 10px 8px;
+  border: 1px solid rgba(42, 37, 31, 0.25);
+  border-radius: 4px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.28), rgba(0,0,0,0.06)),
+    #a9a194;
+}
+
+.delay-module span,
+.delay-blend label,
+.delay-check {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.delay-module strong {
+  color: #11100d;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.delay-module input[type="range"],
+.delay-blend input[type="range"] {
+  accent-color: #51351d;
+}
+
+.delay-time-module input:disabled {
+  opacity: 0.42;
+}
+
+.delay-blend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  flex: 1;
+}
+
+.delay-blend label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.delay-blend span {
+  color: rgba(42, 37, 31, 0.68);
+  font-size: 10px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.delay-switches {
+  display: grid;
+  gap: 5px;
+  min-width: 102px;
+}
+
+.delay-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.delay-switches select {
+  width: 100%;
+  color: #2a251f;
+  border: 1px solid rgba(42, 37, 31, 0.28);
+  border-radius: 4px;
+  background: #d4caba;
+  padding: 4px 5px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.muted-option {
+  opacity: 0.68;
+}
+
 /* Compressor Rack Panel */
 .comp-panel {
   padding: 0;

@@ -16,6 +16,7 @@ import {
   getClipTimelineDuration,
   snapTime,
 } from "../utils/audioMath";
+import { DEFAULT_DELAY_SETTINGS, normalizeDelaySettings } from "../utils/delay";
 
 const playlistToolLabels: Record<PlaylistTool, string> = {
   draw: "그리기",
@@ -116,6 +117,7 @@ function createDefaultTrack(index = 1): Track {
       attack: 0.012,
       release: 0.2,
     },
+    delay: { ...DEFAULT_DELAY_SETTINGS },
     clips: [],
   };
 }
@@ -146,6 +148,25 @@ function getSnapDivision(snap: PlaylistSnap) {
   }
 
   return 2;
+}
+
+function normalizeTrack(track: Track, index: number): Track {
+  const fallback = createDefaultTrack(index + 1);
+
+  return {
+    ...fallback,
+    ...track,
+    eq: {
+      ...fallback.eq,
+      ...track.eq,
+    },
+    compressor: {
+      ...fallback.compressor,
+      ...track.compressor,
+    },
+    delay: normalizeDelaySettings(track.delay),
+    clips: track.clips ?? [],
+  };
 }
 
 function getAllClipIds(tracks: Track[]) {
@@ -676,7 +697,9 @@ export const useDawStore = create<DawStore>((set) => ({
       name: project.name || "가져온 세션",
       bpm: clamp(project.bpm || 120, 20, 300),
       sampleRate: project.sampleRate || 44100,
-      tracks: project.tracks?.length ? project.tracks : [createDefaultTrack(1)],
+      tracks: project.tracks?.length
+        ? project.tracks.map((track, index) => normalizeTrack(track, index))
+        : [createDefaultTrack(1)],
       audioAssets: project.audioAssets || {},
       timeMarkers: project.timeMarkers || [],
       selectedClipId: undefined,

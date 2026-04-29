@@ -4,7 +4,8 @@ import { estimateBpm } from "../audio/bpmDetector";
 import { audioEngine } from "../audio/audioEngine";
 import { useDawStore } from "../store/useDawStore";
 import { SpectrumAnalyzer } from "./SpectrumAnalyzer";
-import type { CompressorSettings, EqSettings } from "../types";
+import { DelayPluginPanel } from "./DelayPluginPanel";
+import type { CompressorSettings, DelaySettings, EqSettings } from "../types";
 import {
   findClip,
   getClipPlaybackRate,
@@ -314,6 +315,15 @@ export function Inspector() {
     });
   }
 
+  function updateDelay(patch: Partial<DelaySettings>) {
+    updateTrack(selectedTrack.id, {
+      delay: {
+        ...selectedTrack.delay,
+        ...patch,
+      },
+    });
+  }
+
   function detectClipBpm() {
     if (!selectedClip) {
       return;
@@ -490,6 +500,14 @@ export function Inspector() {
             />
           </div>
         </div>
+      </section>
+
+      <section className="panel delay-panel">
+        <DelayPluginPanel
+          bpm={bpm}
+          delay={selectedTrack.delay}
+          onChange={updateDelay}
+        />
       </section>
 
       <section className="panel eq-panel">

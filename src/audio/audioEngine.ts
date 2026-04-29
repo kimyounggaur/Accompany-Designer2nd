@@ -1,4 +1,5 @@
 import type { AudioAsset, DawProject, Track } from "../types";
+import { createDelayInsert } from "./delay";
 import {
   createId,
   getClipPlaybackRate,
@@ -89,7 +90,7 @@ class BrowserAudioEngine {
         continue;
       }
 
-      const trackInput = this.createTrackInput(track);
+      const trackInput = this.createTrackInput(track, project.bpm);
 
       for (const clip of track.clips) {
         if (clip.muted) {
@@ -173,7 +174,7 @@ class BrowserAudioEngine {
     return this.playing;
   }
 
-  private createTrackInput(track: Track) {
+  private createTrackInput(track: Track, bpm: number) {
     const context = this.context!;
     const input = context.createGain();
     const low = context.createBiquadFilter();
@@ -208,11 +209,18 @@ class BrowserAudioEngine {
     low.connect(mid);
     mid.connect(high);
 
+    const postDynamics = track.compressor.enabled ? compressor : high;
+
     if (track.compressor.enabled) {
       high.connect(compressor);
-      compressor.connect(pan);
+    }
+
+    if (track.delay?.enabled) {
+      const delayInsert = createDelayInsert(context, track.delay, bpm);
+      postDynamics.connect(delayInsert.input);
+      delayInsert.output.connect(pan);
     } else {
-      high.connect(pan);
+      postDynamics.connect(pan);
     }
 
     pan.connect(output);
