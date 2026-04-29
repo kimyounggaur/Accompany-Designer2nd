@@ -178,25 +178,37 @@ class BrowserAudioEngine {
   private createTrackInput(track: Track, bpm: number) {
     const context = this.context!;
     const input = context.createGain();
-    const low = context.createBiquadFilter();
-    const mid = context.createBiquadFilter();
+    const bass = context.createBiquadFilter();
+    const middleLow = context.createBiquadFilter();
+    const middleHigh = context.createBiquadFilter();
     const high = context.createBiquadFilter();
+    const presence = context.createBiquadFilter();
     const compressor = context.createDynamicsCompressor();
     const pan = context.createStereoPanner();
     const output = context.createGain();
 
-    low.type = "lowshelf";
-    low.frequency.value = 180;
-    low.gain.value = track.eq.lowGain;
+    bass.type = "lowshelf";
+    bass.frequency.value = 110;
+    bass.gain.value = track.eq.bassGain;
 
-    mid.type = "peaking";
-    mid.frequency.value = 1200;
-    mid.Q.value = 0.85;
-    mid.gain.value = track.eq.midGain;
+    middleLow.type = "peaking";
+    middleLow.frequency.value = 360;
+    middleLow.Q.value = 0.9;
+    middleLow.gain.value = track.eq.middleLowGain;
+
+    middleHigh.type = "peaking";
+    middleHigh.frequency.value = 1800;
+    middleHigh.Q.value = 0.85;
+    middleHigh.gain.value = track.eq.middleHighGain;
 
     high.type = "highshelf";
-    high.frequency.value = 6400;
+    high.frequency.value = 5600;
     high.gain.value = track.eq.highGain;
+
+    presence.type = "peaking";
+    presence.frequency.value = 10000;
+    presence.Q.value = 0.75;
+    presence.gain.value = track.eq.presenceGain;
 
     compressor.threshold.value = track.compressor.threshold;
     compressor.ratio.value = track.compressor.ratio;
@@ -206,14 +218,16 @@ class BrowserAudioEngine {
     pan.pan.value = track.pan;
     output.gain.value = track.volume;
 
-    input.connect(low);
-    low.connect(mid);
-    mid.connect(high);
+    input.connect(bass);
+    bass.connect(middleLow);
+    middleLow.connect(middleHigh);
+    middleHigh.connect(high);
+    high.connect(presence);
 
-    const postDynamics = track.compressor.enabled ? compressor : high;
+    const postDynamics = track.compressor.enabled ? compressor : presence;
 
     if (track.compressor.enabled) {
-      high.connect(compressor);
+      presence.connect(compressor);
     }
 
     let effectOutput: AudioNode = postDynamics;

@@ -536,22 +536,34 @@ export function Inspector() {
         <h2>이퀄라이저</h2>
         <div className="eq-bands">
           <EqKnob
-            label="LOW"
-            value={selectedTrack.eq.lowGain}
-            color="#4caf50"
-            onChange={(v) => updateEq({ lowGain: v })}
+            label="BASS"
+            value={selectedTrack.eq.bassGain}
+            color="#3fb46b"
+            onChange={(v) => updateEq({ bassGain: v })}
           />
           <EqKnob
-            label="MID"
-            value={selectedTrack.eq.midGain}
-            color="#c9b236"
-            onChange={(v) => updateEq({ midGain: v })}
+            label="MIDDLE LOW"
+            value={selectedTrack.eq.middleLowGain}
+            color="#9dbd3a"
+            onChange={(v) => updateEq({ middleLowGain: v })}
+          />
+          <EqKnob
+            label="MIDDLE HIGH"
+            value={selectedTrack.eq.middleHighGain}
+            color="#d0a338"
+            onChange={(v) => updateEq({ middleHighGain: v })}
           />
           <EqKnob
             label="HIGH"
             value={selectedTrack.eq.highGain}
-            color="#e05555"
+            color="#df7148"
             onChange={(v) => updateEq({ highGain: v })}
+          />
+          <EqKnob
+            label="PRESENCE"
+            value={selectedTrack.eq.presenceGain}
+            color="#d75c6f"
+            onChange={(v) => updateEq({ presenceGain: v })}
           />
         </div>
       </section>

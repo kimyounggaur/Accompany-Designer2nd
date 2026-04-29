@@ -955,10 +955,11 @@ input[type="range"] {
 
 .eq-band {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 14px 6px 10px;
+  padding: 14px 4px 10px;
   position: relative;
   clip-path: polygon(8% 0%, 100% 0%, 92% 100%, 0% 100%);
   margin-left: -6px;
@@ -974,8 +975,8 @@ input[type="range"] {
 }
 
 .eq-knob {
-  width: 56px;
-  height: 56px;
+  width: 50px;
+  height: 50px;
   display: block;
   filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));
 }
@@ -983,10 +984,13 @@ input[type="range"] {
 .eq-band-label {
   margin-top: 8px;
   color: #111;
-  font-size: 13px;
+  font-size: 9px;
   font-weight: 900;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   text-shadow: 0 1px 2px rgba(255,255,255,0.2);
+  text-align: center;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
 }
 
 .eq-band-value {

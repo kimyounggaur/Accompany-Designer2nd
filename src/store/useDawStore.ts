@@ -19,6 +19,11 @@ import {
 import { DEFAULT_DELAY_SETTINGS, normalizeDelaySettings } from "../utils/delay";
 import { DEFAULT_REVERB_SETTINGS, normalizeReverbSettings } from "../utils/reverb";
 
+type LegacyEqSettings = Partial<Track["eq"]> & {
+  lowGain?: number;
+  midGain?: number;
+};
+
 const playlistToolLabels: Record<PlaylistTool, string> = {
   draw: "그리기",
   paint: "페인트",
@@ -107,9 +112,11 @@ function createDefaultTrack(index = 1): Track {
     muted: false,
     solo: false,
     eq: {
-      lowGain: 0,
-      midGain: 0,
+      bassGain: 0,
+      middleLowGain: 0,
+      middleHighGain: 0,
       highGain: 0,
+      presenceGain: 0,
     },
     compressor: {
       enabled: false,
@@ -158,10 +165,7 @@ function normalizeTrack(track: Track, index: number): Track {
   return {
     ...fallback,
     ...track,
-    eq: {
-      ...fallback.eq,
-      ...track.eq,
-    },
+    eq: normalizeEqSettings(track.eq, fallback.eq),
     compressor: {
       ...fallback.compressor,
       ...track.compressor,
@@ -169,6 +173,29 @@ function normalizeTrack(track: Track, index: number): Track {
     delay: normalizeDelaySettings(track.delay),
     reverb: normalizeReverbSettings(track.reverb),
     clips: track.clips ?? [],
+  };
+}
+
+function normalizeEqSettings(
+  eq: LegacyEqSettings | undefined,
+  fallback: Track["eq"],
+): Track["eq"] {
+  return {
+    ...fallback,
+    ...eq,
+    bassGain: clamp(eq?.bassGain ?? eq?.lowGain ?? fallback.bassGain, -12, 12),
+    middleLowGain: clamp(
+      eq?.middleLowGain ?? eq?.midGain ?? fallback.middleLowGain,
+      -12,
+      12,
+    ),
+    middleHighGain: clamp(
+      eq?.middleHighGain ?? eq?.midGain ?? fallback.middleHighGain,
+      -12,
+      12,
+    ),
+    highGain: clamp(eq?.highGain ?? fallback.highGain, -12, 12),
+    presenceGain: clamp(eq?.presenceGain ?? fallback.presenceGain, -12, 12),
   };
 }
 
