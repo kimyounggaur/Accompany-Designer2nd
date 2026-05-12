@@ -1,5 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import menuIcon from "../assets/icons/flicon_menu.png";
 import snapIcon from "../assets/icons/flicon_snap.png";
 import { useDawStore } from "../store/useDawStore";
@@ -57,6 +57,7 @@ interface CommandSection {
 
 export function PlaylistToolbar() {
   const [openMenu, setOpenMenu] = useState<"menu" | "snap" | undefined>();
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const playlistTool = useDawStore((state) => state.playlistTool);
   const playlistSnap = useDawStore((state) => state.playlistSnap);
   const globalSnap = useDawStore((state) => state.globalSnap);
@@ -98,6 +99,36 @@ export function PlaylistToolbar() {
 
     return playlistSnap === "main" ? `메인: ${globalLabel}` : localLabel;
   }, [globalSnap, playlistSnap]);
+
+  useEffect(() => {
+    if (!openMenu) {
+      return;
+    }
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target;
+
+      if (target instanceof Node && toolbarRef.current?.contains(target)) {
+        return;
+      }
+
+      setOpenMenu(undefined);
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenMenu(undefined);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [openMenu]);
 
   const goToSelectionStart = () => {
     const selected = new Set(selectedClipIds);
@@ -225,7 +256,7 @@ export function PlaylistToolbar() {
   }
 
   return (
-    <div className="playlist-toolbar" aria-label="플레이리스트 도구">
+    <div className="playlist-toolbar" aria-label="플레이리스트 도구" ref={toolbarRef}>
       <div className="playlist-toolbar-section">
         <div className="toolbar-menu-wrapper">
           <button
