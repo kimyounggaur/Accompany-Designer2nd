@@ -37,6 +37,7 @@ const DEFAULT_RECORDING_STATE: RecordingState = {
 };
 
 const playlistToolLabels: Record<PlaylistTool, string> = {
+  move: "이동",
   draw: "그리기",
   paint: "페인트",
   delete: "삭제",

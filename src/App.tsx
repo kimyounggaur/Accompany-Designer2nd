@@ -187,7 +187,9 @@ export default function App() {
       }
 
       const shortcut = event.key.toLowerCase();
-      if (shortcut === "p") {
+      if (shortcut === "v") {
+        setPlaylistTool("move");
+      } else if (shortcut === "p") {
         setPlaylistTool("draw");
       } else if (shortcut === "b") {
         setPlaylistTool("paint");

@@ -12,6 +12,7 @@ const toolButtons: Array<{
   shortcut: string;
   icon: string;
 }> = [
+  { tool: "move", label: "이동", shortcut: "V", icon: playlistToolIcons.move },
   { tool: "draw", label: "그리기", shortcut: "P", icon: playlistToolIcons.draw },
   { tool: "paint", label: "페인트", shortcut: "B", icon: playlistToolIcons.paint },
   { tool: "delete", label: "삭제", shortcut: "D", icon: playlistToolIcons.delete },
@@ -122,6 +123,7 @@ export function PlaylistToolbar() {
     {
       title: "도구",
       items: [
+        { label: "이동", shortcut: "V", selected: playlistTool === "move", action: () => setPlaylistTool("move") },
         { label: "그리기", shortcut: "P", selected: playlistTool === "draw", action: () => setPlaylistTool("draw") },
         { label: "페인트", shortcut: "B", selected: playlistTool === "paint", action: () => setPlaylistTool("paint") },
         { label: "삭제", shortcut: "D", selected: playlistTool === "delete", action: () => setPlaylistTool("delete") },

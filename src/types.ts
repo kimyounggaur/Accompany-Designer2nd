@@ -1,5 +1,6 @@
 export type StretchMode = "none" | "resample";
 export type PlaylistTool =
+  | "move"
   | "draw"
   | "paint"
   | "delete"

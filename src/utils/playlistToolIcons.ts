@@ -1,4 +1,5 @@
 import deleteIcon from "../assets/icons/flicon_delete.png";
+import moveIcon from "../assets/icons/flicon_move.svg";
 import muteIcon from "../assets/icons/flicon_mute.png";
 import paintIcon from "../assets/icons/flicon_paint.png";
 import drawIcon from "../assets/icons/flicon_pencilup.png";
@@ -10,6 +11,7 @@ import zoomIcon from "../assets/icons/flicon_zoom.png";
 import type { PlaylistTool } from "../types";
 
 export const playlistToolIcons: Record<PlaylistTool, string> = {
+  move: moveIcon,
   draw: drawIcon,
   paint: paintIcon,
   delete: deleteIcon,
