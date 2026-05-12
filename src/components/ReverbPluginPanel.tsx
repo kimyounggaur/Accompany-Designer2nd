@@ -88,11 +88,6 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
                 <span className="reverb-power-lamp" />
                 <span>POWER</span>
               </button>
-              <div className="reverb-nameplate">
-                <span>SOFTWARE MODEL</span>
-                <strong>ARTURIA</strong>
-                <span>MADE IN BROWSER</span>
-              </div>
             </section>
 
             <section className="reverb-tube-module">
