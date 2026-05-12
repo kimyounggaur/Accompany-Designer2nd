@@ -1,30 +1,43 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
-    "Helvetica Neue", Inter, Arial, sans-serif;
-  background: #000000;
-  color: #f5f5f7;
+    Arial, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  background: #fffaeb;
+  color: #1f1f1f;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --surface-0: #000000;
-  --surface-1: #1d1d1f;
-  --surface-2: #242426;
-  --surface-3: #2a2a2d;
-  --surface-4: #333336;
-  --line: #333336;
-  --line-soft: rgba(255, 255, 255, 0.1);
-  --text: #f5f5f7;
-  --text-muted: rgba(245, 245, 247, 0.62);
-  --mint: #2997ff;
-  --mint-soft: rgba(41, 151, 255, 0.16);
-  --amber: #0071e3;
-  --red: #ff453a;
-  --apple-blue: #2997ff;
-  --apple-blue-strong: #0071e3;
-  --apple-card-shadow: rgba(0, 0, 0, 0.5) 3px 5px 30px 0;
-  --apple-nav-bg: rgba(0, 0, 0, 0.88);
+  --surface-0: #fffaeb;
+  --surface-1: #fff0c2;
+  --surface-2: #ffffff;
+  --surface-3: #ffe295;
+  --surface-4: #ffd06a;
+  --line: rgba(127, 99, 21, 0.18);
+  --line-soft: rgba(127, 99, 21, 0.1);
+  --text: #1f1f1f;
+  --text-muted: hsl(0, 0%, 24%);
+  --mint: #fa520f;
+  --mint-soft: rgba(250, 82, 15, 0.13);
+  --amber: #ffa110;
+  --red: #fa520f;
+  --mistral-orange: #fa520f;
+  --mistral-flame: #fb6424;
+  --mistral-block-orange: #ff8105;
+  --mistral-sunshine: #ffa110;
+  --mistral-yellow: #ffd900;
+  --mistral-gold: #ffe295;
+  --mistral-cream: #fff0c2;
+  --mistral-ivory: #fffaeb;
+  --mistral-black: #1f1f1f;
+  --mistral-shadow: -8px 16px 39px rgba(127, 99, 21, 0.12),
+    -33px 64px 72px rgba(127, 99, 21, 0.1),
+    -73px 144px 97px rgba(127, 99, 21, 0.06),
+    -130px 255px 115px rgba(127, 99, 21, 0.02);
+  --apple-blue: #fa520f;
+  --apple-blue-strong: #fa520f;
+  --apple-card-shadow: var(--mistral-shadow);
+  --apple-nav-bg: rgba(255, 250, 235, 0.92);
 }
 
 * {
@@ -2855,4 +2868,645 @@ input[type="range"] {
 .dly-led,
 .comp-power-dot {
   background: rgba(60, 60, 67, 0.64);
+}
+
+/* Mistral.ai-inspired UI layer */
+body {
+  background: var(--mistral-ivory);
+  color: var(--mistral-black);
+  font-family:
+    Arial, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-weight: 400;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--mistral-orange);
+  outline-offset: 2px;
+}
+
+.app-shell {
+  background:
+    linear-gradient(180deg, rgba(255, 217, 0, 0.26), transparent 260px),
+    var(--mistral-ivory);
+}
+
+.transport {
+  position: relative;
+  min-height: 64px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 250, 235, 0.92);
+  color: var(--mistral-black);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.transport::before,
+.playlist-toolbar::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(
+    90deg,
+    #ffd900 0 16%,
+    #ffe295 16% 32%,
+    #ffa110 32% 50%,
+    #ff8105 50% 68%,
+    #fb6424 68% 84%,
+    #fa520f 84% 100%
+  );
+}
+
+.transport-group {
+  min-height: 40px;
+  padding: 6px;
+  border: 1px solid rgba(127, 99, 21, 0.14);
+  border-radius: 0;
+  background: var(--mistral-cream);
+  box-shadow: none;
+}
+
+.session-name input,
+.number-control input,
+.control-stack input:not([type="range"]),
+.control-stack select,
+.input-select-control select,
+.count-in-control,
+.warp-input,
+.track-header input:not([type="range"]),
+.dly-select,
+.reverb-model-select select {
+  color: var(--mistral-black);
+  border: 1px solid hsl(240, 5.9%, 90%);
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.session-name input:focus,
+.number-control input:focus,
+.control-stack input:focus,
+.control-stack select:focus,
+.input-select-control select:focus,
+.count-in-control:focus-within,
+.warp-input:focus,
+.track-header input:not([type="range"]):focus,
+.dly-select:focus,
+.reverb-model-select select:focus {
+  border-color: var(--mistral-orange);
+  box-shadow: 0 0 0 3px rgba(250, 82, 15, 0.16);
+}
+
+.number-control,
+.input-select-control,
+.warp-label,
+.panel h2,
+.toolbar-dropdown-label,
+.ruler-corner,
+.control-stack label,
+.track-header label,
+.playlist-tool-button.snap-tool {
+  color: hsl(0, 0%, 24%);
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.icon-button,
+.text-button,
+.toggle,
+.playlist-tool-button,
+.plugin-power-button,
+.add-track-button,
+.warp-btn,
+.dly-power,
+.comp-power-btn,
+.spec-led-btn {
+  color: var(--mistral-black);
+  border: 0;
+  border-radius: 0;
+  background: var(--mistral-cream);
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.icon-button:hover,
+.text-button:hover,
+.toggle:hover,
+.playlist-tool-button:hover,
+.plugin-power-button:hover,
+.add-track-button:hover,
+.warp-btn:hover,
+.dly-power:hover,
+.comp-power-btn:hover,
+.spec-led-btn:hover {
+  color: var(--mistral-black);
+  background: #ffe295;
+}
+
+.icon-button.primary,
+.icon-button.active,
+.toggle.active,
+.monitor-button.active,
+.metronome-button.active,
+.plugin-power-button.on,
+.add-track-button,
+.warp-btn.on,
+.playlist-tool-button.active,
+.toolbar-dropdown button.selected,
+.toolbar-dropdown button:hover,
+.dly-power.on,
+.dly-toggle input:checked + .dly-toggle-track,
+.trax-switch.on .trax-switch-lever,
+.comp-power-btn.on .comp-power-ring,
+.spec-led-btn.active,
+.reverb-power.on .reverb-power-lamp,
+.reverb-toggle input:checked + i {
+  color: #ffffff;
+  background: var(--mistral-black);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.monitor-button.active,
+.metronome-button.active,
+.playlist-tool-button.active,
+.plugin-power-button.on,
+.warp-btn.on,
+.toolbar-dropdown button.selected,
+.toolbar-dropdown button:hover,
+.dly-toggle input:checked + .dly-toggle-track,
+.trax-switch.on .trax-switch-lever,
+.reverb-toggle input:checked + i {
+  background: var(--mistral-orange);
+}
+
+.icon-button.primary {
+  background: var(--mistral-black);
+}
+
+.record-button,
+.arm-toggle {
+  color: var(--mistral-orange);
+}
+
+.record-button.recording,
+.arm-toggle.active,
+.toggle.danger.active {
+  color: #ffffff;
+  background: var(--mistral-orange);
+  box-shadow: none;
+}
+
+.time-display {
+  color: var(--mistral-orange);
+  font-weight: 400;
+}
+
+.status-line,
+.asset-meta,
+.empty-state {
+  color: hsl(0, 0%, 24%);
+}
+
+.workspace,
+.playlist {
+  background: var(--mistral-ivory);
+}
+
+.workspace {
+  border-top: 1px solid var(--line);
+}
+
+.playlist-toolbar {
+  position: relative;
+  z-index: 50;
+  overflow: visible;
+  min-height: 50px;
+  padding-top: 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--mistral-cream);
+  color: var(--mistral-black);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.playlist-toolbar-section {
+  border-right-color: rgba(127, 99, 21, 0.18);
+}
+
+.toolbar-menu-wrapper {
+  z-index: 51;
+}
+
+.toolbar-dropdown {
+  top: calc(100% + 8px);
+  z-index: 1000;
+}
+
+.track-column,
+.timeline-scroll {
+  position: relative;
+  z-index: 1;
+}
+
+.playlist-tool-button {
+  height: 32px;
+  min-width: 36px;
+}
+
+.playlist-tool-button.active {
+  box-shadow: inset 0 -3px 0 var(--mistral-black);
+}
+
+.playlist-tool-button img {
+  filter: none;
+  opacity: 0.86;
+}
+
+.playlist-tool-button.active img,
+.icon-button.primary svg,
+.icon-button.active svg,
+.toggle.active svg,
+.monitor-button.active svg,
+.metronome-button.active svg {
+  filter: invert(1);
+}
+
+.toolbar-dropdown {
+  border: 1px solid rgba(127, 99, 21, 0.18);
+  border-radius: 0;
+  background: #ffffff;
+  color: var(--mistral-black);
+  box-shadow: var(--mistral-shadow);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.toolbar-dropdown-section {
+  border-bottom-color: rgba(127, 99, 21, 0.12);
+}
+
+.toolbar-dropdown button {
+  color: var(--mistral-black);
+  border-radius: 0;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.toolbar-dropdown button small,
+.toolbar-dropdown button:hover small,
+.toolbar-dropdown button.selected small {
+  color: currentColor;
+  opacity: 0.72;
+}
+
+.track-column,
+.inspector {
+  border-color: var(--line);
+  background: #fff0c2;
+}
+
+.ruler-corner,
+.ruler {
+  border-bottom-color: var(--line);
+  background: #ffffff;
+}
+
+.track-header {
+  border-bottom: 1px solid rgba(127, 99, 21, 0.12);
+  background: rgba(255, 250, 235, 0.42);
+}
+
+.track-header.selected {
+  background: #ffe295;
+  box-shadow: inset 5px 0 0 var(--mistral-orange);
+}
+
+.track-header input:not([type="range"]) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--mistral-black);
+}
+
+.timeline-scroll {
+  background: var(--mistral-ivory);
+}
+
+.lanes {
+  background-color: #fffaeb;
+  background-image: linear-gradient(
+    to right,
+    rgba(127, 99, 21, 0.16) 1px,
+    transparent 1px
+  );
+}
+
+.track-lane {
+  border-bottom-color: rgba(127, 99, 21, 0.14);
+}
+
+.track-lane:nth-child(odd) {
+  background: rgba(255, 240, 194, 0.42);
+}
+
+.ruler-tick {
+  background: rgba(127, 99, 21, 0.18);
+}
+
+.ruler-tick.major {
+  background: rgba(250, 82, 15, 0.55);
+}
+
+.ruler-tick span,
+.ruler-marker span {
+  color: var(--mistral-black);
+  font-weight: 400;
+}
+
+.ruler-marker,
+.time-marker {
+  background: var(--mistral-orange);
+}
+
+.selection-box,
+.selection-box.zoom-box {
+  border-color: var(--mistral-orange);
+  background: rgba(250, 82, 15, 0.13);
+}
+
+input[type="range"] {
+  accent-color: var(--mistral-orange);
+}
+
+.clip {
+  border: 1px solid rgba(250, 82, 15, 0.36);
+  border-radius: 0;
+  background:
+    linear-gradient(90deg, rgba(255, 217, 0, 0.32), rgba(250, 82, 15, 0.18)),
+    #fff0c2;
+  box-shadow: -8px 16px 39px rgba(127, 99, 21, 0.1);
+}
+
+.clip.selected {
+  border-color: var(--mistral-orange);
+  box-shadow:
+    inset 5px 0 0 var(--mistral-orange),
+    -8px 16px 39px rgba(127, 99, 21, 0.14);
+}
+
+.clip.muted {
+  border-color: rgba(127, 99, 21, 0.22);
+  background: #fff8df;
+  opacity: 0.58;
+}
+
+.clip.grouped::after {
+  border-color: rgba(250, 82, 15, 0.68);
+  border-radius: 0;
+}
+
+.clip-label {
+  color: var(--mistral-black);
+  font-weight: 400;
+}
+
+.clip-label span {
+  color: hsl(0, 0%, 24%);
+}
+
+.clip canvas {
+  opacity: 0.78;
+}
+
+.trim-handle {
+  background: rgba(250, 82, 15, 0.34);
+}
+
+.playhead,
+.playhead::before {
+  background: var(--mistral-orange);
+}
+
+.playlist-cursor-accent {
+  background: var(--mistral-orange);
+  box-shadow: 0 0 0 1px rgba(250, 82, 15, 0.28);
+}
+
+.inspector {
+  padding: 16px;
+}
+
+.panel {
+  border: 0;
+  border-radius: 0;
+  background: #fff0c2;
+  color: var(--mistral-black);
+  box-shadow: none;
+}
+
+.panel:nth-of-type(2n) {
+  background: #fffaeb;
+}
+
+.panel h2,
+.plugin-panel-heading h2 {
+  color: var(--mistral-orange);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.43;
+  letter-spacing: 2.52px;
+  text-transform: uppercase;
+}
+
+.control-stack label {
+  gap: 8px;
+}
+
+.plugin-panel-heading {
+  margin-bottom: 16px;
+}
+
+.eq-band {
+  background: #ffffff !important;
+  border-right: 1px solid rgba(127, 99, 21, 0.12);
+  clip-path: none;
+  margin-left: 0;
+}
+
+.eq-band:last-child {
+  border-right: 0;
+}
+
+.eq-band-label,
+.eq-band-value,
+.trax-brand,
+.trax-switch-label,
+.trax-knob-label,
+.dly-brand,
+.dly-sub,
+.dly-knob-label,
+.dly-knob-value,
+.dly-section-label,
+.dly-toggle-text,
+.dly-time-display,
+.reverb-brand,
+.reverb-subtitle,
+.reverb-module-title,
+.reverb-model-select span,
+.reverb-knob > span,
+.reverb-knob strong,
+.reverb-mod-section > span,
+.reverb-eq-section > span,
+.comp-title,
+.comp-knob-label,
+.comp-knob-sub,
+.spec-title-main,
+.spec-micro,
+.spec-btn-label {
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.trax-panel,
+.delay-panel,
+.reverb-panel,
+.eq-panel,
+.comp-panel,
+.spec-panel {
+  background: #fff0c2;
+}
+
+.trax-rack,
+.dly-wood,
+.reverb-wood-frame,
+.comp-rack,
+.spec-wrap {
+  border-radius: 0;
+  background: #fff0c2;
+  box-shadow: var(--mistral-shadow);
+}
+
+.dly-face,
+.reverb-faceplate,
+.spec-display,
+.spec-canvas {
+  border: 1px solid rgba(127, 99, 21, 0.16);
+  border-radius: 0;
+  background: #fffaeb;
+  color: var(--mistral-black);
+  box-shadow: none;
+}
+
+.dly-knobs-row,
+.dly-section,
+.reverb-tube-module,
+.reverb-decay-module,
+.reverb-blend-module,
+.reverb-bottom-strip,
+.spec-header,
+.spec-controls {
+  border: 1px solid rgba(127, 99, 21, 0.14);
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.dly-brand,
+.dly-knob-value,
+.dly-toggle-text,
+.dly-time-display,
+.reverb-brand,
+.reverb-decay-module > strong,
+.reverb-knob strong,
+.spec-title-script,
+.spec-title-main,
+.spec-btn-label {
+  color: var(--mistral-black);
+}
+
+.dly-sub,
+.dly-knob-label,
+.dly-section-label,
+.reverb-subtitle,
+.reverb-module-title,
+.reverb-model-select span,
+.reverb-knob > span,
+.reverb-mod-section > span,
+.reverb-eq-section > span,
+.spec-micro,
+.spec-db-scale span {
+  color: hsl(0, 0%, 24%);
+}
+
+.dly-toggle-track {
+  border: 0;
+  border-radius: 0;
+  background: #ffe295;
+}
+
+.dly-toggle-thumb {
+  border-radius: 0;
+  background: var(--mistral-black);
+}
+
+.dly-led,
+.comp-power-dot,
+.reverb-toggle i {
+  background: #ffb83e;
+}
+
+.dly-power.on .dly-led,
+.comp-power-btn.on .comp-power-dot,
+.reverb-toggle input:checked + i,
+.reverb-power.on .reverb-power-lamp {
+  background: var(--mistral-orange);
+  box-shadow: 0 0 0 3px rgba(250, 82, 15, 0.16);
+}
+
+.reverb-arturia-mark,
+.reverb-tube-window,
+.reverb-knob-cap,
+.comp-vu-meter {
+  border-radius: 0;
+  background: var(--mistral-black);
+}
+
+.reverb-knob-cap::after {
+  background: #ffffff;
+}
+
+.recording-save-box {
+  border-color: rgba(250, 82, 15, 0.26);
+  border-radius: 0;
+  background: rgba(250, 82, 15, 0.12);
+}
+
+@media (max-width: 980px) {
+  .transport {
+    background: rgba(255, 250, 235, 0.96);
+  }
+
+  .inspector {
+    border-top-color: var(--line);
+  }
 }
