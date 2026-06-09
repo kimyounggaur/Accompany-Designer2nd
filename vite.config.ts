@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  base: "/Accompany-Designer2nd/",
+  base: process.env.VERCEL ? "/" : "/Accompany-Designer2nd/",
   build: {
     assetsInlineLimit: 0,
     rollupOptions: {
