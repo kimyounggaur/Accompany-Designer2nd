@@ -42,6 +42,8 @@ export default function App() {
   const importProject = useDawStore((state) => state.importProject);
   const deleteSelectedClips = useDawStore((state) => state.deleteSelectedClips);
   const selectedClipIds = useDawStore((state) => state.selectedClipIds);
+  const undo = useDawStore((state) => state.undo);
+  const redo = useDawStore((state) => state.redo);
   const setPlaylistTool = useDawStore((state) => state.setPlaylistTool);
   const quantizeSelectedClips = useDawStore((state) => state.quantizeSelectedClips);
   const zoomToSelectedClips = useDawStore((state) => state.zoomToSelectedClips);
@@ -136,6 +138,25 @@ export default function App() {
         return;
       }
 
+      const hasCommandModifier = event.ctrlKey || event.metaKey;
+      const shortcutKey = event.key.toLowerCase();
+
+      if (hasCommandModifier && shortcutKey === "z") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+        return;
+      }
+
+      if (hasCommandModifier && shortcutKey === "y") {
+        event.preventDefault();
+        redo();
+        return;
+      }
+
       if (event.altKey && event.key.toLowerCase() === "q") {
         event.preventDefault();
         quantizeSelectedClips();
@@ -186,7 +207,7 @@ export default function App() {
         return;
       }
 
-      const shortcut = event.key.toLowerCase();
+      const shortcut = shortcutKey;
       if (shortcut === "v") {
         setPlaylistTool("move");
       } else if (shortcut === "p") {
@@ -220,9 +241,11 @@ export default function App() {
   }, [
     deleteSelectedClips,
     quantizeSelectedClips,
+    redo,
     selectedClipIds.length,
     setPlaylistTool,
     setZoom,
+    undo,
     zoomPxPerSecond,
     zoomToSelectedClips,
   ]);
@@ -416,8 +439,8 @@ export default function App() {
             updateAudioAsset(session.assetId, {
               duration,
               waveformPeaks,
-            });
-            updateClip(session.clipId, { duration });
+            }, { history: false });
+            updateClip(session.clipId, { duration }, { history: false });
             setRecordingState({
               elapsed: duration,
               waveformPeaks,
@@ -456,6 +479,7 @@ export default function App() {
         gain: 1,
         fadeIn: 0,
         fadeOut: 0,
+        fadeCurve: "equalPower",
         muted: false,
         isRecording: true,
       };
@@ -522,18 +546,18 @@ export default function App() {
         waveformPeaks: asset.waveformPeaks.length
           ? asset.waveformPeaks
           : result.peaks,
-      });
+      }, { history: false });
       updateClip(session.clipId, {
         audioBufferId: asset.id,
         duration: asset.duration || result.duration,
         isRecording: false,
         name: asset.fileName,
         stretchMode: "none",
-      });
+      }, { history: false });
       setStatus(`${asset.fileName} 녹음 완료`);
       useDawStore.getState().setCommandMessage(`${asset.fileName} 녹음 완료`);
     } catch (error) {
-      updateClip(session.clipId, { isRecording: false });
+      updateClip(session.clipId, { isRecording: false }, { history: false });
       setStatus(`녹음 저장 실패: ${(error as Error).message}`);
       useDawStore
         .getState()
@@ -581,6 +605,7 @@ export default function App() {
           gain: 1,
           fadeIn: 0,
           fadeOut: 0,
+          fadeCurve: "equalPower",
           muted: false,
         };
 

@@ -1,4 +1,5 @@
 export type StretchMode = "none" | "resample";
+export type FadeCurve = "linear" | "equalPower";
 export type PlaylistTool =
   | "move"
   | "draw"
@@ -32,6 +33,13 @@ export type DelaySyncDivision =
   | "1/8d"
   | "1/8t";
 export type ReverbMode = "plate" | "room" | "hall";
+export type EffectSlotType = "eq" | "comp" | "delay" | "reverb";
+
+export interface EffectSlot {
+  id: string;
+  type: EffectSlotType;
+  enabled: boolean;
+}
 
 export interface EqSettings {
   enabled: boolean;
@@ -93,6 +101,7 @@ export interface Clip {
   gain: number;
   fadeIn: number;
   fadeOut: number;
+  fadeCurve?: FadeCurve;
   muted?: boolean;
   groupId?: string;
   isRecording?: boolean;
@@ -109,6 +118,7 @@ export interface Track {
   compressor: CompressorSettings;
   delay: DelaySettings;
   reverb: ReverbSettings;
+  effectChain: EffectSlot[];
   clips: Clip[];
 }
 

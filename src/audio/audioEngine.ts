@@ -1,4 +1,4 @@
-import type { AudioAsset, DawProject, Track } from "../types";
+import type { AudioAsset, Clip, DawProject, FadeCurve, Track } from "../types";
 import { createDelayInsert } from "./delay";
 import { createReverbInsert } from "./reverb";
 import {
@@ -20,6 +20,7 @@ class BrowserAudioEngine {
   private sources: AudioBufferSourceNode[] = [];
   // 매 play마다 생성되는 트랙 체인 출력 노드를 추적해 stop() 시 완전 해제
   private trackOutputs: GainNode[] = [];
+  private trackAnalysers = new Map<string, AnalyserNode>();
   private startedAt = 0;
   private playheadAtStart = 0;
   private playing = false;
@@ -106,6 +107,14 @@ class BrowserAudioEngine {
     return this.analyser;
   }
 
+  getMasterAnalyser(): AnalyserNode | undefined {
+    return this.analyser;
+  }
+
+  getTrackAnalyser(trackId: string): AnalyserNode | undefined {
+    return this.trackAnalysers.get(trackId);
+  }
+
   async play(project: DawProject, playhead: number) {
     const context = await this.ensureContext();
     this.stop(); // 이전 체인 완전 해제 후 재생 시작
@@ -148,6 +157,7 @@ class BrowserAudioEngine {
           clip.duration - (offset - clip.offset),
           buffer.duration - offset,
         );
+        const scheduledTimelineDuration = sourceDuration / playbackRate;
 
         if (sourceDuration <= 0 || offset >= buffer.duration) {
           continue;
@@ -157,12 +167,19 @@ class BrowserAudioEngine {
         const clipGain = context.createGain();
         source.buffer = buffer;
         source.playbackRate.value = playbackRate;
-        clipGain.gain.value = clip.gain;
 
         source.connect(clipGain);
         clipGain.connect(trackInput);
 
         const when = context.currentTime + Math.max(0, clipStart - playhead);
+        scheduleClipGainEnvelope(
+          clipGain.gain,
+          clip,
+          when,
+          elapsedInsideClip,
+          scheduledTimelineDuration,
+          timelineDuration,
+        );
         source.start(when, offset, sourceDuration);
         this.sources.push(source);
       }
@@ -189,6 +206,7 @@ class BrowserAudioEngine {
       }
     }
     this.trackOutputs = [];
+    this.trackAnalysers.clear();
 
     this.playing = false;
   }
@@ -216,6 +234,7 @@ class BrowserAudioEngine {
     const compressor = context.createDynamicsCompressor();
     const pan = context.createStereoPanner();
     const output = context.createGain();
+    const trackAnalyser = context.createAnalyser();
 
     bass.type = "lowshelf";
     bass.frequency.value = 110;
@@ -247,47 +266,215 @@ class BrowserAudioEngine {
 
     pan.pan.value = track.pan;
     output.gain.value = track.volume;
+    trackAnalyser.fftSize = 2048;
+    trackAnalyser.smoothingTimeConstant = 0.72;
 
     let effectOutput: AudioNode = input;
+    const effectChain = track.effectChain?.length
+      ? track.effectChain
+      : [
+          { id: "eq", type: "eq" as const, enabled: track.eq.enabled },
+          { id: "comp", type: "comp" as const, enabled: track.compressor.enabled },
+          { id: "delay", type: "delay" as const, enabled: track.delay?.enabled ?? false },
+          { id: "reverb", type: "reverb" as const, enabled: track.reverb?.enabled ?? false },
+        ];
 
-    if (track.eq.enabled) {
-      input.connect(bass);
-      bass.connect(middleLow);
-      middleLow.connect(middleHigh);
-      middleHigh.connect(high);
-      high.connect(presence);
-      effectOutput = presence;
-    }
+    for (const slot of effectChain) {
+      if (!slot.enabled) {
+        continue;
+      }
 
-    const postDynamics = track.compressor.enabled ? compressor : effectOutput;
+      if (slot.type === "eq" && track.eq.enabled) {
+        effectOutput.connect(bass);
+        bass.connect(middleLow);
+        middleLow.connect(middleHigh);
+        middleHigh.connect(high);
+        high.connect(presence);
+        effectOutput = presence;
+        continue;
+      }
 
-    if (track.compressor.enabled) {
-      effectOutput.connect(compressor);
-    }
+      if (slot.type === "comp" && track.compressor.enabled) {
+        effectOutput.connect(compressor);
+        effectOutput = compressor;
+        continue;
+      }
 
-    effectOutput = postDynamics;
+      if (slot.type === "delay" && track.delay?.enabled) {
+        const delayInsert = createDelayInsert(context, track.delay, bpm);
+        effectOutput.connect(delayInsert.input);
+        effectOutput = delayInsert.output;
+        continue;
+      }
 
-    if (track.delay?.enabled) {
-      const delayInsert = createDelayInsert(context, track.delay, bpm);
-      effectOutput.connect(delayInsert.input);
-      effectOutput = delayInsert.output;
-    }
-
-    if (track.reverb?.enabled) {
-      const reverbInsert = createReverbInsert(context, track.reverb);
-      effectOutput.connect(reverbInsert.input);
-      effectOutput = reverbInsert.output;
+      if (slot.type === "reverb" && track.reverb?.enabled) {
+        const reverbInsert = createReverbInsert(context, track.reverb);
+        effectOutput.connect(reverbInsert.input);
+        effectOutput = reverbInsert.output;
+      }
     }
 
     effectOutput.connect(pan);
 
     pan.connect(output);
-    output.connect(this.master!);
+    output.connect(trackAnalyser);
+    trackAnalyser.connect(this.master!);
+    this.trackAnalysers.set(track.id, trackAnalyser);
 
     // stop() 시 master에서 분리할 수 있도록 추적
     this.trackOutputs.push(output);
 
     return input;
+  }
+}
+
+function createFadeCurve(
+  curve: FadeCurve,
+  direction: "in" | "out",
+  startRatio: number,
+  endRatio: number,
+  gain: number,
+) {
+  const sampleCount = 64;
+  const values = new Float32Array(sampleCount);
+
+  for (let index = 0; index < sampleCount; index += 1) {
+    const position = startRatio + ((endRatio - startRatio) * index) / (sampleCount - 1);
+    const safePosition = Math.min(1, Math.max(0, position));
+    const value =
+      direction === "in"
+        ? curve === "linear"
+          ? safePosition
+          : Math.sin((Math.PI / 2) * safePosition)
+        : curve === "linear"
+          ? 1 - safePosition
+          : Math.cos((Math.PI / 2) * safePosition);
+    values[index] = Math.max(0.0001, value * gain);
+  }
+
+  return values;
+}
+
+function getFadeGainAt(
+  position: number,
+  clipGain: number,
+  fadeIn: number,
+  fadeOut: number,
+  timelineDuration: number,
+  curve: FadeCurve,
+) {
+  let gain = clipGain;
+
+  if (fadeIn > 0 && position < fadeIn) {
+    const ratio = Math.min(1, Math.max(0, position / fadeIn));
+    gain *= curve === "linear" ? ratio : Math.sin((Math.PI / 2) * ratio);
+  }
+
+  if (fadeOut > 0 && position > timelineDuration - fadeOut) {
+    const ratio = Math.min(1, Math.max(0, (position - (timelineDuration - fadeOut)) / fadeOut));
+    gain *= curve === "linear" ? 1 - ratio : Math.cos((Math.PI / 2) * ratio);
+  }
+
+  return Math.max(0.0001, gain);
+}
+
+function scheduleFadeSegment(
+  param: AudioParam,
+  curve: FadeCurve,
+  direction: "in" | "out",
+  gain: number,
+  when: number,
+  segmentStart: number,
+  segmentEnd: number,
+  fadeStart: number,
+  fadeDuration: number,
+  playbackSegmentStart: number,
+) {
+  const duration = Math.max(0, segmentEnd - segmentStart);
+  if (duration <= 0.001) {
+    return;
+  }
+
+  const startRatio = Math.min(1, Math.max(0, (segmentStart - fadeStart) / fadeDuration));
+  const endRatio = Math.min(1, Math.max(0, (segmentEnd - fadeStart) / fadeDuration));
+  const startTime = when + (segmentStart - playbackSegmentStart);
+
+  if (curve === "linear") {
+    const startGain =
+      direction === "in" ? gain * startRatio : gain * (1 - startRatio);
+    const endGain = direction === "in" ? gain * endRatio : gain * (1 - endRatio);
+    param.setValueAtTime(Math.max(0.0001, startGain), startTime);
+    param.linearRampToValueAtTime(Math.max(0.0001, endGain), startTime + duration);
+    return;
+  }
+
+  param.setValueCurveAtTime(
+    createFadeCurve(curve, direction, startRatio, endRatio, gain),
+    startTime,
+    duration,
+  );
+}
+
+function scheduleClipGainEnvelope(
+  param: AudioParam,
+  clip: Clip,
+  when: number,
+  elapsedInsideClip: number,
+  scheduledTimelineDuration: number,
+  timelineDuration: number,
+) {
+  const gain = Math.max(0, clip.gain);
+  const curve = clip.fadeCurve ?? "equalPower";
+  const fadeLimit = Math.max(0, timelineDuration / 2);
+  const fadeIn = Math.min(Math.max(0, clip.fadeIn || 0), fadeLimit);
+  const fadeOut = Math.min(Math.max(0, clip.fadeOut || 0), fadeLimit);
+  const segmentStart = Math.max(0, elapsedInsideClip);
+  const segmentEnd = Math.min(timelineDuration, segmentStart + scheduledTimelineDuration);
+
+  param.cancelScheduledValues(when);
+  if (gain <= 0) {
+    param.setValueAtTime(0, when);
+    return;
+  }
+
+  param.setValueAtTime(
+    getFadeGainAt(segmentStart, gain, fadeIn, fadeOut, timelineDuration, curve),
+    when,
+  );
+
+  if (fadeIn > 0 && segmentStart < fadeIn && segmentEnd > 0) {
+    scheduleFadeSegment(
+      param,
+      curve,
+      "in",
+      gain,
+      when,
+      Math.max(segmentStart, 0),
+      Math.min(segmentEnd, fadeIn),
+      0,
+      fadeIn,
+      segmentStart,
+    );
+  }
+
+  if (fadeIn > 0 && segmentStart < fadeIn && segmentEnd > fadeIn) {
+    param.setValueAtTime(gain, when + (fadeIn - segmentStart));
+  }
+
+  const fadeOutStart = Math.max(0, timelineDuration - fadeOut);
+  if (fadeOut > 0 && segmentEnd > fadeOutStart) {
+    scheduleFadeSegment(
+      param,
+      curve,
+      "out",
+      gain,
+      when,
+      Math.max(segmentStart, fadeOutStart),
+      segmentEnd,
+      fadeOutStart,
+      fadeOut,
+      segmentStart,
+    );
   }
 }
 

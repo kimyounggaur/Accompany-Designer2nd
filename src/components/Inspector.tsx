@@ -6,9 +6,12 @@ import { useDawStore } from "../store/useDawStore";
 import { SpectrumAnalyzer } from "./SpectrumAnalyzer";
 import { DelayPluginPanel } from "./DelayPluginPanel";
 import { ReverbPluginPanel } from "./ReverbPluginPanel";
+import { LevelMeterRack } from "./LevelMeter";
+import { EffectRack } from "./EffectRack";
 import type {
   CompressorSettings,
   DelaySettings,
+  EffectSlotType,
   EqSettings,
   ReverbSettings,
 } from "../types";
@@ -56,12 +59,21 @@ export function Inspector() {
   const selectedClip = selection?.clip;
   const asset = selectedClip ? audioAssets[selectedClip.audioBufferId] : undefined;
 
+  function syncEffectSlot(type: EffectSlotType, enabled: boolean) {
+    return selectedTrack.effectChain.map((slot) =>
+      slot.type === type ? { ...slot, enabled } : slot,
+    );
+  }
+
   function updateEq(patch: Partial<EqSettings>) {
     updateTrack(selectedTrack.id, {
       eq: {
         ...selectedTrack.eq,
         ...patch,
       },
+      ...(typeof patch.enabled === "boolean"
+        ? { effectChain: syncEffectSlot("eq", patch.enabled) }
+        : {}),
     });
   }
 
@@ -322,6 +334,9 @@ export function Inspector() {
         ...selectedTrack.compressor,
         ...patch,
       },
+      ...(typeof patch.enabled === "boolean"
+        ? { effectChain: syncEffectSlot("comp", patch.enabled) }
+        : {}),
     });
   }
 
@@ -331,6 +346,9 @@ export function Inspector() {
         ...selectedTrack.delay,
         ...patch,
       },
+      ...(typeof patch.enabled === "boolean"
+        ? { effectChain: syncEffectSlot("delay", patch.enabled) }
+        : {}),
     });
   }
 
@@ -340,6 +358,9 @@ export function Inspector() {
         ...selectedTrack.reverb,
         ...patch,
       },
+      ...(typeof patch.enabled === "boolean"
+        ? { effectChain: syncEffectSlot("reverb", patch.enabled) }
+        : {}),
     });
   }
 
@@ -550,6 +571,17 @@ export function Inspector() {
             />
           </div>
         </div>
+      </section>
+
+      <section className="panel meter-panel">
+        <LevelMeterRack />
+      </section>
+
+      <section className="panel effect-rack-panel">
+        <EffectRack
+          track={selectedTrack}
+          onChange={(patch) => updateTrack(selectedTrack.id, patch)}
+        />
       </section>
 
       <section className="panel delay-panel">

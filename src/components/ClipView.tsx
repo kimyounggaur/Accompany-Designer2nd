@@ -10,7 +10,7 @@ import {
   snapTime,
 } from "../utils/audioMath";
 
-type DragMode = "move" | "trim-left" | "trim-right" | "slip";
+type DragMode = "move" | "trim-left" | "trim-right" | "slip" | "fade-in" | "fade-out";
 
 interface ClipViewProps {
   asset?: AudioAsset;
@@ -40,6 +40,7 @@ export function ClipView({
   const sessionRef = useRef<PointerSession | undefined>(undefined);
   const selectedClipIds = useDawStore((state) => state.selectedClipIds);
   const playlistTool = useDawStore((state) => state.playlistTool);
+  const captureHistory = useDawStore((state) => state.captureHistory);
   const updateClip = useDawStore((state) => state.updateClip);
   const moveClip = useDawStore((state) => state.moveClip);
   const deleteClip = useDawStore((state) => state.deleteClip);
@@ -57,6 +58,8 @@ export function ClipView({
   const width = Math.max(48, timelineDuration * zoomPxPerSecond);
   const left = clip.startTime * zoomPxPerSecond;
   const top = trackIndex * trackHeight + 15;
+  const fadeInWidth = Math.min(width / 2, Math.max(0, clip.fadeIn || 0) * zoomPxPerSecond);
+  const fadeOutWidth = Math.min(width / 2, Math.max(0, clip.fadeOut || 0) * zoomPxPerSecond);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -124,6 +127,7 @@ export function ClipView({
   function beginDrag(mode: DragMode, event: React.PointerEvent<HTMLElement>) {
     event.stopPropagation();
     selectClip(clip.id, event.shiftKey || event.ctrlKey);
+    captureHistory();
     sessionRef.current = {
       mode,
       pointerId: event.pointerId,
@@ -203,7 +207,7 @@ export function ClipView({
         : trackIndex;
       const targetTrackId = trackIds[targetTrackIndex] ?? original.trackId;
 
-      moveClip(original.id, targetTrackId, { startTime: Math.max(0, moved) });
+      moveClip(original.id, targetTrackId, { startTime: Math.max(0, moved) }, { history: false });
       return;
     }
 
@@ -214,7 +218,27 @@ export function ClipView({
         Math.max(0, assetDuration - original.duration),
       );
 
-      updateClip(original.id, { offset: nextOffset });
+      updateClip(original.id, { offset: nextOffset }, { history: false });
+      return;
+    }
+
+    if (session.mode === "fade-in") {
+      const originalTimelineDuration = getClipTimelineDuration(bpm, original);
+      const maxFade = originalTimelineDuration / 2;
+      updateClip(original.id, {
+        fadeIn: Math.round(clamp(original.fadeIn + deltaTimeline, 0, maxFade) * 100) / 100,
+        fadeCurve: original.fadeCurve ?? "equalPower",
+      }, { history: false });
+      return;
+    }
+
+    if (session.mode === "fade-out") {
+      const originalTimelineDuration = getClipTimelineDuration(bpm, original);
+      const maxFade = originalTimelineDuration / 2;
+      updateClip(original.id, {
+        fadeOut: Math.round(clamp(original.fadeOut - deltaTimeline, 0, maxFade) * 100) / 100,
+        fadeCurve: original.fadeCurve ?? "equalPower",
+      }, { history: false });
       return;
     }
 
@@ -238,7 +262,7 @@ export function ClipView({
         startTime: original.startTime + deltaSource / originalRate,
         offset: nextOffset,
         duration: nextDuration,
-      });
+      }, { history: false });
       return;
     }
 
@@ -254,7 +278,7 @@ export function ClipView({
       MIN_CLIP_SOURCE_DURATION,
       assetDuration - original.offset,
     );
-    updateClip(original.id, { duration: nextDuration });
+    updateClip(original.id, { duration: nextDuration }, { history: false });
   }
 
   function endDrag(event: React.PointerEvent<HTMLElement>) {
@@ -288,6 +312,42 @@ export function ClipView({
         onPointerCancel={endDrag}
       />
       <canvas ref={canvasRef} />
+      {(fadeInWidth > 0 || fadeOutWidth > 0) && (
+        <div className="clip-fade-overlays" aria-hidden="true">
+          {fadeInWidth > 0 && (
+            <span
+              className="clip-fade-overlay fade-in"
+              style={{ width: fadeInWidth }}
+            />
+          )}
+          {fadeOutWidth > 0 && (
+            <span
+              className="clip-fade-overlay fade-out"
+              style={{ width: fadeOutWidth }}
+            />
+          )}
+        </div>
+      )}
+      <button
+        aria-label="페이드 인 조절"
+        className="fade-handle fade-in"
+        onPointerDown={(event) => beginDrag("fade-in", event)}
+        onPointerMove={updateDrag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        style={{ left: Math.max(12, fadeInWidth) }}
+        type="button"
+      />
+      <button
+        aria-label="페이드 아웃 조절"
+        className="fade-handle fade-out"
+        onPointerDown={(event) => beginDrag("fade-out", event)}
+        onPointerMove={updateDrag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        style={{ right: Math.max(12, fadeOutWidth) }}
+        type="button"
+      />
       <div className="clip-label">
         <strong>{clip.name}</strong>
         <span>{clip.muted ? "음소거" : `${playbackRate.toFixed(2)}x`}</span>

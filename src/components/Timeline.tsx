@@ -77,6 +77,7 @@ export function Timeline() {
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const performanceMode = useDawStore((state) => state.performanceMode);
   const recording = useDawStore((state) => state.recording);
+  const captureHistory = useDawStore((state) => state.captureHistory);
   const setPlayhead = useDawStore((state) => state.setPlayhead);
   const clearSelection = useDawStore((state) => state.clearSelection);
   const setSelectedClips = useDawStore((state) => state.setSelectedClips);
@@ -150,7 +151,9 @@ export function Timeline() {
   );
   const trackIds = useMemo(() => tracks.map((track) => track.id), [tracks]);
   const playlistCursorStyle = {
-    "--playlist-tool-cursor": `url("${playlistToolIcons[playlistTool]}") 8 8, auto`,
+    "--playlist-tool-cursor": `url("${playlistToolIcons[playlistTool]}") ${
+      playlistTool === "move" ? "1 1" : "8 8"
+    }, auto`,
   } as CSSProperties;
 
   function getPointerPosition(event: React.PointerEvent<HTMLElement>): PointerPosition | undefined {
@@ -227,7 +230,13 @@ export function Timeline() {
     if (playlistTool === "draw" || playlistTool === "paint") {
       event.preventDefault();
       const sourceClipId = selectedClipId;
-      const clipId = addClipFromSource(sourceClipId, position.trackId, position.time);
+      captureHistory();
+      const clipId = addClipFromSource(
+        sourceClipId,
+        position.trackId,
+        position.time,
+        { history: false },
+      );
 
       if (!clipId) {
         return;
@@ -293,14 +302,24 @@ export function Timeline() {
     }
 
     if (session.mode === "draw" && session.clipId) {
-      moveClip(session.clipId, position.trackId, { startTime: position.time });
+      moveClip(
+        session.clipId,
+        position.trackId,
+        { startTime: position.time },
+        { history: false },
+      );
       return;
     }
 
     if (session.mode === "paint") {
       const paintKey = getPaintKey(position);
       if (paintKey !== session.lastPaintKey) {
-        addClipFromSource(session.sourceClipId, position.trackId, position.time);
+        addClipFromSource(
+          session.sourceClipId,
+          position.trackId,
+          position.time,
+          { history: false },
+        );
         session.lastPaintKey = paintKey;
       }
       return;
