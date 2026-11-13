@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useDawStore } from "../store/useDawStore";
 
-// 로그 스케일 주파수 밴드 (Spear 32 스타일)
+// 로그 스케일 주파수 밴드
 const FREQ_BANDS = [
   20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160,
   200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600,
@@ -17,7 +18,6 @@ const DB_LINES = [-10, -18, -26, -34, -40];
 const MIN_DB = -48;
 const MAX_DB = -6;
 
-type Mode = "M" | "L" | "R";
 type Resp = 1 | 2 | 3;
 
 const SMOOTHING: Record<Resp, number> = { 1: 0.92, 2: 0.8, 3: 0.6 };
@@ -30,7 +30,9 @@ export function SpectrumAnalyzer({ analyser }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   const barsRef = useRef<number[]>(new Array(FREQ_BANDS.length).fill(MIN_DB));
-  const [mode, setMode] = useState<Mode>("M");
+  const isPlaying = useDawStore((state) => state.isPlaying);
+  const isRecording = useDawStore((state) => state.recording.status === "recording");
+  const active = isPlaying || isRecording;
   const [resp, setResp] = useState<Resp>(2);
 
   const draw = useCallback(() => {
@@ -39,8 +41,9 @@ export function SpectrumAnalyzer({ analyser }: Props) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const W = canvas.width;
-    const H = canvas.height;
+    // Drawing uses CSS pixels; the backing store is scaled separately for HiDPI.
+    const W = canvas.clientWidth;
+    const H = canvas.clientHeight;
     const PAD_L = 0;
     const PAD_B = 18;
     const plotH = H - PAD_B;
@@ -61,7 +64,7 @@ export function SpectrumAnalyzer({ analyser }: Props) {
     });
 
     // FFT 데이터 읽기
-    if (analyser) {
+    if (analyser && active) {
       const bufLen = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufLen);
       analyser.getByteFrequencyData(dataArray);
@@ -123,32 +126,41 @@ export function SpectrumAnalyzer({ analyser }: Props) {
       ctx.fillText(label, x, H - 3);
     });
 
-    rafRef.current = requestAnimationFrame(draw);
-  }, [analyser, resp]);
+  }, [analyser, resp, active]);
 
-  useEffect(() => {
-    rafRef.current = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [draw]);
-
-  // 캔버스 DPI 대응
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * devicePixelRatio;
-    canvas.height = rect.height * devicePixelRatio;
-    const ctx = canvas.getContext("2d");
-    ctx?.scale(devicePixelRatio, devicePixelRatio);
-  }, []);
+    const resize = () => {
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.round(width * ratio);
+      canvas.height = Math.round(height * ratio);
+      canvas.getContext("2d")?.setTransform(ratio, 0, 0, ratio, 0, 0);
+      draw();
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(canvas);
+    if (!active) barsRef.current.fill(MIN_DB);
+    resize();
+    const tick = () => {
+      draw();
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    if (active) rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, [draw, active]);
 
   return (
     <div className="spec-wrap">
       {/* 헤더 */}
       <div className="spec-header">
-        <span className="spec-title-script">Specan 32</span>
-        <span className="spec-title-main">REAL TIME SPECTRUM ANALYSER</span>
-        <span className="spec-micro">Microprocessor Controlled</span>
+        <span className="spec-title-script">반주 디자이너</span>
+        <span className="spec-title-main">주파수 분석기</span>
       </div>
 
       {/* 캔버스 */}
@@ -164,24 +176,15 @@ export function SpectrumAnalyzer({ analyser }: Props) {
       {/* 하단 컨트롤 */}
       <div className="spec-controls">
         <div className="spec-btn-group">
-          <span className="spec-btn-label">MODE</span>
-          <div className="spec-btn-row">
-            {(["L", "M", "R"] as Mode[]).map((m) => (
-              <button
-                key={m}
-                className={`spec-led-btn ${mode === m ? "active" : ""}`}
-                onClick={() => setMode(m)}
-              >{m}</button>
-            ))}
-          </div>
-        </div>
-        <div className="spec-btn-group">
-          <span className="spec-btn-label">RESP</span>
+          <span className="spec-btn-label">반응 속도</span>
           <div className="spec-btn-row">
             {([1, 2, 3] as Resp[]).map((r) => (
               <button
                 key={r}
                 className={`spec-led-btn ${resp === r ? "active" : ""}`}
+                type="button"
+                aria-label={`분석기 반응 속도 ${r}`}
+                aria-pressed={resp === r}
                 onClick={() => setResp(r)}
               >{r}</button>
             ))}

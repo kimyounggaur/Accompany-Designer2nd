@@ -2699,6 +2699,28 @@ input[type="range"] {
   }
 }
 
+/* Keep the workspace within the viewport when transport controls wrap. */
+.app-shell { width: 100%; min-width: 0; }
+.transport { flex-wrap: wrap; min-width: 0; }
+.transport-group { flex-shrink: 0; }
+.workspace { min-width: 0; }
+.track-column { min-height: 0; overflow: hidden; }
+.follow-toggle { min-width: 76px; min-height: 28px; padding: 3px 5px; color: #5b270b; background: #ffe295; cursor: pointer; font-size: 11px; }
+.follow-toggle[aria-pressed="true"] { color: #fff; background: #a5350c; }
+.clip canvas { right: auto; width: auto; pointer-events: none; }
+.clip-context-menu { position: absolute; z-index: 10; top: 4px; left: 12px; display: flex; gap: 4px; background: #fff8e7; border: 1px solid #623d21; padding: 4px; }
+.clip-context-menu button { min-height: 28px; color: #351a0d; background: #ffe2a0; cursor: pointer; }
+@media (max-width: 1440px) {
+  .status-line { flex-basis: 100%; min-width: 0; }
+}
+@media (max-width: 980px) {
+  .app-shell { width: 100%; }
+  .transport { align-content: flex-start; }
+  .workspace { min-width: 0; }
+  .playlist { min-width: 0; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); }
+  .playlist-toolbar { flex-wrap: wrap; }
+}
+
 /* Apple-inspired UI layer */
 body {
   background: #000000;
@@ -3869,4 +3891,32 @@ input[type="range"] {
   .inspector {
     border-top-color: var(--line);
   }
+}
+
+.track-heading { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.track-heading input { flex: 1 1 auto; }
+.track-order-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px; width: 24px; height: 26px; padding: 0; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #5c4514; cursor: pointer; }
+.track-order-button:hover:not(:disabled), .track-order-button:focus-visible { border-color: #9a6b16; background: #ffefbd; }
+.track-order-button:disabled { opacity: .35; cursor: not-allowed; }
+
+/* Legibility and keyboard focus on the light workspace theme. */
+.count-in-control select,
+.count-in-control select option {
+  color: #242018;
+  background-color: #fff8e3;
+}
+.record-button,
+.arm-toggle,
+.panel h2,
+.plugin-panel-heading h2 {
+  color: #8b2b08;
+}
+.arm-toggle.active {
+  color: #fff;
+  background-color: #8b2b08;
+}
+.dly-knob-wrap svg:focus-visible {
+  outline: 3px solid #8b2b08;
+  outline-offset: 3px;
+  border-radius: 50%;
 }

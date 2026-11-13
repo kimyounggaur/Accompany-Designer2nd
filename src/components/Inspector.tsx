@@ -8,6 +8,7 @@ import { DelayPluginPanel } from "./DelayPluginPanel";
 import { ReverbPluginPanel } from "./ReverbPluginPanel";
 import { LevelMeterRack } from "./LevelMeter";
 import { EffectRack } from "./EffectRack";
+import { CommittedNumberInput } from "./CommittedNumberInput";
 import type {
   CompressorSettings,
   DelaySettings,
@@ -23,6 +24,7 @@ import {
 
 export function Inspector() {
   const [bpmStatus, setBpmStatus] = useState("");
+  const [bpmSuggestion, setBpmSuggestion] = useState<{ clipId: string; value: number }>();
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | undefined>(undefined);
   const tracks = useDawStore((state) => state.tracks);
   const audioAssets = useDawStore((state) => state.audioAssets);
@@ -30,22 +32,32 @@ export function Inspector() {
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const bpm = useDawStore((state) => state.bpm);
   const updateClip = useDawStore((state) => state.updateClip);
+  const setBpm = useDawStore((state) => state.setBpm);
+  const beginHistoryGroup = useDawStore((state) => state.beginHistoryGroup);
+  const endHistoryGroup = useDawStore((state) => state.endHistoryGroup);
+  useEffect(() => {
+    document.addEventListener("pointerup", endHistoryGroup);
+    document.addEventListener("pointercancel", endHistoryGroup);
+    return () => { document.removeEventListener("pointerup", endHistoryGroup); document.removeEventListener("pointercancel", endHistoryGroup); };
+  }, [endHistoryGroup]);
   const updateTrack = useDawStore((state) => state.updateTrack);
   const updateAudioAsset = useDawStore((state) => state.updateAudioAsset);
   const deleteClip = useDawStore((state) => state.deleteClip);
 
   // AnalyserNode를 AudioContext 초기화 후 연결
   useEffect(() => {
+    let timer: number | undefined;
     const tryGetAnalyser = () => {
       const node = audioEngine.getAnalyser();
       if (node) {
         setAnalyserNode(node);
       } else {
         // AudioContext가 아직 초기화 안 됐으면 잠시 후 재시도
-        setTimeout(tryGetAnalyser, 500);
+        timer = window.setTimeout(tryGetAnalyser, 500);
       }
     };
     tryGetAnalyser();
+    return () => window.clearTimeout(timer);
   }, []);
 
   const selection = useMemo(
@@ -92,7 +104,7 @@ export function Inspector() {
     const startY = useRef(0);
     const startVal = useRef(0);
 
-    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    const handleMouseDown = useCallback((e: React.PointerEvent) => {
       startY.current = e.clientY;
       startVal.current = value;
 
@@ -103,12 +115,12 @@ export function Inspector() {
       };
 
       const handleMouseUp = () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('pointermove', handleMouseMove);
+        document.removeEventListener('pointerup', handleMouseUp);
       };
 
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('pointermove', handleMouseMove);
+      document.addEventListener('pointerup', handleMouseUp);
     }, [value, onChange]);
 
     const angle = (value / 12) * 135;
@@ -122,7 +134,9 @@ export function Inspector() {
         <svg
           className="eq-knob"
           viewBox="0 0 64 64"
-          onMouseDown={handleMouseDown}
+          onPointerDown={handleMouseDown}
+          role="slider" tabIndex={0} aria-label={`${label} 이퀄라이저`} aria-valuemin={-12} aria-valuemax={12} aria-valuenow={value}
+          onKeyDown={(event) => { if (event.key === "ArrowUp" || event.key === "ArrowRight" || event.key === "ArrowDown" || event.key === "ArrowLeft") { event.preventDefault(); onChange(Math.max(-12, Math.min(12, value + (event.key === "ArrowUp" || event.key === "ArrowRight" ? 0.5 : -0.5)))); } }}
           style={{ cursor: "ns-resize", touchAction: "none", userSelect: "none" }}
         >
           <circle cx={cx} cy={cy} r={28} fill="#2a2a2a" />
@@ -145,7 +159,7 @@ export function Inspector() {
     const startY = useRef(0);
     const startVal = useRef(0);
 
-    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    const handleMouseDown = useCallback((e: React.PointerEvent) => {
       startY.current = e.clientY;
       startVal.current = value;
       const range = max - min;
@@ -154,11 +168,11 @@ export function Inspector() {
         onChange(Math.max(min, Math.min(max, startVal.current + delta)));
       };
       const handleMouseUp = () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('pointermove', handleMouseMove);
+        document.removeEventListener('pointerup', handleMouseUp);
       };
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('pointermove', handleMouseMove);
+      document.addEventListener('pointerup', handleMouseUp);
     }, [value, min, max, onChange]);
 
     const norm = (value - min) / (max - min);
@@ -199,8 +213,10 @@ export function Inspector() {
         <svg
           width={size} height={size}
           viewBox={`0 0 ${size} ${size}`}
-          onMouseDown={handleMouseDown}
-          style={{ cursor: "ns-resize", userSelect: "none", display: "block" }}
+          onPointerDown={handleMouseDown}
+          role="slider" tabIndex={0} aria-label={label} aria-valuemin={min} aria-valuemax={max} aria-valuenow={value} aria-valuetext={displayVal}
+          onKeyDown={(event) => { if (event.key === "ArrowUp" || event.key === "ArrowRight" || event.key === "ArrowDown" || event.key === "ArrowLeft") { event.preventDefault(); onChange(Math.max(min, Math.min(max, value + (max - min) / 100 * (event.key === "ArrowUp" || event.key === "ArrowRight" ? 1 : -1)))); } }}
+          style={{ cursor: "ns-resize", touchAction: "none", userSelect: "none", display: "block" }}
         >
           {/* 틱 마크 */}
           {tickAngles.map((a, i) => {
@@ -258,7 +274,7 @@ export function Inspector() {
     const startY = useRef(0);
     const startVal = useRef(0);
 
-    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    const handleMouseDown = useCallback((e: React.PointerEvent) => {
       startY.current = e.clientY;
       startVal.current = value;
       const range = max - min;
@@ -268,11 +284,11 @@ export function Inspector() {
         onChange(Math.round(next * 100) / 100);
       };
       const handleMouseUp = () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('pointermove', handleMouseMove);
+        document.removeEventListener('pointerup', handleMouseUp);
       };
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('pointermove', handleMouseMove);
+      document.addEventListener('pointerup', handleMouseUp);
     }, [value, min, max, onChange]);
 
     const norm = (value - min) / (max - min);
@@ -284,8 +300,10 @@ export function Inspector() {
         <svg
           className="comp-knob-svg"
           viewBox="0 0 80 80"
-          onMouseDown={handleMouseDown}
-          style={{ cursor: "ns-resize", userSelect: "none" }}
+          onPointerDown={handleMouseDown}
+          role="slider" tabIndex={0} aria-label={`${label} 컴프레서`} aria-valuemin={min} aria-valuemax={max} aria-valuenow={value} aria-valuetext={sub}
+          onKeyDown={(event) => { if (event.key === "ArrowUp" || event.key === "ArrowRight" || event.key === "ArrowDown" || event.key === "ArrowLeft") { event.preventDefault(); onChange(Math.max(min, Math.min(max, value + (max - min) / 100 * (event.key === "ArrowUp" || event.key === "ArrowRight" ? 1 : -1)))); } }}
+          style={{ cursor: "ns-resize", touchAction: "none", userSelect: "none" }}
         >
           {/* 틱 마크 */}
           {tickAngles.map((a, i) => {
@@ -383,9 +401,9 @@ export function Inspector() {
         return;
       }
 
-      updateClip(selectedClip.id, { sourceBpm: detected });
-      updateAudioAsset(selectedClip.audioBufferId, { detectedBpm: detected });
-      setBpmStatus(`추정 BPM ${detected}`);
+      updateAudioAsset(selectedClip.audioBufferId, { detectedBpm: detected }, { history: false });
+      setBpmSuggestion({ clipId: selectedClip.id, value: detected });
+      setBpmStatus(`추정 BPM ${detected} · 곡에 따라 절반이나 두 배로 감지될 수 있습니다.`);
     }, 30);
   }
 
@@ -407,7 +425,10 @@ export function Inspector() {
   }
 
   return (
-    <aside className="inspector">
+    <aside className="inspector" onPointerDownCapture={(event) => {
+      const target = event.target as Element;
+      if (target.closest("svg") || target.matches('input[type="range"]')) beginHistoryGroup();
+    }}>
       <section className="panel">
         <div className="panel-heading">
           <h2>클립</h2>
@@ -428,6 +449,8 @@ export function Inspector() {
               이름
               <input
                 value={selectedClip.name}
+                onFocus={beginHistoryGroup}
+                onBlur={endHistoryGroup}
                 onChange={(event) =>
                   updateClip(selectedClip.id, { name: event.target.value })
                 }
@@ -435,17 +458,9 @@ export function Inspector() {
             </label>
             <label>
               소스 BPM
-              <input
-                min={20}
-                max={300}
-                type="number"
+              <CommittedNumberInput key={selectedClip.id} label="소스 BPM" min={20} max={300} step={0.1}
                 value={selectedClip.sourceBpm}
-                onChange={(event) =>
-                  updateClip(selectedClip.id, {
-                    sourceBpm: Number(event.target.value) || bpm,
-                  })
-                }
-              />
+                onCommit={(value) => updateClip(selectedClip.id, { sourceBpm: value })} />
             </label>
             <label>
               게인
@@ -491,6 +506,10 @@ export function Inspector() {
             <button className="text-button full" onClick={detectClipBpm}>
               BPM 감지
             </button>
+            {bpmSuggestion?.clipId === selectedClip.id && <div className="control-stack">
+              <button className="text-button full" type="button" onClick={() => { updateClip(selectedClip.id, { sourceBpm: bpmSuggestion.value }); setBpmStatus(`클립 원본 BPM을 ${bpmSuggestion.value}(으)로 설정했습니다.`); }}>클립 원본 BPM에 적용</button>
+              <button className="text-button full" type="button" onClick={() => { setBpm(bpmSuggestion.value); setBpmStatus(`프로젝트 템포를 ${bpmSuggestion.value}(으)로 설정했습니다.`); }}>프로젝트 템포에 적용</button>
+            </div>}
             {asset && (
               <p className="asset-meta">
                 {asset.fileName} · {asset.duration.toFixed(2)}초 · {asset.sampleRate}Hz
@@ -500,7 +519,7 @@ export function Inspector() {
               <div className="recording-save-box">
                 <p className="asset-meta">
                   WAV {asset.byteSize ? `${(asset.byteSize / 1024).toFixed(1)}KB` : ""}
-                  {asset.recordedAt ? ` 쨌 ${new Date(asset.recordedAt).toLocaleString()}` : ""}
+                  {asset.recordedAt ? ` · ${new Date(asset.recordedAt).toLocaleString()}` : ""}
                 </p>
                 <button
                   className="text-button full"
@@ -530,6 +549,7 @@ export function Inspector() {
               <div className="trax-toggle-group">
                 <button
                   className={`trax-switch ${selectedTrack.muted ? "on danger" : ""}`}
+                  aria-label="트랙 음소거" aria-pressed={selectedTrack.muted}
                   onClick={() => updateTrack(selectedTrack.id, { muted: !selectedTrack.muted })}
                 >
                   <span className="trax-switch-lever" />
@@ -539,6 +559,7 @@ export function Inspector() {
               <div className="trax-toggle-group">
                 <button
                   className={`trax-switch ${selectedTrack.solo ? "on solo" : ""}`}
+                  aria-label="트랙 솔로" aria-pressed={selectedTrack.solo}
                   onClick={() => updateTrack(selectedTrack.id, { solo: !selectedTrack.solo })}
                 >
                   <span className="trax-switch-lever" />

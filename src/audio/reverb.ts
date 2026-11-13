@@ -5,10 +5,11 @@ import { normalizeReverbSettings } from "../utils/reverb";
 interface ReverbInsert {
   input: GainNode;
   output: GainNode;
+  update: (settings: ReverbSettings) => void;
 }
 
 export function createReverbInsert(
-  context: AudioContext,
+  context: BaseAudioContext,
   settings: ReverbSettings,
 ): ReverbInsert {
   const reverb = normalizeReverbSettings(settings);
@@ -70,11 +71,23 @@ export function createReverbInsert(
   width.output.connect(wet);
   wet.connect(output);
 
-  return { input, output };
+  let impulseKey = JSON.stringify([reverb.mode, reverb.decay, reverb.modEnabled, reverb.modAmount]);
+  let driveAmount = reverb.drive;
+  return { input, output, update: (next) => {
+    const value = normalizeReverbSettings(next), now = context.currentTime;
+    const set = (param: AudioParam, amount: number) => param.setTargetAtTime(amount, now, 0.01);
+    set(dry.gain, value.dry); set(wet.gain, value.wet); set(preDelay.delayTime, value.preDelayMs / 1000);
+    set(highPass.frequency, value.highPassHz); set(lowPass.frequency, value.lowPassHz);
+    set(lowEq.gain, value.postEqLowGain); set(midEq.gain, value.postEqMidGain); set(highEq.gain, value.postEqHighGain);
+    width.update(value.width);
+    if (driveAmount !== value.drive) { drive.curve = createDriveCurve(value.drive); driveAmount = value.drive; }
+    const key = JSON.stringify([value.mode, value.decay, value.modEnabled, value.modAmount]);
+    if (key !== impulseKey) { convolver.buffer = createImpulseResponse(context, value); impulseKey = key; }
+  } };
 }
 
 function createImpulseResponse(
-  context: AudioContext,
+  context: BaseAudioContext,
   settings: ReverbSettings,
 ) {
   const sampleRate = context.sampleRate;
@@ -142,7 +155,7 @@ function createDriveCurve(amount: number) {
   return curve;
 }
 
-function createWidthStage(context: AudioContext, width: number) {
+function createWidthStage(context: BaseAudioContext, width: number) {
   const input = context.createGain();
   const output = context.createGain();
   const splitter = context.createChannelSplitter(2);
@@ -167,10 +180,17 @@ function createWidthStage(context: AudioContext, width: number) {
   rightToRight.connect(merger, 0, 1);
   merger.connect(output);
 
-  return { input, output };
+  return { input, output, update: (value: number) => {
+    const next = clamp(value, 0, 1);
+    const now = context.currentTime;
+    leftToLeft.gain.setTargetAtTime((1 + next) / 2, now, 0.01);
+    rightToRight.gain.setTargetAtTime((1 + next) / 2, now, 0.01);
+    leftToRight.gain.setTargetAtTime((1 - next) / 2, now, 0.01);
+    rightToLeft.gain.setTargetAtTime((1 - next) / 2, now, 0.01);
+  } };
 }
 
-function createGain(context: AudioContext, value: number) {
+function createGain(context: BaseAudioContext, value: number) {
   const gain = context.createGain();
   gain.gain.value = value;
   return gain;

@@ -1,10 +1,8 @@
 import { ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import menuIcon from "../assets/icons/flicon_menu.png";
-import snapIcon from "../assets/icons/flicon_snap.png";
 import { useDawStore } from "../store/useDawStore";
 import type { PlaylistSnap, PlaylistTool } from "../types";
-import { playlistToolIcons } from "../utils/playlistToolIcons";
+import { menuIcon, playlistToolIcons, snapIcon } from "../utils/playlistToolIcons";
 
 const toolButtons: Array<{
   tool: PlaylistTool;

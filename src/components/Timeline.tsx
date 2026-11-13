@@ -1,6 +1,6 @@
-import { Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import type { CSSProperties } from "react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDawStore } from "../store/useDawStore";
 import type { PlaylistTool } from "../types";
 import {
@@ -59,6 +59,9 @@ function makeBox(startX: number, startY: number, endX: number, endY: number): Dr
 
 export function Timeline() {
   const lanesRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const headersRef = useRef<HTMLDivElement>(null);
+  const [followPlayhead, setFollowPlayhead] = useState(true);
   const sessionRef = useRef<LanePointerSession | undefined>(undefined);
   const [dragBox, setDragBox] = useState<DragBox | undefined>();
   const [cursorAccent, setCursorAccent] = useState<CursorAccent | undefined>();
@@ -77,6 +80,7 @@ export function Timeline() {
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const performanceMode = useDawStore((state) => state.performanceMode);
   const recording = useDawStore((state) => state.recording);
+  const isPlaying = useDawStore((state) => state.isPlaying);
   const captureHistory = useDawStore((state) => state.captureHistory);
   const setPlayhead = useDawStore((state) => state.setPlayhead);
   const clearSelection = useDawStore((state) => state.clearSelection);
@@ -84,6 +88,16 @@ export function Timeline() {
   const addClipFromSource = useDawStore((state) => state.addClipFromSource);
   const moveClip = useDawStore((state) => state.moveClip);
   const addTrack = useDawStore((state) => state.addTrack);
+  const deleteTrack = useDawStore((state) => state.deleteTrack);
+  const reorderTrack = useDawStore((state) => state.reorderTrack);
+  const beginHistoryGroup = useDawStore((state) => state.beginHistoryGroup);
+  const endHistoryGroup = useDawStore((state) => state.endHistoryGroup);
+  const isRecording = ["counting-in", "recording", "stopping"].includes(recording.status);
+  useEffect(() => {
+    document.addEventListener("pointerup", endHistoryGroup);
+    document.addEventListener("pointercancel", endHistoryGroup);
+    return () => { document.removeEventListener("pointerup", endHistoryGroup); document.removeEventListener("pointercancel", endHistoryGroup); };
+  }, [endHistoryGroup]);
   const updateTrack = useDawStore((state) => state.updateTrack);
   const selectTrack = useDawStore((state) => state.selectTrack);
   const toggleRecordingArm = useDawStore((state) => state.toggleRecordingArm);
@@ -91,7 +105,7 @@ export function Timeline() {
 
   const CLIP_HEIGHT = TRACK_HEIGHT - 32;
 
-  // ── 수평 줌: 룰러 드래그 ──────────────────────────────
+  // A ruler click seeks; dragging still adjusts the zoom.
   function beginRulerDrag(e: React.MouseEvent<HTMLDivElement>) {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -104,7 +118,12 @@ export function Timeline() {
       const factor = Math.pow(1.008, delta);          // 부드러운 지수 스케일
       setZoom(rulerDragRef.current.startZoom * factor);
     }
-    function onUp() {
+    function onUp(ev: MouseEvent) {
+      const scroll = scrollRef.current;
+      if (rulerDragRef.current && Math.abs(ev.clientX - rulerDragRef.current.startX) < 4 && scroll) {
+        const left = scroll.getBoundingClientRect().left;
+        seekTo(Math.max(0, (ev.clientX - left + scroll.scrollLeft) / zoomPxPerSecond));
+      }
       rulerDragRef.current = null;
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
@@ -113,12 +132,32 @@ export function Timeline() {
     document.addEventListener('mouseup', onUp);
   }
 
-  // ── 수평 줌: 타임라인 마우스 휠 ──────────────────────
-  function handleTimelineWheel(e: React.WheelEvent) {
-    e.preventDefault();
-    const factor = e.deltaY > 0 ? 0.88 : 1.14;
-    setZoom(zoomPxPerSecond * factor);
-  }
+  // Native non-passive listener prevents browser zoom only for Ctrl+wheel.
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey || event.deltaY === 0) return;
+      event.preventDefault();
+      const cursor = event.clientX - scroll.getBoundingClientRect().left;
+      const time = (scroll.scrollLeft + cursor) / useDawStore.getState().zoomPxPerSecond;
+      const currentZoom = useDawStore.getState().zoomPxPerSecond;
+      setZoom(currentZoom * (event.deltaY > 0 ? 0.88 : 1.14));
+      const nextZoom = useDawStore.getState().zoomPxPerSecond;
+      requestAnimationFrame(() => { scroll.scrollLeft = time * nextZoom - cursor; });
+    };
+    scroll.addEventListener("wheel", onWheel, { passive: false });
+    return () => scroll.removeEventListener("wheel", onWheel);
+  }, [setZoom]);
+
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll || !followPlayhead || !isPlaying) return;
+    const x = playhead * zoomPxPerSecond;
+    if (x < scroll.scrollLeft || x > scroll.scrollLeft + scroll.clientWidth - 30) {
+      scroll.scrollLeft = Math.max(0, x - scroll.clientWidth * 0.2);
+    }
+  }, [followPlayhead, isPlaying, playhead, zoomPxPerSecond]);
 
   const projectDuration = useMemo(
     () => getProjectDuration({ bpm, tracks }),
@@ -186,13 +225,21 @@ export function Timeline() {
     return `${position.trackId}:${Math.round(position.time / snapStep)}`;
   }
 
+  function seekTo(time: number) {
+    if (useDawStore.getState().isPlaying) {
+      window.dispatchEvent(new CustomEvent("playlist-play-from", { detail: time }));
+    } else {
+      setPlayhead(time);
+    }
+  }
+
   function seekFromPointer(event: React.PointerEvent<HTMLElement>) {
     const position = getPointerPosition(event);
     if (!position) {
       return;
     }
 
-    setPlayhead(position.time);
+    seekTo(position.time);
   }
 
   function getClipIdsInsideBox(box: DragBox) {
@@ -362,6 +409,9 @@ export function Timeline() {
 
         setPlayhead(Math.max(0, startTime));
         setZoom(viewportWidth / duration);
+        requestAnimationFrame(() => {
+          if (scrollRef.current) scrollRef.current.scrollLeft = startTime * useDawStore.getState().zoomPxPerSecond;
+        });
       } else {
         setZoom(zoomPxPerSecond + 24);
       }
@@ -378,24 +428,38 @@ export function Timeline() {
       style={playlistCursorStyle}
     >
       <PlaylistToolbar />
-      <div className="track-column">
+      <div className="track-column" ref={headersRef}>
         <div className="ruler-corner">
-          <span>플레이리스트</span>
+          <button type="button" className="follow-toggle" aria-pressed={followPlayhead} onClick={() => setFollowPlayhead(!followPlayhead)} title="재생선 따라가기 켜기/끄기">{followPlayhead ? "따라가기 켬" : "따라가기 끔"}</button>
           <button className="add-track-button" onClick={addTrack} title="트랙 추가">
             <Plus size={15} />
             <span>트랙</span>
           </button>
         </div>
-        {tracks.map((track) => (
+        {tracks.map((track, index) => (
           <div
             className={`track-header ${selectedTrackId === track.id ? "selected" : ""}`}
             key={track.id}
             onClick={() => selectTrack(track.id)}
           >
-            <input
-              value={track.name}
-              onChange={(event) => updateTrack(track.id, { name: event.target.value })}
-            />
+            <div className="track-heading">
+              <input
+                aria-label={`${track.name} 트랙 이름`}
+                value={track.name}
+                onFocus={beginHistoryGroup}
+                onBlur={endHistoryGroup}
+                onChange={(event) => updateTrack(track.id, { name: event.target.value })}
+              />
+              <button type="button" className="track-order-button" disabled={index === 0 || isRecording}
+                aria-label={`${track.name} 위로 이동`} title="트랙 위로 이동"
+                onClick={(event) => { event.stopPropagation(); reorderTrack(track.id, -1); }}><ArrowUp size={14} /></button>
+              <button type="button" className="track-order-button" disabled={index === tracks.length - 1 || isRecording}
+                aria-label={`${track.name} 아래로 이동`} title="트랙 아래로 이동"
+                onClick={(event) => { event.stopPropagation(); reorderTrack(track.id, 1); }}><ArrowDown size={14} /></button>
+              <button type="button" className="track-order-button" disabled={tracks.length <= 1 || isRecording}
+                aria-label={`${track.name} 삭제`} title={tracks.length <= 1 ? "트랙은 하나 이상 필요합니다" : "트랙 삭제"}
+                onClick={(event) => { event.stopPropagation(); if (window.confirm(`'${track.name}' 트랙과 클립 ${track.clips.length}개를 삭제할까요? 실행 취소로 복원할 수 있습니다.`)) deleteTrack(track.id); }}><Trash2 size={14} /></button>
+            </div>
             <div className="track-toggles">
               <button
                 className={
@@ -410,6 +474,8 @@ export function Timeline() {
                 }
                 onClick={() => toggleRecordingArm(track.id)}
                 title="Arm this track for vocal recording"
+                aria-label={`${track.name} 녹음 대기`}
+                aria-pressed={recording.armedTrackId === track.id}
                 type="button"
               >
                 ARM
@@ -417,6 +483,8 @@ export function Timeline() {
               <button
                 className={track.muted ? "toggle active danger" : "toggle"}
                 onClick={() => updateTrack(track.id, { muted: !track.muted })}
+                aria-label={`${track.name} 음소거`}
+                aria-pressed={track.muted}
                 type="button"
               >
                 M
@@ -424,6 +492,8 @@ export function Timeline() {
               <button
                 className={track.solo ? "toggle active" : "toggle"}
                 onClick={() => updateTrack(track.id, { solo: !track.solo })}
+                aria-label={`${track.name} 솔로`}
+                aria-pressed={track.solo}
                 type="button"
               >
                 S
@@ -437,6 +507,8 @@ export function Timeline() {
                 max={1}
                 step={0.01}
                 value={track.volume}
+                aria-label={`${track.name} 볼륨`}
+                onPointerDown={beginHistoryGroup}
                 onChange={(event) =>
                   updateTrack(track.id, { volume: Number(event.target.value) })
                 }
@@ -446,12 +518,12 @@ export function Timeline() {
         ))}
       </div>
 
-      <div className="timeline-scroll">
+      <div className="timeline-scroll" ref={scrollRef} onScroll={(event) => { if (headersRef.current) headersRef.current.scrollTop = event.currentTarget.scrollTop; }}>
         <div
           className="ruler"
           style={{ width, cursor: "ew-resize", userSelect: "none" }}
           onMouseDown={beginRulerDrag}
-          title="좌우 드래그로 타임라인 확대/축소"
+          title="클릭하여 재생 위치 이동, 좌우 드래그로 확대/축소"
         >
           {rulerTicks.map((tick) => (
             <div
@@ -486,7 +558,6 @@ export function Timeline() {
           onPointerUp={endLanePointer}
           onPointerCancel={endLanePointer}
           onPointerLeave={() => setCursorAccent(undefined)}
-          onWheel={handleTimelineWheel}
         >
           {timeMarkers.map((marker) => (
             <div

@@ -77,16 +77,18 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
           <div className="reverb-main-deck">
             <section className="reverb-brand-module">
               <div>
-                <span className="reverb-brand">REV PLATE-140</span>
-                <span className="reverb-subtitle">REVERBERATION UNIT</span>
+                <span className="reverb-brand">공간 리버브</span>
+                <span className="reverb-subtitle">REVERB</span>
               </div>
               <button
                 className={`reverb-power ${reverb.enabled ? "on" : ""}`}
                 onClick={() => onChange({ enabled: !reverb.enabled })}
                 type="button"
+                aria-label="리버브 켜기"
+                aria-pressed={reverb.enabled}
               >
                 <span className="reverb-power-lamp" />
-                <span>POWER</span>
+                <span>{reverb.enabled ? "켜짐" : "꺼짐"}</span>
               </button>
             </section>
 
@@ -106,9 +108,9 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
             </section>
 
             <section className="reverb-decay-module">
-              <span className="reverb-module-title">DECAY TIME</span>
+              <span className="reverb-module-title">잔향 길이</span>
               <label className="reverb-model-select">
-                <span>Model</span>
+                <span>공간 유형</span>
                 <select
                   onChange={(event) =>
                     onChange({
@@ -126,6 +128,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
               </label>
               <div className="reverb-decay-fader">
                 <input
+                  aria-label="잔향 길이"
                   max={12}
                   min={0.2}
                   onChange={(event) => onChange({ decay: Number(event.target.value) })}
@@ -172,7 +175,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
           </div>
 
           <div className="reverb-bottom-strip">
-            <div className="reverb-arturia-mark">A</div>
+            <div className="reverb-arturia-mark" aria-label="반주 디자이너">RD</div>
             <Knob
               display={`${Math.round(reverb.preDelayMs)} ms`}
               label="Pre-delay"
@@ -213,7 +216,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
                   type="checkbox"
                 />
                 <i />
-                Active
+                사용
               </label>
               <Knob
                 display={formatPercent(reverb.modAmount)}
