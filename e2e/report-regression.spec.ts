@@ -273,6 +273,16 @@ test.describe("C10 화면 갱신", () => {
   });
 });
 
+test("P1-1 빌드 표시: 상태 줄 오른쪽에 빌드 번호가 보인다", async ({ page }) => {
+  await openApp(page);
+  const stamp = page.locator('[data-testid="build-stamp"]');
+  await expect(stamp).toBeVisible();
+  await expect(stamp).toHaveText(/^빌드 (local|[0-9a-f]{7})$/);
+  await expect(stamp).toHaveAttribute("title", /^빌드 시각 \d{4}-\d{2}-\d{2}T/);
+  // 배포 확인용: EXPECT_BUILD_COMMIT=$(git rev-parse --short=7 HEAD) 로 빌드했다면 같아야 한다.
+  if (process.env.EXPECT_BUILD_COMMIT) await expect(stamp).toHaveText(`빌드 ${process.env.EXPECT_BUILD_COMMIT}`);
+});
+
 test("C2 휠을 굴려도 콘솔 오류가 쌓이지 않는다", async ({ page }) => {
   const errors: string[] = [];
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));

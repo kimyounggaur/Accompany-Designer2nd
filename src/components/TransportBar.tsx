@@ -333,7 +333,10 @@ export function TransportBar({
         </div>
       </div>
 
-      <p className="status-line" data-testid="status-line">{status}</p>
+      <p className="status-line" data-testid="status-line">
+        <span className="status-text">{status}</span>
+        <span className="build-stamp" data-testid="build-stamp" title={`빌드 시각 ${__BUILD_TIME__}`}>빌드 {__BUILD_COMMIT__}</span>
+      </p>
     </header>
   );
 }
