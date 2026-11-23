@@ -1,0 +1,450 @@
+/*
+ * 화면 틀(AppShell) 배치 — P2-1
+ *
+ * styles.css는 같은 선택자를 여러 번 덮어 쓴 테마 층이 쌓여 있어서(P6-1에서 정리 예정),
+ * 여기 규칙은 복합 선택자(.app-shell.shell 등)로 우선순위를 확보하고 styles.css 뒤에 불러온다.
+ * 배치(크기·간격·넘침)만 정하고, 색은 기존 테마 변수를 그대로 쓴다.
+ */
+
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  /* 설계는 288px였으나, 딜레이·리버브·EQ 장비 화면이 320px 기준이라 288px에서는 잘리거나 글자가 깨진다.
+     기존 고정 폭(320px)을 최소로 유지한다. 장비 화면이 폭에 맞춰 줄어들게 하는 일은 P5-0에서 한다. */
+  --inspector-min: 320px;
+  --inspector-max: 360px;
+}
+
+/* ───────── 틀: 상단 바 / 작업 영역 / 상태 줄 ───────── */
+
+.app-shell.shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* ───────── 상단 바 ───────── */
+
+.transport.topbar {
+  display: grid;
+  row-gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-2) var(--space-3);
+  /* 팝오버가 아래 도구줄 위에 뜨도록 */
+  z-index: 60;
+}
+
+.topbar__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.topbar__row > * {
+  flex-shrink: 0;
+}
+
+/* 상단 바의 조작 요소는 높이를 32px로 통일한다(두 줄 합쳐 112px 이하를 지키기 위해). */
+.topbar .transport-group {
+  min-height: 0;
+  padding: 4px;
+  gap: 6px;
+}
+
+.topbar .icon-button,
+.topbar .text-button {
+  height: 32px;
+  min-height: 32px;
+  min-width: 32px;
+}
+
+.topbar .session-name input,
+.topbar .number-control input,
+.topbar .input-select-control select {
+  height: 32px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.topbar .number-control {
+  height: 32px;
+}
+
+.topbar .count-in-control {
+  height: 32px;
+}
+
+.topbar .time-display {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+}
+
+.topbar__spacer {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.topbar .session-name {
+  flex: 0 1 240px;
+  min-width: 140px;
+  width: auto;
+}
+
+.topbar .session-name input {
+  width: 100%;
+  min-width: 0;
+}
+
+.topbar .record-options-group {
+  flex-wrap: nowrap;
+}
+
+.topbar .input-select-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.topbar .input-select-control select {
+  width: 150px;
+}
+
+/* ───────── 팝오버·메뉴 ───────── */
+
+.popover-host {
+  position: relative;
+}
+
+.popover-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 1000;
+  display: grid;
+  gap: var(--space-1);
+  min-width: 200px;
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  background: var(--mistral-ivory);
+  color: var(--mistral-black);
+  box-shadow: var(--mistral-shadow);
+}
+
+.record-options-popover {
+  right: auto;
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  width: max-content;
+  max-width: min(520px, calc(100vw - 24px));
+}
+
+.file-menu-panel button[role="menuitem"] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--mistral-black);
+  text-align: left;
+  cursor: pointer;
+}
+
+.file-menu-panel button[role="menuitem"]:hover,
+.file-menu-panel button[role="menuitem"]:focus-visible {
+  background: var(--mistral-gold);
+}
+
+/* ───────── 작업 영역과 오른쪽 패널 ───────── */
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--inspector-width, clamp(var(--inspector-min), 24vw, var(--inspector-max)));
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace[data-inspector="collapsed"] {
+  --inspector-width: 0px;
+}
+
+.workspace[data-inspector="collapsed"] > .inspector {
+  display: none;
+}
+
+.workspace > .inspector {
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 칸(PanelSection) */
+.panel-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 28px;
+}
+
+.panel .panel-section__heading {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.panel-section__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.panel-section__toggle:focus-visible {
+  outline: 2px solid var(--mistral-orange);
+  outline-offset: 2px;
+}
+
+.panel-section__chevron {
+  flex: 0 0 auto;
+  transition: transform 0.15s ease;
+}
+
+.panel-section[data-open="false"] .panel-section__chevron {
+  transform: rotate(-90deg);
+}
+
+.panel-section__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+}
+
+.panel-section[data-open="true"] > .panel-section__body {
+  margin-top: var(--space-2);
+}
+
+/* 기본 여백이 있는 칸은 접었을 때 높이를 줄이고, 여백이 없는 장비 칸(padding:0)은 머리글에 여백을 준다. */
+.clip-panel.panel-section[data-open="false"],
+.meter-panel.panel-section[data-open="false"],
+.effect-rack-panel.panel-section[data-open="false"],
+.eq-panel.panel-section[data-open="false"] {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.trax-panel > .panel-section__header,
+.comp-panel > .panel-section__header,
+.delay-panel > .panel-section__header,
+.reverb-panel > .panel-section__header,
+.spec-panel > .panel-section__header {
+  padding: 6px 14px;
+}
+
+.trax-panel.panel-section[data-open="true"] > .panel-section__body,
+.comp-panel.panel-section[data-open="true"] > .panel-section__body,
+.delay-panel.panel-section[data-open="true"] > .panel-section__body,
+.reverb-panel.panel-section[data-open="true"] > .panel-section__body,
+.spec-panel.panel-section[data-open="true"] > .panel-section__body {
+  margin-top: 0;
+}
+
+/* 클립 칸의 WARP 묶음 */
+.warp-block {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.warp-block__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--mistral-black);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.warp-block__toggle.on {
+  border-color: var(--mistral-orange);
+  background: var(--mistral-gold);
+}
+
+.warp-block__led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #b9b09a;
+}
+
+.warp-block__toggle.on .warp-block__led {
+  background: var(--mistral-orange);
+  box-shadow: 0 0 6px rgba(250, 82, 15, 0.6);
+}
+
+.warp-block__field,
+.warp-block__rate {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.warp-block__label {
+  text-align: left;
+  justify-self: start;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  color: hsl(0, 0%, 24%);
+}
+
+.warp-block__field input {
+  width: 100%;
+  min-width: 0;
+}
+
+.warp-block__rate-value {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.warp-block__rate-value.active {
+  color: var(--mistral-orange);
+}
+
+/* ───────── 아래 상태 줄 ───────── */
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  border-top: 1px solid var(--line);
+  background: var(--mistral-cream);
+  color: hsl(0, 0%, 24%);
+  font-size: 12px;
+}
+
+.statusbar .status-line {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+}
+
+.statusbar .status-line .status-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusbar__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.statusbar__toggle[aria-pressed="false"] {
+  background: var(--mistral-gold);
+}
+
+.statusbar__toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.statusbar .build-stamp {
+  flex: 0 0 auto;
+  font-size: 11px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+/* ───────── 좁은 화면(태블릿 이하): 위아래로 쌓고 페이지가 스크롤 ───────── */
+
+@media (max-width: 980px) {
+  .app-shell.shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .workspace,
+  .workspace[data-inspector="collapsed"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace > .inspector {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    overflow-y: visible;
+  }
+
+  .topbar__row {
+    flex-wrap: wrap;
+  }
+
+  .statusbar {
+    position: sticky;
+    bottom: 0;
+    z-index: 40;
+  }
+}

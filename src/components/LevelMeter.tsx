@@ -182,7 +182,6 @@ export function LevelMeterRack() {
   return (
     <div className="meter-rack">
       <div className="meter-rack-heading">
-        <h2>레벨 미터</h2>
         <span>Peak / RMS</span>
       </div>
       <div className="meter-list">

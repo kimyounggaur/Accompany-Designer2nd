@@ -3920,8 +3920,3 @@ input[type="range"] {
   outline-offset: 3px;
   border-radius: 50%;
 }
-
-/* 상태 줄 오른쪽 끝의 빌드 표시 (P1-1). 상태 문구만 말줄임 처리한다. */
-.status-line { display: flex; align-items: center; gap: 12px; }
-.status-line .status-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.status-line .build-stamp { flex: 0 0 auto; font-size: 11px; opacity: 0.7; font-variant-numeric: tabular-nums; cursor: default; }
