@@ -19,5 +19,9 @@ mkdirSync("e2e/fixtures", { recursive: true });
 // 앞 4초 작게(0.05), 뒤 4초 크게(0.8)인 220Hz 사인파 — B1 파형·C8 출력 한계 측정용
 writeFileSync("e2e/fixtures/quiet-loud-8s.wav",
   wav({ sample: (t, len) => Math.sin(2 * Math.PI * 220 * t) * (t < len / 2 ? 0.05 : 0.8) }));
+// 12초 내내 크기가 같은 220Hz 사인파(0.5) — 재생 중 클립 이동·시크가 만드는 튐(클릭)만 따로 재기 위한 음원(P3-2).
+// 정상 신호의 이웃 샘플 차이가 0.02 안팎이라, 튐 기준(0.2)을 넘으면 전부 엔진이 만든 클릭이다.
+writeFileSync("e2e/fixtures/steady-220hz-12s.wav",
+  wav({ seconds: 12, sample: (t) => Math.sin(2 * Math.PI * 220 * t) * 0.5 }));
 writeFileSync("e2e/fixtures/not-audio.txt", "not audio");
 console.log("fixtures ready");

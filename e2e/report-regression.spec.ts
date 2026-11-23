@@ -14,6 +14,16 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const WAV = path.join(here, "fixtures", "quiet-loud-8s.wav"); // 앞 4초 작게(0.05), 뒤 4초 크게(0.8)
 const NOT_AUDIO = path.join(here, "fixtures", "not-audio.txt");
+const STEADY = path.join(here, "fixtures", "steady-220hz-12s.wav"); // 12초 내내 같은 크기(0.5)의 220Hz — 엔진이 만드는 클릭만 재기 위한 음원
+
+/** 모든 시험을 한 엔진으로 돌려 비교할 때: E2E_ENGINE=v1|v2. 비우면 앱의 기본 엔진. 주소에 engine이 이미 있으면 그대로 둔다. */
+const ENGINE = process.env.E2E_ENGINE;
+function withEngine(query = "") {
+  if (!ENGINE) return query;
+  const params = new URLSearchParams(query);
+  if (!params.has("engine")) params.set("engine", ENGINE);
+  return `?${params}`;
+}
 
 const S = {
   inspector: '[data-testid="inspector"]',
@@ -53,8 +63,12 @@ const S = {
 /** 소리 소스 시작 횟수, rAF 호출 수, 최종 출력 분석기를 잡아 두는 측정 훅 */
 const PROBES = `(() => {
   window.__starts = 0;
+  window.__startLog = [];
+  window.__stopLog = [];
   const start = AudioBufferSourceNode.prototype.start;
-  AudioBufferSourceNode.prototype.start = function (...a) { window.__starts++; return start.apply(this, a); };
+  AudioBufferSourceNode.prototype.start = function (...a) { window.__starts++; window.__startLog.push([this.context.currentTime, ...a]); return start.apply(this, a); };
+  const stop = AudioScheduledSourceNode.prototype.stop;
+  AudioScheduledSourceNode.prototype.stop = function (...a) { window.__stopLog.push([this.context.currentTime, ...a]); return stop.apply(this, a); };
   window.__raf = 0;
   const raf = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = (cb) => { window.__raf++; return raf(cb); };
@@ -77,7 +91,7 @@ async function openApp(page: Page, options: { layoutNotice?: boolean; query?: st
       }
     });
   }
-  await page.goto(`/${options.query ?? ""}`);
+  await page.goto(`/${withEngine(options.query)}`);
   await page.locator(S.inspector).waitFor();
   await page.waitForTimeout(1200); // 자동 저장 복구가 끝날 때까지
 }
@@ -85,8 +99,8 @@ async function openApp(page: Page, options: { layoutNotice?: boolean; query?: st
 async function upload(page: Page, file = WAV) {
   const before = await page.locator(S.clip).count();
   await page.setInputFiles(S.upload, file);
-  if (file === WAV) await expect(page.locator(S.clip)).toHaveCount(before + 1);
-  else await page.waitForTimeout(800);
+  if (file === NOT_AUDIO) await page.waitForTimeout(800);
+  else await expect(page.locator(S.clip)).toHaveCount(before + 1);
 }
 
 const starts = (page: Page) => page.evaluate(() => (window as any).__starts as number);
@@ -751,6 +765,188 @@ test.describe("P3-0 안전망", () => {
     await page.click(S.play);
     await page.waitForTimeout(800);
     expect(await page.evaluate(() => (window as any).__probe)).toBeUndefined();
+  });
+});
+
+// ───────────────────────── P3-2 새 재생 엔진 ─────────────────────────
+// 새 엔진은 ?engine=v2로만 켜진다. 같은 시험을 옛 엔진으로 돌려 수치만 비교하려면 E2E_P32_ENGINE=v1(그때는 v2 전용 판정을 건너뛴다).
+
+const P32_ENGINE = process.env.E2E_P32_ENGINE === "v1" ? "v1" : "v2";
+const P32_QUERY = `?engine=${P32_ENGINE}&probe=1`;
+const onNewEngine = P32_ENGINE === "v2";
+
+type ProbeReport = { jumps: number; gaps: number; peak: number; longestGapMs: number; jumpLog: [number, number, number][] };
+
+/** (진단) 튄 지점 가까이에서 있었던 소리 시작·정지를 모아 한 줄로 */
+async function explainJumps(page: Page, probe: ProbeReport) {
+  const logs = await page.evaluate(() => ({ starts: (window as any).__startLog as number[][], stops: (window as any).__stopLog as number[][] }));
+  const r = (n: number) => Math.round(n * 1000) / 1000;
+  return probe.jumpLog.map(([at, prev, value]) => ({
+    at: r(at), prev: r(prev), value: r(value),
+    starts: logs.starts.filter((row) => Math.abs((row[1] ?? row[0]) - at) < 0.08 || Math.abs(row[0] - at) < 0.08).map((row) => row.map(r)),
+    stops: logs.stops.filter((row) => Math.abs((row[1] ?? row[0]) - at) < 0.08 || Math.abs(row[0] - at) < 0.08).map((row) => row.map(r)),
+  }));
+}
+const readProbe = (page: Page) => page.evaluate(() => (window as any).__probe as ProbeReport);
+
+async function resetProbe(page: Page) {
+  await page.waitForFunction(() => typeof (window as any).__probeReset === "function" && !!(window as any).__out);
+  await page.evaluate(() => (window as any).__probeReset());
+}
+
+/** 측정값은 한 줄로 남긴다: 병합 기록의 이전/이후 표에 그대로 옮긴다. */
+const measured = (name: string, value: unknown) => console.log(`P3-2 측정 [${P32_ENGINE}] ${name}: ${JSON.stringify(value)}`);
+
+/** 축소 버튼을 n번 눌러 눈금 폭을 정하고 초당 픽셀 수를 돌려준다(한 번에 16px/초씩 줄어든다). */
+async function zoomOutBy(page: Page, times: number) {
+  for (let i = 0; i < times; i++) await page.click(S.zoomOut);
+  return 96 - 16 * times;
+}
+
+async function clickRuler(page: Page, seconds: number, pxPerSecond: number) {
+  const ruler = (await page.locator(S.ruler).boundingBox())!;
+  await page.mouse.click(ruler.x + seconds * pxPerSecond, ruler.y + 5);
+}
+
+const timeSeconds = async (page: Page) => {
+  const text = (await page.locator(S.timeDisplay).textContent()) ?? "";
+  const match = /(\d+):(\d{2})(?:\.(\d+))?/.exec(text);
+  return match ? Number(match[1]) * 60 + Number(match[2]) + (match[3] ? Number(`0.${match[3]}`) : 0) : Number.NaN;
+};
+
+test.describe("P3-2 재생 시계·예약기", () => {
+  test("새 엔진은 주소 ?engine=v2나 저장소 ad.engine=v2일 때만 켜지고, ?engine=v1이 언제나 이긴다", async ({ page }) => {
+    const engineAt = async (url: string) => {
+      await page.goto(url);
+      await page.locator(S.inspector).waitFor();
+      return page.evaluate(() => document.documentElement.dataset.engine);
+    };
+    expect(await engineAt("/")).toBe("v1");
+    expect(await engineAt("/?engine=v2")).toBe("v2");
+    await page.evaluate(() => window.localStorage.setItem("ad.engine", "v2"));
+    expect(await engineAt("/")).toBe("v2");
+    expect(await engineAt("/?engine=v1")).toBe("v1");
+    await page.evaluate(() => window.localStorage.removeItem("ad.engine"));
+    expect(await engineAt("/")).toBe("v1");
+  });
+
+  test("재생을 시작하면 앞으로 2초 안에 시작하는 클립의 소리만 만들고, 25ms 틱이 뒤의 클립을 미리 예약한다", async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as any).__workers = 0;
+      const Native = window.Worker;
+      window.Worker = class extends Native {
+        constructor(...args: ConstructorParameters<typeof Worker>) {
+          super(...args);
+          (window as any).__workers++;
+        }
+      };
+    });
+    await openApp(page, { query: P32_QUERY });
+    expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe(P32_ENGINE);
+    const pxPerSecond = await zoomOutBy(page, 4); // 32px/초: 30초가 한 화면에 들어온다
+    // 12초 클립 3개: A는 0~12초, B는 4~16초(A와 겹치므로 새 트랙), C는 14~26초
+    for (const seconds of [0, 4, 14]) {
+      await clickRuler(page, seconds, pxPerSecond);
+      await upload(page, STEADY);
+    }
+    await clickRuler(page, 0, pxPerSecond);
+    const base = await starts(page);
+    await page.click(S.play);
+    await page.waitForTimeout(500);
+    const atStart = (await starts(page)) - base; // 옛 엔진은 3, 새 엔진은 A 하나
+    await page.waitForTimeout(2500); // 재생 3초 지점: B(4초 시작)가 창(앞 2초)에 들어와 이미 예약돼 있어야 한다
+    const beforeB = (await starts(page)) - base;
+    await clickRuler(page, 13, pxPerSecond); // 재생 중 시크: B(진행 중)와 C(14초 시작)가 창에 있다
+    await page.waitForTimeout(500);
+    const afterSeek = (await starts(page)) - base;
+    const workers = await page.evaluate(() => (window as any).__workers as number);
+    measured("재생 시작 때 만든 소리 수", { atStart, at3s: beforeB, afterSeekTo13s: afterSeek, workers });
+    if (onNewEngine) {
+      expect(atStart).toBe(1);
+      expect(beforeB).toBe(2);
+      expect(afterSeek).toBe(4);
+      expect(workers).toBeGreaterThanOrEqual(1); // 예약기 타이머가 실제로 Worker에서 돈다
+    } else {
+      expect(atStart).toBe(3);
+    }
+  });
+
+  test("재생 중 클립을 10번 움직여도 스피커 신호에 튐이 0회다", async ({ page }) => {
+    await openApp(page, { query: P32_QUERY });
+    await upload(page, STEADY);
+    await clickRuler(page, 1, 96); // 재생 위치 1초(클립 안)
+    await page.click(S.play);
+    await page.waitForTimeout(500);
+    await resetProbe(page);
+    const startsBefore = await starts(page);
+
+    const box = (await page.locator(S.clip).first().boundingBox())!;
+    const x = box.x + Math.min(box.width / 2, 300);
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    for (let i = 1; i <= 10; i++) {
+      await page.mouse.move(x + (i % 2 === 1 ? 48 : 0), y); // 0.5초 오른쪽 ↔ 제자리를 번갈아: 재생 위치는 늘 클립 안
+      await page.waitForTimeout(100);
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+    const probe = await readProbe(page);
+    const replaced = (await starts(page)) - startsBefore;
+    measured("클립 10번 이동", { ...probe, 새로_시작한_소리: replaced });
+    if (probe.jumps > 0) console.log("P3-2 진단", JSON.stringify(await explainJumps(page, probe)));
+    expect(replaced).toBeGreaterThanOrEqual(10); // 정말 클립이 10번 바뀌었다(헛통과 방지)
+    expect(probe.peak).toBeGreaterThan(0.2); // 내내 소리가 났다
+    if (onNewEngine) expect(probe.jumps).toBe(0);
+  });
+
+  test("재생 중 시크를 10번 해도 튐이 0회, 끊김은 한 번에 20ms 이하다", async ({ page }) => {
+    await openApp(page, { query: P32_QUERY });
+    await upload(page, STEADY);
+    const pxPerSecond = await zoomOutBy(page, 4);
+    await page.click(S.play);
+    await page.waitForTimeout(500);
+    await resetProbe(page);
+    const startsBefore = await starts(page);
+    for (const seconds of [3, 8, 2, 9, 4, 10, 1.5, 7, 5, 11]) {
+      await clickRuler(page, seconds, pxPerSecond);
+      await page.waitForTimeout(150);
+    }
+    await page.waitForTimeout(400);
+    const probe = await readProbe(page);
+    const restarted = (await starts(page)) - startsBefore;
+    measured("시크 10번", { ...probe, 새로_시작한_소리: restarted });
+    if (probe.jumps > 0) console.log("P3-2 진단", JSON.stringify(await explainJumps(page, probe)));
+    expect(restarted).toBeGreaterThanOrEqual(10); // 시크마다 새 위치에서 소리가 다시 시작됐다
+    expect(probe.peak).toBeGreaterThan(0.2);
+    if (onNewEngine) {
+      expect(probe.jumps).toBe(0);
+      expect(probe.longestGapMs).toBeLessThanOrEqual(20);
+    }
+  });
+
+  test("재생 → 일시정지 → 이어 재생: 멈춘 동안 위치가 그대로이고, 이어서 가며 튐이 없다", async ({ page }) => {
+    await openApp(page, { query: P32_QUERY });
+    await upload(page, STEADY);
+    await page.click(S.play);
+    await page.waitForTimeout(400);
+    await resetProbe(page);
+    await page.waitForTimeout(800);
+    await page.click(S.play); // 일시정지
+    const pausedAt = await timeSeconds(page);
+    expect(pausedAt).toBeGreaterThan(0.8);
+    await page.waitForTimeout(700);
+    expect(await timeSeconds(page)).toBe(pausedAt);
+    await page.click(S.play); // 이어 재생
+    await page.waitForTimeout(900);
+    const resumedAt = await timeSeconds(page);
+    expect(resumedAt).toBeGreaterThan(pausedAt + 0.5);
+    expect(resumedAt).toBeLessThan(pausedAt + 2);
+    const probe = await readProbe(page);
+    measured("일시정지·이어 재생", { ...probe, pausedAt, resumedAt });
+    if (probe.jumps > 0) console.log("P3-2 진단", JSON.stringify(await explainJumps(page, probe)));
+    expect(probe.peak).toBeGreaterThan(0.2);
+    if (onNewEngine) expect(probe.jumps).toBe(0);
   });
 });
 

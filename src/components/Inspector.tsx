@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
-import { audioEngine } from "../audio/audioEngine";
+import { audioEngine } from "../audio/currentEngine";
 import { ko } from "../i18n/ko";
 import { useDawStore } from "../store/useDawStore";
 import { SpectrumAnalyzer } from "./SpectrumAnalyzer";
