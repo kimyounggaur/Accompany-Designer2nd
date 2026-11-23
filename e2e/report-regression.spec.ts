@@ -283,6 +283,15 @@ test("P1-1 빌드 표시: 상태 줄 오른쪽에 빌드 번호가 보인다", a
   if (process.env.EXPECT_BUILD_COMMIT) await expect(stamp).toHaveText(`빌드 ${process.env.EXPECT_BUILD_COMMIT}`);
 });
 
+test("P1-6 사이트 기본 정보: 탭 제목, 파비콘, 공유 이미지", async ({ page, request }) => {
+  await openApp(page);
+  await expect(page).toHaveTitle("반주 디자이너 2");
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/favicon.svg");
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", "반주 디자이너 2");
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#fff4d6");
+  for (const url of ["/favicon.svg", "/og.png"]) expect((await request.get(url)).status(), url).toBe(200);
+});
+
 test("C2 휠을 굴려도 콘솔 오류가 쌓이지 않는다", async ({ page }) => {
   const errors: string[] = [];
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
