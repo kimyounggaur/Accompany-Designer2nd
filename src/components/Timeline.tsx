@@ -439,12 +439,14 @@ export function Timeline() {
         {tracks.map((track, index) => (
           <div
             className={`track-header ${selectedTrackId === track.id ? "selected" : ""}`}
+            data-testid="track-header"
             key={track.id}
             onClick={() => selectTrack(track.id)}
           >
             <div className="track-heading">
               <input
                 aria-label={`${track.name} 트랙 이름`}
+                data-testid="track-name"
                 value={track.name}
                 onFocus={beginHistoryGroup}
                 onBlur={endHistoryGroup}
@@ -508,6 +510,7 @@ export function Timeline() {
                 step={0.01}
                 value={track.volume}
                 aria-label={`${track.name} 볼륨`}
+                data-testid="track-volume"
                 onPointerDown={beginHistoryGroup}
                 onChange={(event) =>
                   updateTrack(track.id, { volume: Number(event.target.value) })
@@ -521,6 +524,7 @@ export function Timeline() {
       <div className="timeline-scroll" ref={scrollRef} onScroll={(event) => { if (headersRef.current) headersRef.current.scrollTop = event.currentTarget.scrollTop; }}>
         <div
           className="ruler"
+          data-testid="ruler"
           style={{ width, cursor: "ew-resize", userSelect: "none" }}
           onMouseDown={beginRulerDrag}
           title="클릭하여 재생 위치 이동, 좌우 드래그로 확대/축소"

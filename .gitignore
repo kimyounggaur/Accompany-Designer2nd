@@ -7,3 +7,8 @@ vite-live.err
 .DS_Store
 
 /assets/
+
+# test artifacts
+playwright-report/
+test-results/
+e2e/fixtures/

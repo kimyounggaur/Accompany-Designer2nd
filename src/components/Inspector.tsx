@@ -421,11 +421,11 @@ export function Inspector() {
   }
 
   if (!selectedTrack) {
-    return <aside className="inspector" />;
+    return <aside className="inspector" data-testid="inspector" />;
   }
 
   return (
-    <aside className="inspector" onPointerDownCapture={(event) => {
+    <aside className="inspector" data-testid="inspector" onPointerDownCapture={(event) => {
       const target = event.target as Element;
       if (target.closest("svg") || target.matches('input[type="range"]')) beginHistoryGroup();
     }}>
