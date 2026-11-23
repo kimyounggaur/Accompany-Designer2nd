@@ -1,7 +1,7 @@
 node_modules/
 dist/
 .vercel/
-.claude/settings.local.json
+.claude/
 *.log
 vite-live.err
 .DS_Store
