@@ -17,7 +17,7 @@ const WAV = path.join(here, "fixtures", "quiet-loud-8s.wav"); // 앞 4초 작게
 const NOT_AUDIO = path.join(here, "fixtures", "not-audio.txt");
 const STEADY = path.join(here, "fixtures", "steady-220hz-12s.wav"); // 12초 내내 같은 크기(0.5)의 220Hz — 엔진이 만드는 클릭만 재기 위한 음원
 
-/** 모든 시험을 한 엔진으로 돌려 비교할 때: E2E_ENGINE=v1|v2. 비우면 앱의 기본 엔진. 주소에 engine이 이미 있으면 그대로 둔다. */
+/** 모든 시험을 한 엔진으로 돌려 비교할 때: E2E_ENGINE=v1|v2. 비우면 앱의 기본 엔진(v2, P3 기본 전환 이후). 옛 엔진 전체 돌리기는 E2E_ENGINE=v1. 주소에 engine이 이미 있으면 그대로 둔다. */
 const ENGINE = process.env.E2E_ENGINE;
 function withEngine(query = "") {
   if (!ENGINE) return query;
@@ -782,7 +782,7 @@ test.describe("P3-0 안전망", () => {
 });
 
 // ───────────────────────── P3-2 새 재생 엔진 ─────────────────────────
-// 새 엔진은 ?engine=v2로만 켜진다. 같은 시험을 옛 엔진으로 돌려 수치만 비교하려면 E2E_P32_ENGINE=v1(그때는 v2 전용 판정을 건너뛴다).
+// 새 엔진(v2)이 기본이지만, 3단계 시험은 주소에 engine을 분명히 적어 어느 엔진으로 돌았는지 흔들리지 않게 한다. 같은 시험을 옛 엔진으로 돌려 수치만 비교하려면 E2E_P32_ENGINE=v1(그때는 v2 전용 판정을 건너뛴다).
 
 const P32_ENGINE = process.env.E2E_P32_ENGINE === "v1" ? "v1" : "v2";
 const P32_QUERY = `?engine=${P32_ENGINE}&probe=1`;
@@ -828,19 +828,31 @@ const timeSeconds = async (page: Page) => {
 };
 
 test.describe("P3-2 재생 시계·예약기", () => {
-  test("새 엔진은 주소 ?engine=v2나 저장소 ad.engine=v2일 때만 켜지고, ?engine=v1이 언제나 이긴다", async ({ page }) => {
+  test("새 엔진이 기본이고, 주소 ?engine=v1이나 저장소 ad.engine=v1일 때만 옛 엔진이며, 주소가 저장소보다 우선한다", async ({ page }) => {
     const engineAt = async (url: string) => {
       await page.goto(url);
       await page.locator(S.inspector).waitFor();
       return page.evaluate(() => document.documentElement.dataset.engine);
     };
-    expect(await engineAt("/")).toBe("v1");
-    expect(await engineAt("/?engine=v2")).toBe("v2");
-    await page.evaluate(() => window.localStorage.setItem("ad.engine", "v2"));
     expect(await engineAt("/")).toBe("v2");
     expect(await engineAt("/?engine=v1")).toBe("v1");
-    await page.evaluate(() => window.localStorage.removeItem("ad.engine"));
+    await page.evaluate(() => window.localStorage.setItem("ad.engine", "v1"));
     expect(await engineAt("/")).toBe("v1");
+    expect(await engineAt("/?engine=v2")).toBe("v2");
+    await page.evaluate(() => window.localStorage.setItem("ad.engine", "아무거나"));
+    expect(await engineAt("/")).toBe("v2"); // 알 수 없는 값은 무시하고 기본(v2)
+    await page.evaluate(() => window.localStorage.removeItem("ad.engine"));
+    expect(await engineAt("/")).toBe("v2");
+  });
+
+  test("옛 엔진으로 돌아가는 길(?engine=v1)에서도 올리기·재생·정지가 된다", async ({ page }) => {
+    await openApp(page, { query: "?engine=v1" });
+    expect(await page.evaluate(() => document.documentElement.dataset.engine)).toBe("v1");
+    await upload(page);
+    await page.click(S.play);
+    await expect.poll(() => timeSeconds(page), { timeout: 5000 }).toBeGreaterThan(0.5);
+    await page.click(S.stop);
+    await expect.poll(() => timeSeconds(page), { timeout: 2000 }).toBe(0);
   });
 
   test("재생을 시작하면 앞으로 2초 안에 시작하는 클립의 소리만 만들고, 25ms 틱이 뒤의 클립을 미리 예약한다", async ({ page }) => {
@@ -1648,6 +1660,26 @@ test.describe("P3-6 믹스 내보내기", () => {
     expect(Math.abs(wav.seconds - (180 + REVERB_TAIL_SECONDS))).toBeLessThanOrEqual(0.01);
     expect(wav.peak).toBeLessThanOrEqual(CEILING + 1 / 32768);
     expect(wav.rms(60, 120)).toBeGreaterThan(0.05); // 소리가 나온다(무음 파일이 아니다)
+    fs.rmSync(saved, { force: true });
+  });
+
+  test("재생 출력의 최고점과 내보낸 파일의 최고점이 같다(±0.5 dB) — 재생과 내보내기가 같은 소리 부품을 쓴다", async ({ page }, testInfo) => {
+    await openApp(page, { query: P32_QUERY });
+    await upload(page); // 앞 4초 작게(0.05), 뒤 4초 크게(0.8)
+    await clickRuler(page, 4.5, 96);
+    await page.click(S.play);
+    await page.waitForTimeout(400);
+    const playing = await outputPeak(page, 800);
+    await page.click(S.stop);
+    await chooseExport(page);
+    const [download] = await Promise.all([page.waitForEvent("download"), page.locator(S.exportStart).click()]);
+    const saved = await saveDownload(download, testInfo, "same-sound");
+    const wav = readWav(saved);
+    const diffDb = dbOf(wav.peak / playing);
+    measured36("재생 출력 최고점 vs 내보낸 파일 최고점", { 재생: playing, 파일: wav.peak, 차이_dB: diffDb });
+    expect(playing).toBeGreaterThan(0.3);
+    // 옛 엔진(E2E_P32_ENGINE=v1)의 재생은 새 소리 부품을 쓰지 않아 내보낸 소리와 다르다 — 수치만 남기고 판정은 새 엔진에서만 한다.
+    if (onNewEngine) expect(Math.abs(diffDb)).toBeLessThanOrEqual(0.5);
     fs.rmSync(saved, { force: true });
   });
 

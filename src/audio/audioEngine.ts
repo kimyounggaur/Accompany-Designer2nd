@@ -23,8 +23,9 @@ interface DecodedAudio {
 export const LEGACY_MASTER_GAIN = 0.92;
 
 /**
- * 옛 엔진(재생 구조 교체 전). 새 엔진(`engine/AudioEngine.ts`, `?engine=v2`)이 이 클래스를 이어받아 소리 경로·마스터·음원 보관 같은
- * 아직 옮기지 않은 부분을 그대로 쓴다. 3단계가 끝나 옛 엔진을 지울 때 함께 정리된다.
+ * 옛 엔진(재생 구조 교체 전). 기본은 새 엔진(`engine/AudioEngine.ts`)이고, 주소 `?engine=v1`(또는 저장소 `ad.engine=v1`)일 때만
+ * 이 클래스가 그대로 재생한다. 새 엔진은 이 클래스를 이어받아 음원 보관·디코드·소리 장치 열기 같은 공용 부분을 쓴다.
+ * 기본을 바꾼 1주 뒤 옛 재생 코드를 지울 때(설계 결정 10) 공용 부분만 남기고 정리된다.
  */
 export class BrowserAudioEngine {
   protected context?: AudioContext;

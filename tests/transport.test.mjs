@@ -386,23 +386,24 @@ test("소리 쪽을 연결하지 않아도 시계는 혼자 동작한다", async
 
 // ───── 엔진 고르기 ─────
 
-test("readEngineChoice: 기본은 옛 엔진, 주소·저장소로 새 엔진을 켠다", () => {
-  assert.equal(readEngineChoice("", null), "v1");
+test("readEngineChoice: 기본은 새 엔진, 주소·저장소로 옛 엔진을 고른다", () => {
+  assert.equal(readEngineChoice("", null), "v2");
+  assert.equal(readEngineChoice("?engine=v1", null), "v1");
+  assert.equal(readEngineChoice("?x=1&engine=v1", null), "v1");
   assert.equal(readEngineChoice("?engine=v2", null), "v2");
-  assert.equal(readEngineChoice("?x=1&engine=v2", null), "v2");
-  assert.equal(readEngineChoice("", "v2"), "v2");
   assert.equal(readEngineChoice("", "v1"), "v1");
-  assert.equal(readEngineChoice("", "아무거나"), "v1");
+  assert.equal(readEngineChoice("", "v2"), "v2");
+  assert.equal(readEngineChoice("", "아무거나"), "v2");
 });
 
-test("readEngineChoice: 주소의 ?engine=v1은 저장소 설정보다 우선한다(바로 옛 엔진으로 돌아오는 길)", () => {
+test("readEngineChoice: 주소의 ?engine=…은 저장소 설정보다 우선하고, 알 수 없는 값은 무시한다", () => {
   assert.equal(readEngineChoice("?engine=v1", "v2"), "v1");
   assert.equal(readEngineChoice("?engine=v2", "v1"), "v2");
-  assert.equal(readEngineChoice("?engine=v3", "v2"), "v2", "알 수 없는 값은 무시하고 저장소를 본다");
-  assert.equal(readEngineChoice("?engine=v3", null), "v1");
+  assert.equal(readEngineChoice("?engine=v3", "v1"), "v1", "알 수 없는 값은 무시하고 저장소를 본다");
+  assert.equal(readEngineChoice("?engine=v3", null), "v2");
   assert.equal(ENGINE_STORAGE_KEY, "ad.engine");
 });
 
-test("readEngineChoice: 인자를 생략해도(브라우저가 아닌 환경) 옛 엔진", () => {
-  assert.equal(readEngineChoice(), "v1");
+test("readEngineChoice: 인자를 생략해도(브라우저가 아닌 환경) 새 엔진", () => {
+  assert.equal(readEngineChoice(), "v2");
 });
