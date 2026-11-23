@@ -152,11 +152,18 @@ export interface RecordingState {
   waveformPeaks: number[];
 }
 
+/** 마스터 설정. 지금은 볼륨(−60 ~ +6 dB)뿐이다. */
+export interface MasterSettings {
+  volumeDb: number;
+}
+
 export interface DawProject {
   id: string;
   name: string;
   bpm: number;
   sampleRate: number;
+  /** 마스터 볼륨. 옛 프로젝트에는 없을 수 있어 없으면 0 dB로 본다(문서 형식 v2에서 필수가 된다). */
+  master?: MasterSettings;
   tracks: Track[];
   audioAssets: Record<string, AudioAsset>;
   timeMarkers: TimeMarker[];

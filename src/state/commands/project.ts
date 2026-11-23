@@ -1,4 +1,5 @@
 /** 프로젝트 전체(이름·템포·음원·마커·통째로 바꾸기)에 대한 문서 변경 함수 */
+import { MASTER_VOLUME_DEFAULT_DB, normalizeMasterVolumeDb } from "../../domain/master/volume";
 import type { AudioAsset, ProjectDoc } from "../../types";
 import { clamp, createId } from "../../utils/audioMath";
 import { createDefaultTrack, createEmptyDoc, normalizeTrack } from "../docDefaults";
@@ -13,6 +14,19 @@ export function setBpm(bpm: number, options?: EditOptions): boolean {
 
 export function setProjectName(name: string, options?: EditOptions): boolean {
   return history.edit("프로젝트 이름 변경", (doc) => { doc.name = name; }, options);
+}
+
+/**
+ * 마스터 볼륨(dB)을 바꾼다. 범위(−60 ~ +6)로 맞추고 소수 첫째 자리까지만 남긴다.
+ * 슬라이더를 끄는 동안 이어지는 변경은 같은 key로 한 단계로 묶인다.
+ */
+export function setMasterVolumeDb(volumeDb: number, options?: EditOptions): boolean {
+  const value = normalizeMasterVolumeDb(volumeDb);
+  return history.edit("마스터 볼륨 변경", (doc) => {
+    // master가 없는 옛 문서는 0 dB로 본다. 값이 그대로면 이력에 남기지 않는다.
+    if ((baseOf(doc).master?.volumeDb ?? MASTER_VOLUME_DEFAULT_DB) === value) return;
+    doc.master = { volumeDb: value };
+  }, { key: "master-volume", ...options });
 }
 
 export function addAudioAsset(asset: AudioAsset, options?: EditOptions): boolean {
@@ -51,6 +65,7 @@ export function replaceDoc(project: ProjectDoc, options?: EditOptions): boolean 
     doc.name = project.name || "가져온 세션";
     doc.bpm = clamp(project.bpm || 120, 20, 300);
     doc.sampleRate = project.sampleRate || 44100;
+    doc.master = { volumeDb: normalizeMasterVolumeDb(project.master?.volumeDb ?? MASTER_VOLUME_DEFAULT_DB) };
     doc.tracks = project.tracks?.length
       ? project.tracks.map((track, index) => normalizeTrack(track, index))
       : [createDefaultTrack(1)];

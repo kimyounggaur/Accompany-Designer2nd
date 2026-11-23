@@ -7,6 +7,7 @@ import { planSync, type SyncDoc } from "./syncPlan";
 import type { TickTimer } from "./tickTimer";
 import type { EffectTimers } from "../effects/EffectNode";
 import type { EffectEnv } from "../effects/registry";
+import { createMasterBus, type LimiterHandle, type MasterBus } from "./MasterBus";
 import { TrackStrip } from "./TrackStrip";
 import { TransportClock } from "./Transport";
 
@@ -24,12 +25,15 @@ export interface AudioEngineV2Options {
   effectTimers?: EffectTimers;
   /** 시험에서 리버브 잔향 만들기를 바꿔 끼울 때 */
   makeImpulse?: EffectEnv["makeImpulse"];
+  /** 시험에서 워크렛 리미터 대신 끼울 리미터 만들기 */
+  createLimiter?: (context: BaseAudioContext) => Promise<LimiterHandle>;
 }
 
 /**
  * 새 엔진(`?engine=v2`). 재생 시계(Transport)·예약기(Scheduler)·클립 재생 단위(ClipVoice)로 재생을 맡는다.
- * 아직 옮기지 않은 부분(마스터 출력, 트랙 소리 경로, 음원 보관, 녹음 연결, 내보내기)은 옛 엔진 것을 그대로 쓴다:
- * 트랙 경로는 P3-3, 마스터는 P3-4, 녹음은 P3-5, 내보내기는 P3-6에서 바뀐다.
+ * 아직 옮기지 않은 부분(음원 보관, 녹음 연결, 내보내기)은 옛 엔진 것을 그대로 쓴다:
+ * 트랙 경로(P3-3)와 마스터 길(P3-4: 마스터 볼륨 → 선읽기 리미터 → 미터)은 새로 만들었고,
+ * 녹음은 P3-5, 내보내기는 P3-6에서 바뀐다.
  */
 /**
  * 새 소리를 시작하거나 내릴 때 "지금"에서 얼마나 뒤로 잡을지(초)의 범위.
@@ -51,6 +55,9 @@ export class AudioEngineV2 extends BrowserAudioEngine {
   private readonly retire: (action: () => void) => void;
   private readonly effectTimers?: EffectTimers;
   private readonly makeImpulse?: EffectEnv["makeImpulse"];
+  private readonly createLimiter?: AudioEngineV2Options["createLimiter"];
+  /** 마스터 길: 마스터 볼륨 → 선읽기 리미터 → 마스터 미터. 소리 엔진을 켤 때 만든다. */
+  private masterBus?: MasterBus;
   /** 트랙마다 하나씩. 이펙트를 켜고 꺼도 새로 만들지 않는다(그래서 소리 소스가 그대로 흐른다). */
   readonly strips = new Map<string, TrackStrip>();
   /** 소리 경로가 마지막으로 맞춰진 문서. 다음 sync는 이것과 비교한다. */
@@ -64,12 +71,14 @@ export class AudioEngineV2 extends BrowserAudioEngine {
     this.retire = options.retire ?? ((action) => void setTimeout(action, RETIRE_MS));
     this.effectTimers = options.effectTimers;
     this.makeImpulse = options.makeImpulse;
+    this.createLimiter = options.createLimiter;
     this.transport = new TransportClock({
       now: () => this.context?.currentTime ?? 0,
       lead: options.lead ?? (() => scheduleLead(this.context?.baseLatency)),
       outputLatency: () => {
         const context = this.context as (AudioContext & { outputLatency?: number }) | undefined;
-        return context?.outputLatency || context?.baseLatency || 0;
+        // 스피커까지의 지연 + 선읽기 리미터가 소리를 늦추는 5 ms
+        return (context?.outputLatency || context?.baseLatency || 0) + this.getMasterLatency();
       },
       ensureRunning: async () => {
         await this.ensureContext();
@@ -89,6 +98,29 @@ export class AudioEngineV2 extends BrowserAudioEngine {
     this.transport.on("state", () => {
       if (this.transport.state !== "playing") this.retireAllStrips();
     });
+  }
+
+  /** 마스터 길을 MasterBus로 만든다(옛 압축기 대신 선읽기 리미터). 워크렛을 못 올리면 MasterBus가 옛 방식으로 대신한다. */
+  protected override async buildOutput(context: AudioContext): Promise<void> {
+    const bus = await createMasterBus(context, { createLimiter: this.createLimiter });
+    this.masterBus = bus;
+    this.master = bus.input;
+    this.analyser = bus.analyser;
+  }
+
+  protected override setMasterVolumeDb(db: number, time: number, smoothly: boolean): void {
+    const bus = this.masterBus;
+    if (!bus) return;
+    if (smoothly) bus.setVolumeDb(db, time);
+    else bus.setVolumeDbNow(db);
+  }
+
+  override getLimiterReduction(): number {
+    return this.masterBus?.reductionDb() ?? 0;
+  }
+
+  override getMasterLatency(): number {
+    return this.masterBus?.latencySeconds ?? 0;
   }
 
   /** 녹음 중처럼 곡 끝에 닿아도 멈추면 안 될 때 true를 돌려주는 함수를 알려 준다. */
@@ -192,6 +224,8 @@ export class AudioEngineV2 extends BrowserAudioEngine {
 
     // 값이 바뀌는 시각은 "지금"이 아니라 안전한 시각: 지금에 걸면 소리 스레드에는 이미 지난 일이 된다.
     const time = this.transport.safeTime();
+    // 마스터 볼륨: 재생 중이면 부드럽게, 재생을 시작하는 중이면 곧바로(시작할 때 볼륨이 흔들리지 않게)
+    this.applyMaster(project, time, this.transportPlaying());
     const touched = new Set<string>();
     for (const step of plan.steps) {
       const { track } = step;

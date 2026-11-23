@@ -7,6 +7,9 @@ import { createTrackGraph, disposeGraph, graphSignature, updateTrackGraph, type 
 import { getProjectDuration } from "../utils/audioMath";
 import { encodeWav } from "../utils/wavEncoder";
 import { projectTailSeconds } from "./effects/tail";
+import { smooth } from "./effects/EffectNode";
+import { clampMasterVolumeDb, dbToGain, MASTER_VOLUME_DEFAULT_DB } from "./engine/MasterBus";
+import { MONITOR_VOLUME_DEFAULT, MonitorBus, clampMonitorVolume } from "./engine/MonitorBus";
 import {
   createId,
   getClipPlaybackRate,
@@ -18,14 +21,26 @@ interface DecodedAudio {
   buffer: AudioBuffer;
 }
 
+/** 옛 마스터 사슬이 처음부터 곱하던 이득. 마스터 볼륨 0 dB에서도 이 값이 남는다(새 엔진은 1.0). */
+export const LEGACY_MASTER_GAIN = 0.92;
+
 /**
  * 옛 엔진(재생 구조 교체 전). 새 엔진(`engine/AudioEngine.ts`, `?engine=v2`)이 이 클래스를 이어받아 소리 경로·마스터·음원 보관 같은
  * 아직 옮기지 않은 부분을 그대로 쓴다. 3단계가 끝나 옛 엔진을 지울 때 함께 정리된다.
  */
 export class BrowserAudioEngine {
   protected context?: AudioContext;
+  /** 트랙 소리가 모이는 곳(마스터 볼륨). 새 엔진에서는 MasterBus의 입력이다. */
   protected master?: GainNode;
+  /** 마스터 미터와 측정 프로브가 읽는 분석기(스피커 바로 앞) */
   protected analyser?: AnalyserNode;
+  /** 메트로놈·입력 모니터가 나가는 길(마스터를 거치지 않는다) */
+  protected monitor?: MonitorBus;
+  private monitorVolume = MONITOR_VOLUME_DEFAULT;
+  /** 마스터 출력을 다 만들 때까지 기다리게 하는 약속(새 엔진은 워크렛을 올리느라 비동기다) */
+  private outputReady?: Promise<void>;
+  /** 마스터 볼륨을 마지막으로 맞춘 문서의 `master` 값(참조). 처음에는 어느 값과도 다르다. */
+  private appliedMaster: unknown = Symbol("unapplied");
   protected buffers = new Map<string, AudioBuffer>();
   private sources = new Map<string, ScheduledClip>();
   protected trackGraphs = new Map<string, TrackGraph>();
@@ -42,34 +57,46 @@ export class BrowserAudioEngine {
         window.AudioContext ??
         (window as unknown as { webkitAudioContext: typeof AudioContext })
           .webkitAudioContext;
-      this.context = new AudioContextCtor();
-      this.master = this.context.createGain();
-      this.master.gain.value = 0.92;
-      this.analyser = this.context.createAnalyser();
-      this.analyser.fftSize = 2048;
-      this.analyser.smoothingTimeConstant = 0.8;
-      const limiter = this.context.createDynamicsCompressor();
-      limiter.threshold.value = -1;
-      limiter.knee.value = 0;
-      limiter.ratio.value = 20;
-      limiter.attack.value = 0.003;
-      limiter.release.value = 0.1;
-      this.master.connect(limiter);
-      const ceiling = createSafetyCeiling(this.context);
-      limiter.connect(ceiling);
-      ceiling.connect(this.analyser);
-      this.analyser.connect(this.context.destination);
-      // 주소에 ?probe=1이 있을 때만: 스피커로 나가는 신호를 직접 재는 개발용 프로브(audio/probe.ts)
-      if (isProbeEnabled()) {
-        attachProbe(this.context, this.analyser).catch((error: unknown) => console.warn("출력 측정 프로브를 붙이지 못했습니다.", error));
-      }
+      const context = new AudioContextCtor();
+      this.context = context;
+      this.outputReady = this.buildOutput(context).then(() => {
+        this.monitor = new MonitorBus(context, this.monitorVolume);
+        // 주소에 ?probe=1이 있을 때만: 스피커로 나가는 신호를 직접 재는 개발용 프로브(audio/probe.ts)
+        if (isProbeEnabled() && this.analyser) {
+          attachProbe(context, this.analyser).catch((error: unknown) => console.warn("출력 측정 프로브를 붙이지 못했습니다.", error));
+        }
+      });
     }
+    await this.outputReady;
 
     if (this.context.state === "suspended") {
       await this.context.resume();
     }
 
     return this.context;
+  }
+
+  /**
+   * 마스터 출력(트랙 소리 → 스피커로 가는 길)을 만들어 `master`·`analyser`에 둔다.
+   * 옛 방식: 0.92 이득 → 압축기(−1 dB, 20:1) → 0.98 상한 → 분석기 → 스피커. 새 엔진은 이것을 MasterBus로 바꾼다.
+   */
+  protected async buildOutput(context: AudioContext): Promise<void> {
+    this.master = context.createGain();
+    this.master.gain.value = LEGACY_MASTER_GAIN;
+    this.analyser = context.createAnalyser();
+    this.analyser.fftSize = 2048;
+    this.analyser.smoothingTimeConstant = 0.8;
+    const limiter = context.createDynamicsCompressor();
+    limiter.threshold.value = -1;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.1;
+    this.master.connect(limiter);
+    const ceiling = createSafetyCeiling(context);
+    limiter.connect(ceiling);
+    ceiling.connect(this.analyser);
+    this.analyser.connect(context.destination);
   }
 
   async decodeFile(file: File): Promise<DecodedAudio> {
@@ -143,6 +170,54 @@ export class BrowserAudioEngine {
     return this.analyser;
   }
 
+  /** 메트로놈·입력 모니터를 이을 곳. 마스터 길을 거치지 않고 스피커로만 나간다(믹스·미터·내보내기에 섞이지 않는다). 소리 엔진이 아직 없으면 undefined. */
+  getMonitorInput(): AudioNode | undefined {
+    return this.monitor?.input;
+  }
+
+  /** 모니터 볼륨(0~1). 소리 엔진이 아직 없어도 기억해 두었다가 만들 때 쓴다. */
+  setMonitorVolume(volume: number): void {
+    this.monitorVolume = clampMonitorVolume(volume);
+    if (this.monitor && this.context) this.monitor.setVolume(this.monitorVolume, this.context.currentTime);
+  }
+
+  getMonitorVolume(): number {
+    return this.monitorVolume;
+  }
+
+  /** 리미터가 지금 내리고 있는 이득(dB, 0 이하). 옛 마스터 사슬은 알 수 없어 늘 0이다. */
+  getLimiterReduction(): number {
+    return 0;
+  }
+
+  /** 마스터 길이 소리를 늦추는 시간(초). 새 엔진의 선읽기 리미터가 5 ms다. */
+  getMasterLatency(): number {
+    return 0;
+  }
+
+  /**
+   * 문서의 마스터 볼륨을 소리 길에 맞춘다. 문서의 `master`가 지난번과 같은 참조면 아무것도 하지 않는다.
+   * `smoothly`: 재생 중에는 `time`부터 부드럽게, 재생을 시작하기 전에는 곧바로(시작할 때 볼륨이 흔들리지 않게) 바꾼다.
+   */
+  protected applyMaster(project: SyncDoc, time: number, smoothly: boolean): void {
+    if (!this.master || project.master === this.appliedMaster) return;
+    this.appliedMaster = project.master;
+    this.setMasterVolumeDb(clampMasterVolumeDb(project.master?.volumeDb ?? MASTER_VOLUME_DEFAULT_DB), time, smoothly);
+  }
+
+  /** 마스터 볼륨(dB)을 소리 길에 쓴다. 옛 방식은 처음부터 곱하던 0.92에 더 곱한다. */
+  protected setMasterVolumeDb(db: number, time: number, smoothly: boolean): void {
+    const gain = this.master?.gain;
+    if (!gain) return;
+    const value = LEGACY_MASTER_GAIN * dbToGain(db);
+    if (smoothly) {
+      smooth(gain, value, time);
+    } else {
+      gain.cancelScheduledValues(0);
+      gain.value = value;
+    }
+  }
+
   getTrackAnalyser(trackId: string): AnalyserNode | undefined {
     return this.trackAnalysers.get(trackId);
   }
@@ -157,6 +232,7 @@ export class BrowserAudioEngine {
     this.stop();
     this.startedAt = context.currentTime;
     this.playheadAtStart = playhead;
+    this.applyMaster(project, context.currentTime, false);
     this.playing = true;
     this.sync(project);
   }
@@ -169,6 +245,7 @@ export class BrowserAudioEngine {
     if (!this.playing || !this.context || !this.master) return;
     if (project === this.syncedDoc) return;
     const context = this.context;
+    this.applyMaster(project, context.currentTime, true);
     const plan = planSync(project, this.syncedDoc);
 
     for (const id of plan.removedTrackIds) {
@@ -269,7 +346,7 @@ export class BrowserAudioEngine {
     if (duration > 3600) throw new Error("1시간 이하의 프로젝트만 WAV로 내보낼 수 있습니다.");
     const context = new OfflineAudioContext(2, Math.max(1, Math.ceil(duration * sampleRate)), sampleRate);
     const master = context.createGain();
-    master.gain.value = 0.92;
+    master.gain.value = LEGACY_MASTER_GAIN * dbToGain(clampMasterVolumeDb(project.master?.volumeDb ?? MASTER_VOLUME_DEFAULT_DB));
     const limiter = context.createDynamicsCompressor();
     limiter.threshold.value = -1; limiter.knee.value = 0; limiter.ratio.value = 20;
     limiter.attack.value = 0.003; limiter.release.value = 0.1;

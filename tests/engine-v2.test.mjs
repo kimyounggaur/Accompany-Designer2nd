@@ -18,14 +18,33 @@ beforeEach(() => {
   Source.starts = [];
 });
 
+/** 시험용 리미터: 진짜 워크렛 대신 게인 노드 하나(워크렛은 Node에서 올릴 수 없다). 동작량은 `report(db)`로 알린다. */
+function fakeLimiter(ctx) {
+  const node = ctx.createGain();
+  let listener;
+  return {
+    input: node, output: node, node, latencySeconds: 0.005,
+    onReduction: (next) => { listener = next; },
+    dispose: () => node.disconnect(),
+    report: (db) => listener?.(db),
+  };
+}
+
 /** 새 엔진 + 손으로 돌리는 타이머 + 끊기를 모아 두는 retire. 오디오 시계는 0초에서 시작한다. */
 async function makeEngine(options = {}) {
   const timer = createManualTimer();
   const retired = [];
-  const engine = new AudioEngineV2({ createTimer: () => timer, retire: (action) => retired.push(action), lead: () => 0, ...options });
+  let limiter;
+  const engine = new AudioEngineV2({
+    createTimer: () => timer,
+    retire: (action) => retired.push(action),
+    lead: () => 0,
+    createLimiter: async (context) => (limiter = fakeLimiter(context)),
+    ...options,
+  });
   const ctx = await engine.ensureContext();
   engine.registerBuffer("asset", ctx.createBuffer(1, 44100 * 10, 44100));
-  const rig = { engine, ctx, timer, retired, ended: [] };
+  const rig = { engine, ctx, timer, retired, ended: [], limiter };
   engine.transport.on("ended", () => rig.ended.push(ctx.currentTime));
   /** 오디오 시계를 흘리고 예약기를 한 번 깨운다 */
   rig.advance = (seconds) => { ctx.currentTime += seconds; timer.fire(); };
@@ -497,4 +516,167 @@ test("lead를 두고 재생 중 클립 하나를 옮기면: 새 소리는 안전
   assert.equal(Source.starts.length, 2);
   near(Source.starts[1].started[0], 1.03);
   near(Source.starts[1].started[1], 0.5);
+});
+
+// ───────────────────────── P3-4 마스터 길 ─────────────────────────
+
+const withMaster = (doc, volumeDb) => produce(doc, (draft) => { draft.master = { volumeDb }; });
+
+test("마스터 길: 트랙이 모이는 마스터 볼륨 → 리미터 → 마스터 미터(분석기) → 스피커", async () => {
+  const rig = await makeEngine();
+  const { engine, ctx, limiter } = rig;
+  assert.equal(engine.master.kind, "gain");
+  assert.deepEqual(engine.master.connections, [limiter.input]);
+  assert.deepEqual(limiter.output.connections, [engine.getMasterAnalyser()]);
+  assert.deepEqual(engine.getMasterAnalyser().connections, [ctx.destination]);
+  assert.equal(ctx.all("compressor").length, 0, "옛 압축기는 없다");
+  assert.equal(ctx.all("waveshaper").length, 0, "0.98 상한도 없다");
+  near(engine.master.gain.value, 1, "마스터 볼륨 0 dB = 이득 1(옛 0.92가 아니다)");
+});
+
+test("트랙은 마스터 볼륨 게인으로 이어진다", async () => {
+  const rig = await makeEngine();
+  const doc = makeDoc([0, 1]);
+  await rig.engine.play(doc, 0);
+  const strip = rig.engine.strips.get(doc.tracks[0].id);
+  assert.ok(strip.analyser.connections.includes(rig.engine.master));
+});
+
+test("재생을 시작하기 전에 정한 마스터 볼륨은 곧바로 적용된다(시작할 때 볼륨이 흔들리지 않는다)", async () => {
+  const rig = await makeEngine();
+  await rig.engine.play(withMaster(makeDoc([0, 1]), -6), 0);
+  const gain = rig.engine.master.gain;
+  near(gain.value, 10 ** (-6 / 20), "−6 dB");
+  assert.equal(gain.events.filter((event) => event.type === "target").length, 0, "부드럽게 가는 예약 없이 값이 들어갔다");
+});
+
+test("문서에 master가 없으면(옛 프로젝트) 0 dB다", async () => {
+  const rig = await makeEngine();
+  await rig.engine.play(makeDoc([0, 1]), 0);
+  near(rig.engine.master.gain.value, 1);
+});
+
+test("재생 중에 마스터 볼륨을 바꾸면 안전한 시각부터 10 ms 시상수로 부드럽게 가고, 소리 소스는 건드리지 않는다", async () => {
+  const rig = await makeEngine({ lead: () => 0.03 });
+  const base = makeDoc([0, 1]);
+  await rig.engine.play(base, 0);
+  const sources = Source.starts.length;
+  rig.advance(1);
+  const next = withMaster(base, -12);
+  rig.engine.sync(next, base);
+  const events = rig.engine.master.gain.events.filter((event) => event.type === "target");
+  assert.equal(events.length, 1);
+  near(events[0].time, 1.03, "지금(1) + lead(0.03)");
+  assert.equal(events[0].constant, 0.01);
+  near(events[0].value, 10 ** (-12 / 20));
+  assert.equal(Source.starts.length, sources, "소스 시작 +0");
+  assert.equal(rig.retired.length, 0);
+});
+
+test("마스터 값이 그대로면(다른 편집) 마스터 볼륨에는 아무것도 쓰지 않는다", async () => {
+  const rig = await makeEngine();
+  const base = withMaster(makeDoc([0, 1]), -3);
+  await rig.engine.play(base, 0);
+  const gain = rig.engine.master.gain;
+  const before = gain.events.length + gain.assigned.length;
+  const next = produce(base, (draft) => { draft.tracks[0].volume = 0.4; });
+  assert.equal(next.master, base.master, "immer가 master 참조를 그대로 둔다");
+  rig.engine.sync(next, base);
+  assert.equal(gain.events.length + gain.assigned.length, before);
+});
+
+test("마스터 볼륨은 범위(−60 ~ +6 dB) 안으로 맞춘다", async () => {
+  const rig = await makeEngine();
+  const base = makeDoc([0, 1]);
+  await rig.engine.play(withMaster(base, 40), 0);
+  near(rig.engine.master.gain.value, 10 ** (6 / 20), "+6 dB까지");
+  const low = withMaster(base, -300);
+  rig.engine.sync(low, base);
+  near(rig.engine.master.gain.events.at(-1).value, 10 ** (-60 / 20), "−60 dB까지");
+});
+
+test("정지한 사이 바꾼 마스터 볼륨은 다음 재생을 시작할 때 곧바로 적용된다", async () => {
+  const rig = await makeEngine();
+  const base = makeDoc([0, 1]);
+  await rig.engine.play(base, 0);
+  rig.engine.stop();
+  const quiet = withMaster(base, -20);
+  rig.engine.sync(quiet, base); // 정지 중: 문서만 기억한다
+  near(rig.engine.master.gain.value, 1, "아직 그대로");
+  await rig.engine.play(quiet, 0);
+  near(rig.engine.master.gain.value, 10 ** (-20 / 20));
+});
+
+test("리미터 동작량은 MasterBus가 알려 온 값이다", async () => {
+  const rig = await makeEngine();
+  assert.equal(rig.engine.getLimiterReduction(), 0);
+  rig.limiter.report(-5.5);
+  assert.equal(rig.engine.getLimiterReduction(), -5.5);
+});
+
+test("리미터 지연 5 ms는 재생 시계의 출력 지연에 더해진다(화면 위치가 들리는 소리와 맞는다)", async () => {
+  const rig = await makeEngine();
+  assert.equal(rig.engine.getMasterLatency(), 0.005);
+  const doc = makeDoc([0, 1]);
+  await rig.engine.play(doc, 0);
+  rig.ctx.baseLatency = 0.01;
+  rig.advance(2);
+  near(rig.engine.transport.position() - rig.engine.transport.visualPosition(), 0.015, "baseLatency 0.01 + 리미터 0.005");
+  rig.ctx.outputLatency = 0.03;
+  near(rig.engine.transport.position() - rig.engine.transport.visualPosition(), 0.035, "outputLatency 0.03 + 리미터 0.005");
+});
+
+test("워크렛 리미터를 올리지 못해도 소리는 난다(옛 압축기로 대신하고 지연은 0)", async () => {
+  const warnings = [];
+  const original = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  let rig;
+  try {
+    rig = await makeEngine({ createLimiter: async () => { throw new Error("audioWorklet 없음"); } });
+  } finally {
+    console.warn = original;
+  }
+  assert.equal(warnings.length, 1);
+  assert.equal(rig.ctx.all("compressor").length, 1);
+  assert.equal(rig.engine.getMasterLatency(), 0);
+  const doc = makeDoc([0, 1]);
+  await rig.engine.play(doc, 0);
+  assert.equal(aliveCount(), 2, "그래도 재생된다");
+});
+
+test("모니터 길: 메트로놈·입력 모니터를 이을 곳은 스피커로만 이어지고 마스터와는 따로다", async () => {
+  const rig = await makeEngine();
+  const input = rig.engine.getMonitorInput();
+  assert.ok(input);
+  assert.deepEqual(input.connections, [rig.ctx.destination]);
+  near(input.gain.value, 0.85);
+  assert.notEqual(input, rig.engine.master);
+  assert.equal(rig.engine.master.connections.includes(input), false);
+});
+
+test("모니터 볼륨은 소리 엔진이 켜지기 전에 정해도 기억했다가 쓴다", async () => {
+  const engine = new AudioEngineV2({ createTimer: () => createManualTimer(), createLimiter: async (context) => fakeLimiter(context) });
+  engine.setMonitorVolume(0.3);
+  assert.equal(engine.getMonitorVolume(), 0.3);
+  assert.equal(engine.getMonitorInput(), undefined, "아직 소리 엔진이 없다");
+  await engine.ensureContext();
+  near(engine.getMonitorInput().gain.value, 0.3);
+  engine.setMonitorVolume(0.6);
+  assert.equal(engine.getMonitorInput().gain.events.at(-1).value, 0.6);
+  engine.setMonitorVolume(9);
+  assert.equal(engine.getMonitorVolume(), 1);
+});
+
+test("옛 엔진은 마스터 길이 그대로다(0.92 → 압축기 → 상한): 마스터 볼륨은 0.92에 곱한다", async () => {
+  const legacy = new BrowserAudioEngine();
+  const ctx = await legacy.ensureContext();
+  assert.equal(ctx.all("compressor").length, 1);
+  assert.equal(ctx.all("waveshaper").length, 1);
+  near(legacy.master.gain.value, 0.92);
+  assert.equal(legacy.getLimiterReduction(), 0);
+  assert.equal(legacy.getMasterLatency(), 0);
+  legacy.registerBuffer("asset", ctx.createBuffer(1, 44100 * 10, 44100));
+  await legacy.play(withMaster(makeDoc([0, 1]), -6), 0);
+  near(legacy.master.gain.value, 0.92 * 10 ** (-6 / 20));
+  legacy.stop();
 });

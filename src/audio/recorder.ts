@@ -7,6 +7,11 @@ interface RecorderCallbacks {
 interface RecorderOptions {
   inputDeviceId?: string;
   monitoringEnabled?: boolean;
+  /**
+   * 입력 모니터 소리를 보낼 곳(모니터 길의 입력). 없으면 스피커(context.destination)로 바로 보낸다.
+   * 모니터 길은 자체 볼륨(기본 0.85)을 가지므로, 여기서는 그 볼륨만 적용되도록 이득을 1로 둔다.
+   */
+  monitorOutput?: AudioNode;
 }
 
 interface RecorderResult {
@@ -104,9 +109,9 @@ class VocalRecorder {
 
     if (options.monitoringEnabled) {
       this.monitorGain = context.createGain();
-      this.monitorGain.gain.value = 0.85;
+      this.monitorGain.gain.value = options.monitorOutput ? 1 : 0.85;
       this.source.connect(this.monitorGain);
-      this.monitorGain.connect(context.destination);
+      this.monitorGain.connect(options.monitorOutput ?? context.destination);
     }
   }
 

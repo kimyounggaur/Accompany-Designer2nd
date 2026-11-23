@@ -8,6 +8,7 @@ import { ReverbPluginPanel } from "./ReverbPluginPanel";
 import { LevelMeterRack } from "./LevelMeter";
 import { EffectRack } from "./EffectRack";
 import { ClipPanel } from "../ui/inspector/ClipPanel";
+import { MasterPanel } from "../ui/inspector/MasterPanel";
 import { PanelSection } from "../ui/inspector/PanelSection";
 import type {
   CompressorSettings,
@@ -433,6 +434,8 @@ export function Inspector() {
           </div>
         </div>
       </PanelSection>
+
+      <MasterPanel />
 
       <PanelSection id="meter" title="레벨 미터" className="meter-panel">
         <LevelMeterRack />
