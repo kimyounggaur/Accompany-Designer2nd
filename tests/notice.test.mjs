@@ -6,6 +6,7 @@ import { confirmAction } from "../src/services/confirm.ts";
 import { useDialogStore } from "../src/state/dialogStore.ts";
 import { fail, ok } from "../src/state/commandResult.ts";
 import { useDawStore } from "../src/store/useDawStore.ts";
+import { history } from "../src/state/history.ts";
 import * as actions from "../src/app/actions.ts";
 
 const notices = () => useNoticeStore.getState().notices;
@@ -14,7 +15,7 @@ const status = () => useNoticeStore.getState().statusMessage;
 beforeEach(() => {
   useNoticeStore.getState().reset();
   useDawStore.getState().resetProject();
-  useDawStore.setState({ past: [], future: [] });
+  history.clear();
 });
 
 test("정보 안내는 상태 줄에만 나오고 토스트는 만들지 않는다", () => {
@@ -147,14 +148,14 @@ test("되돌릴 것이 없으면 정보 안내만 하고 기록은 만들지 않
 });
 
 test("선택이 없을 때 지우기·퀀타이즈·그룹은 거절 안내를 하고 기록을 만들지 않는다", () => {
-  const before = useDawStore.getState().past.length;
+  const before = history.depth().undo;
   actions.deleteSelectedClips();
   assert.equal(status(), "선택된 클립이 없습니다.");
   actions.quantizeSelectedClips();
   assert.equal(status(), "퀀타이즈할 클립이 없습니다.");
   actions.groupSelectedClips();
   assert.equal(status(), "그룹화할 클립을 두 개 이상 선택하세요.");
-  assert.equal(useDawStore.getState().past.length, before);
+  assert.equal(history.depth().undo, before);
 });
 
 test("스토어 함수는 문구 대신 결과를 돌려준다", () => {

@@ -13,6 +13,7 @@
     "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
+    "immer": "11.2.10",
     "lucide-react": "1.11.0",
     "react": "19.2.5",
     "react-dom": "19.2.5",

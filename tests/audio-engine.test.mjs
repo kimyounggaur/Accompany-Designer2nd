@@ -3,45 +3,9 @@ import assert from 'node:assert/strict';
 import { encodeWav } from '../src/utils/wavEncoder.ts';
 import { DEFAULT_DELAY_SETTINGS } from '../src/utils/delay.ts';
 import { DEFAULT_REVERB_SETTINGS } from '../src/utils/reverb.ts';
+import { produce } from 'immer';
+import { FakeContext, Source } from './helpers/fake-audio.mjs';
 
-class Param {
-  value = 0;
-  setTargetAtTime(value) { this.value = value; }
-  setValueAtTime(value) { this.value = value; }
-  cancelScheduledValues() {}
-  linearRampToValueAtTime(value) { this.value = value; }
-  setValueCurveAtTime(values) { this.value = values.at(-1); }
-}
-class Node {
-  constructor() {
-    for (const name of ['gain', 'frequency', 'Q', 'threshold', 'ratio', 'attack', 'release', 'pan', 'delayTime', 'knee']) this[name] = new Param();
-  }
-  connect() {} disconnect() {}
-}
-class Source extends Node {
-  playbackRate = new Param();
-  start(...args) { this.started = args; Source.starts.push(this); }
-  stop() { this.stopped = true; }
-  static starts = [];
-}
-class FakeContext {
-  state = 'running'; currentTime = 0; sampleRate = 44100; destination = new Node();
-  createGain() { return new Node(); }
-  createAnalyser() { return new Node(); }
-  createDynamicsCompressor() { return new Node(); }
-  createWaveShaper() { return new Node(); }
-  createBiquadFilter() { return new Node(); }
-  createStereoPanner() { return new Node(); }
-  createDelay() { return new Node(); }
-  createConvolver() { return new Node(); }
-  createChannelSplitter() { return new Node(); }
-  createChannelMerger() { return new Node(); }
-  createBufferSource() { return new Source(); }
-  createBuffer(channels, length, sampleRate) {
-    const data = Array.from({length: channels}, () => new Float32Array(length));
-    return { duration: length / sampleRate, length, numberOfChannels: channels, sampleRate, getChannelData: (n) => data[n] };
-  }
-}
 globalThis.window = { AudioContext: FakeContext };
 const { audioEngine } = await import('../src/audio/audioEngine.ts');
 
@@ -68,20 +32,20 @@ test('WAV encoder writes stereo PCM header and clips samples correctly', async (
 
 test('playback keeps sources running on mixer and name edits; clip edits reschedule only that clip', async () => {
   Source.starts = [];
-  const project = projectWithClip();
+  const base = projectWithClip();
   const buffer = new FakeContext().createBuffer(1, 44100 * 10, 44100);
   audioEngine.registerBuffer('asset', buffer);
-  project.tracks[0].clips.push({...project.tracks[0].clips[0], id: 'clip-2', startTime: 5});
+  // 문서는 바꾸지 않고 새로 만든다(immer). 엔진은 참조가 같은 트랙·클립을 건너뛴다.
+  const project = produce(base, (draft) => { draft.tracks[0].clips.push({ ...base.tracks[0].clips[0], id: 'clip-2', startTime: 5 }); });
   await audioEngine.play(project, 0);
   assert.equal(Source.starts.length, 2);
   assert.deepEqual(Source.starts[0].started, [1, 0, 3]);
-  project.tracks[0].name = 'renamed';
-  project.tracks[0].volume = .5;
-  audioEngine.sync(project);
+  const renamed = produce(project, (draft) => { draft.tracks[0].name = 'renamed'; draft.tracks[0].volume = .5; });
+  audioEngine.sync(renamed, project);
   assert.equal(Source.starts.length, 2);
   assert.equal(Source.starts[0].stopped, undefined);
-  project.tracks[0].clips[0].startTime = 2;
-  audioEngine.sync(project);
+  const moved = produce(renamed, (draft) => { draft.tracks[0].clips[0].startTime = 2; });
+  audioEngine.sync(moved, renamed);
   assert.equal(Source.starts.length, 3);
   assert.equal(Source.starts[0].stopped, true);
   assert.equal(Source.starts[1].stopped, undefined);
@@ -91,13 +55,16 @@ test('playback keeps sources running on mixer and name edits; clip edits resched
 
 test('delay and reverb parameter changes keep the running source', async () => {
   Source.starts = [];
-  const project = projectWithClip(), track = project.tracks[0];
-  track.delay.enabled = true; track.reverb.enabled = true;
-  track.effectChain = [{id:'delay', type:'delay', enabled:true}, {id:'reverb', type:'reverb', enabled:true}];
+  const base = projectWithClip();
+  const project = produce(base, (draft) => {
+    const track = draft.tracks[0];
+    track.delay.enabled = true; track.reverb.enabled = true;
+    track.effectChain = [{ id: 'delay', type: 'delay', enabled: true }, { id: 'reverb', type: 'reverb', enabled: true }];
+  });
   await audioEngine.play(project, 0);
   assert.equal(Source.starts.length, 1);
-  track.delay.wet = .7; track.reverb.wet = .6;
-  audioEngine.sync(project);
+  const wetter = produce(project, (draft) => { draft.tracks[0].delay.wet = .7; draft.tracks[0].reverb.wet = .6; });
+  audioEngine.sync(wetter, project);
   assert.equal(Source.starts.length, 1);
   assert.equal(Source.starts[0].stopped, undefined);
   audioEngine.stop();

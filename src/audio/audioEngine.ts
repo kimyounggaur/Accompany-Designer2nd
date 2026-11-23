@@ -2,6 +2,7 @@ import type { AudioAsset, Clip, DawProject, FadeCurve, Track } from "../types";
 import { createDelayInsert } from "./delay";
 import { createReverbInsert } from "./reverb";
 import { attachProbe, isProbeEnabled } from "./probe";
+import { planSync, type SyncDoc } from "./engine/syncPlan";
 import { encodeWav } from "../utils/wavEncoder";
 import { getDelayTimeMs, normalizeDelaySettings } from "../utils/delay";
 import {
@@ -26,6 +27,8 @@ class BrowserAudioEngine {
   private startedAt = 0;
   private playheadAtStart = 0;
   private playing = false;
+  /** 소리 경로가 마지막으로 맞춰진 문서. 다음 sync는 이것과 비교한다(재생 시작 직후 문서가 바뀐 경우도 안전하다). */
+  private syncedDoc?: SyncDoc;
 
   async ensureContext() {
     if (!this.context) {
@@ -147,58 +150,82 @@ class BrowserAudioEngine {
     this.sync(project);
   }
 
-  /** Reconcile only the changed clips and parameters; leave unrelated sources and effect tails running. */
-  sync(project: DawProject) {
+  /**
+   * 문서에 맞춰 소리 경로를 고친다. 비교는 참조(===)로만 한다: 바뀌지 않은 트랙과 클립은 건드리지 않고,
+   * 재생 중인 소스와 이펙트 꼬리는 그대로 둔다. 두 번째 인자는 알려 주는 용도일 뿐, 기준은 엔진이 마지막으로 맞춘 문서다.
+   */
+  sync(project: SyncDoc, _previous?: SyncDoc) {
     if (!this.playing || !this.context || !this.master) return;
+    if (project === this.syncedDoc) return;
     const context = this.context;
-    const solo = project.tracks.some((track) => track.solo);
-    const trackIds = new Set(project.tracks.map((track) => track.id));
-    for (const [id, graph] of this.trackGraphs) {
-      if (!trackIds.has(id)) {
-        disposeGraph(graph);
-        this.trackGraphs.delete(id);
-        this.trackAnalysers.delete(id);
+    const plan = planSync(project, this.syncedDoc);
+
+    for (const id of plan.removedTrackIds) {
+      for (const [clipId, scheduled] of this.sources) {
+        if (scheduled.trackId === id) {
+          stopSource(scheduled.source);
+          this.sources.delete(clipId);
+        }
       }
+      const graph = this.trackGraphs.get(id);
+      if (graph) disposeGraph(graph);
+      this.trackGraphs.delete(id);
+      this.trackAnalysers.delete(id);
     }
+
+    const touchedTracks = new Set<string>();
     const activeClips = new Set<string>();
-    for (const track of project.tracks) {
-      const signature = graphSignature(track, project.bpm);
+    for (const step of plan.steps) {
+      const { track } = step;
       let graph = this.trackGraphs.get(track.id);
-      if (!graph || graph.signature !== signature) {
+      let rebuilt = false;
+      // 이펙트 켜기/끄기·순서 같은 연결 모양이 바뀌었을 때만 이 트랙의 그래프를 새로 만든다.
+      if (!graph || (step.trackChanged && graph.signature !== graphSignature(track, project.bpm))) {
         if (graph) disposeGraph(graph);
         graph = createTrackGraph(context, this.master, track, project.bpm);
         this.trackGraphs.set(track.id, graph);
         this.trackAnalysers.set(track.id, graph.analyser);
-        // Only sources on this particular track need reconnecting.
-        for (const [id, scheduled] of this.sources) {
+        // 이 트랙의 소스만 다시 연결하면 된다.
+        for (const [clipId, scheduled] of this.sources) {
           if (scheduled.trackId === track.id) {
             stopSource(scheduled.source);
-            this.sources.delete(id);
+            this.sources.delete(clipId);
           }
         }
+        rebuilt = true;
       }
-      updateTrackGraph(graph, track, solo, context.currentTime, project.bpm);
+      if (step.updateParams || rebuilt) updateTrackGraph(graph, track, plan.solo, context.currentTime, project.bpm);
+      if (!step.reconcileClips && !rebuilt) continue;
+
+      touchedTracks.add(track.id);
       for (const clip of track.clips) {
         if (clip.isRecording || clip.muted) continue;
         const buffer = this.buffers.get(clip.audioBufferId);
         if (!buffer) continue;
-        const clipSignature = JSON.stringify([track.id, clip.audioBufferId, clip.startTime, clip.offset, clip.duration,
-          getClipPlaybackRate(project.bpm, clip), clip.gain, clip.fadeIn, clip.fadeOut, clip.fadeCurve]);
         activeClips.add(clip.id);
         const previous = this.sources.get(clip.id);
-        if (previous?.signature === clipSignature) continue;
+        // 같은 클립 객체이고 템포·그래프가 그대로면 예약을 건드리지 않는다.
+        if (previous && previous.clip === clip && previous.trackId === track.id && !plan.tempoChanged) continue;
+        const signature = clipSignature(track.id, clip, project.bpm);
+        if (previous?.signature === signature) {
+          previous.clip = clip;
+          continue;
+        }
         if (previous) stopSource(previous.source);
         const source = scheduleClip(context, graph.input, buffer, clip, project.bpm, this.getCurrentPlayhead());
-        if (source) this.sources.set(clip.id, { source, signature: clipSignature, trackId: track.id });
+        if (source) this.sources.set(clip.id, { source, signature, trackId: track.id, clip });
         else this.sources.delete(clip.id);
       }
     }
-    for (const [id, scheduled] of this.sources) {
-      if (!activeClips.has(id)) {
+
+    // 다시 맞춘 트랙에서 더 이상 소리 나면 안 되는 클립(지움·음소거·녹음 중)은 멈춘다.
+    for (const [clipId, scheduled] of this.sources) {
+      if (touchedTracks.has(scheduled.trackId) && !activeClips.has(clipId)) {
         stopSource(scheduled.source);
-        this.sources.delete(id);
+        this.sources.delete(clipId);
       }
     }
+    this.syncedDoc = project;
   }
 
   stop() {
@@ -207,6 +234,7 @@ class BrowserAudioEngine {
     for (const graph of this.trackGraphs.values()) disposeGraph(graph);
     this.trackGraphs.clear();
     this.trackAnalysers.clear();
+    this.syncedDoc = undefined;
     this.playing = false;
   }
 
@@ -272,7 +300,7 @@ function createSafetyCeiling(context: BaseAudioContext): WaveShaperNode {
   return ceiling;
 }
 
-interface ScheduledClip { source: AudioBufferSourceNode; signature: string; trackId: string; }
+interface ScheduledClip { source: AudioBufferSourceNode; signature: string; trackId: string; clip: Clip; }
 interface TrackGraph {
   input: GainNode; output: GainNode; analyser: AnalyserNode; signature: string;
   pan: StereoPannerNode; eq: BiquadFilterNode[]; compressor: DynamicsCompressorNode;
@@ -293,6 +321,12 @@ function graphSignature(track: Track, _bpm: number) {
   // Effect topology and effect settings require a new graph. Mixer and EQ/comp parameters update in place.
   return JSON.stringify([track.effectChain, track.eq.enabled, track.compressor.enabled,
     track.delay?.enabled, track.delay?.pingPong, track.reverb?.enabled]);
+}
+
+/** 클립의 소리에 영향을 주는 값만 모은 표시. 이름·그룹처럼 소리와 무관한 값이 바뀌어도 같다. */
+function clipSignature(trackId: string, clip: Clip, bpm: number) {
+  return JSON.stringify([trackId, clip.audioBufferId, clip.startTime, clip.offset, clip.duration,
+    getClipPlaybackRate(bpm, clip), clip.gain, clip.fadeIn, clip.fadeOut, clip.fadeCurve]);
 }
 
 function updateTrackGraph(graph: TrackGraph, track: Track, solo: boolean, time: number, bpm: number) {

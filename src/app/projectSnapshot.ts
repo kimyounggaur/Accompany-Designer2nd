@@ -1,4 +1,4 @@
-import { useDawStore } from "../store/useDawStore";
+import { getDoc } from "../state/projectStore";
 import type { DawProject } from "../types";
 
 /**
@@ -6,21 +6,21 @@ import type { DawProject } from "../types";
  * blobUrl처럼 실행 중에만 의미 있는 값은 뺀다.
  */
 export function getProjectSnapshot(): DawProject {
-  const state = useDawStore.getState();
+  const doc = getDoc();
   const audioAssets = Object.fromEntries(
-    Object.entries(state.audioAssets).map(([assetId, asset]) => {
+    Object.entries(doc.audioAssets).map(([assetId, asset]) => {
       const { blobUrl, ...serializableAsset } = asset;
       return [assetId, serializableAsset];
     }),
   );
 
   return {
-    id: state.id,
-    name: state.name,
-    bpm: state.bpm,
-    sampleRate: state.sampleRate,
-    tracks: state.tracks,
+    id: doc.id,
+    name: doc.name,
+    bpm: doc.bpm,
+    sampleRate: doc.sampleRate,
+    tracks: doc.tracks,
     audioAssets,
-    timeMarkers: state.timeMarkers,
+    timeMarkers: doc.timeMarkers,
   };
 }

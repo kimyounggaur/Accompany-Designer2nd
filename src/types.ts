@@ -162,6 +162,13 @@ export interface DawProject {
   timeMarkers: TimeMarker[];
 }
 
+/**
+ * 실행 취소·자동 저장·엔진 동기화의 대상이 되는 프로젝트 문서.
+ * 지금은 DawProject와 같은 모양이다. 문서 형식 v2(필드 이름 변경, 파형 분리)는 P4-1에서 바꾼다.
+ * 문서는 바꾸지 않고 새로 만든다(immer). 그래서 "무엇이 바뀌었나"를 === 로 알 수 있다.
+ */
+export type ProjectDoc = DawProject;
+
 export interface TimeMarker {
   id: string;
   time: number;
