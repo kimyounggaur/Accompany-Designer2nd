@@ -1,6 +1,17 @@
 import { ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDawStore } from "../store/useDawStore";
+import {
+  clearSelection,
+  clearTimeMarkers,
+  deleteSelectedClips,
+  groupSelectedClips,
+  quantizeSelectedClips,
+  resetSelectedClipSource,
+  selectAllClips,
+  ungroupSelectedClips,
+  zoomToSelectedClips,
+} from "../app/actions";
 import type { PlaylistSnap, PlaylistTool } from "../types";
 import { menuIcon, playlistToolIcons, snapIcon } from "../utils/playlistToolIcons";
 
@@ -67,18 +78,7 @@ export function PlaylistToolbar() {
   const setPlaylistTool = useDawStore((state) => state.setPlaylistTool);
   const setPlaylistSnap = useDawStore((state) => state.setPlaylistSnap);
   const setGlobalSnap = useDawStore((state) => state.setGlobalSnap);
-  const deleteSelectedClips = useDawStore((state) => state.deleteSelectedClips);
-  const quantizeSelectedClips = useDawStore((state) => state.quantizeSelectedClips);
-  const selectAllClips = useDawStore((state) => state.selectAllClips);
-  const clearSelection = useDawStore((state) => state.clearSelection);
-  const groupSelectedClips = useDawStore((state) => state.groupSelectedClips);
-  const ungroupSelectedClips = useDawStore((state) => state.ungroupSelectedClips);
-  const zoomToSelectedClips = useDawStore((state) => state.zoomToSelectedClips);
-  const resetSelectedClipSource = useDawStore(
-    (state) => state.resetSelectedClipSource,
-  );
   const addTimeMarker = useDawStore((state) => state.addTimeMarker);
-  const clearTimeMarkers = useDawStore((state) => state.clearTimeMarkers);
   const togglePerformanceMode = useDawStore(
     (state) => state.togglePerformanceMode,
   );

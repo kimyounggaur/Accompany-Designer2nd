@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { audioEngine } from "./audio/audioEngine";
 import { vocalRecorder } from "./audio/recorder";
 import { Inspector } from "./components/Inspector";
 import { Timeline } from "./components/Timeline";
 import { AppShell } from "./app/AppShell";
+import { quantizeSelectedClips, redo, undo, zoomToSelectedClips, deleteSelectedClips } from "./app/actions";
+import { confirmAction } from "./services/confirm";
+import { notify, notifyError } from "./services/notify";
+import { useDialogStore } from "./state/dialogStore";
 import { TopBar } from "./ui/transport/TopBar";
 import type { AudioAsset, Clip, DawProject } from "./types";
 import { createId, getProjectDuration } from "./utils/audioMath";
@@ -52,22 +56,14 @@ export default function App() {
   const updateClip = useDawStore((state) => state.updateClip);
   const addTrack = useDawStore((state) => state.addTrack);
   const importProject = useDawStore((state) => state.importProject);
-  const deleteSelectedClips = useDawStore((state) => state.deleteSelectedClips);
   const selectedClipIds = useDawStore((state) => state.selectedClipIds);
-  const undo = useDawStore((state) => state.undo);
-  const redo = useDawStore((state) => state.redo);
   const setPlaylistTool = useDawStore((state) => state.setPlaylistTool);
-  const quantizeSelectedClips = useDawStore((state) => state.quantizeSelectedClips);
-  const zoomToSelectedClips = useDawStore((state) => state.zoomToSelectedClips);
   const setZoom = useDawStore((state) => state.setZoom);
   const zoomPxPerSecond = useDawStore((state) => state.zoomPxPerSecond);
-  const commandMessage = useDawStore((state) => state.commandMessage);
   const recordingState = useDawStore((state) => state.recording);
   const setRecordingState = useDawStore((state) => state.setRecordingState);
   const resetRecordingState = useDawStore((state) => state.resetRecordingState);
-  const [status, setStatus] = useState("오디오 파일을 업로드하면 첫 트랙에 클립이 생성됩니다.");
   const copiedClips = useRef<Clip[]>([]);
-  useEffect(() => { if (commandMessage) setStatus(commandMessage); }, [commandMessage]);
   const isRecording =
     recordingState.status === "counting-in" ||
     recordingState.status === "recording" ||
@@ -105,7 +101,7 @@ export default function App() {
         pending = pending.catch(() => {}).then(() => saveAutosave(project)).then(() => {
           if (!timer) unsaved = false;
         }).catch(() => {
-          if (!cancelled) setStatus("자동 저장에 실패했습니다. 프로젝트 파일을 따로 저장해 주세요.");
+          if (!cancelled) notify("error", "자동 저장에 실패했습니다. 프로젝트 파일을 따로 저장해 주세요.");
         });
       }, 1200);
     });
@@ -123,11 +119,12 @@ export default function App() {
             audioEngine.clearBuffers();
             restored.commit();
             importProject(restored.project);
-            setStatus(restored.missing ? `자동 저장된 프로젝트를 복구했습니다. 음원 ${restored.missing}개를 다시 연결해 주세요.` : "자동 저장된 프로젝트와 음원을 복구했습니다.");
+            if (restored.missing) notify("warning", `자동 저장된 프로젝트를 복구했습니다. 음원 ${restored.missing}개를 다시 연결해 주세요.`);
+            else notify("success", "자동 저장된 프로젝트와 음원을 복구했습니다.");
           }
         }
       } catch {
-        if (!cancelled) setStatus("자동 저장된 작업을 복구하지 못했습니다. 프로젝트 파일을 확인해 주세요.");
+        if (!cancelled) notify("error", "자동 저장된 작업을 복구하지 못했습니다. 프로젝트 파일을 확인해 주세요.");
       } finally { ready = true; }
     };
     void recover();
@@ -197,6 +194,11 @@ export default function App() {
         return;
       }
 
+      // 확인창이 열려 있는 동안에는 뒤의 화면을 건드리는 단축키(삭제·재생 등)를 막는다.
+      if (useDialogStore.getState().confirm) {
+        return;
+      }
+
       const hasCommandModifier = event.ctrlKey || event.metaKey;
       const shortcutKey = event.code.startsWith("Key") ? event.code.slice(3).toLowerCase() : event.key.toLowerCase();
 
@@ -225,7 +227,7 @@ export default function App() {
         event.preventDefault();
         const state = useDawStore.getState();
         copiedClips.current = state.tracks.flatMap(track => track.clips.filter(clip => state.selectedClipIds.includes(clip.id))).map(clip => ({ ...clip }));
-        setStatus(`클립 ${copiedClips.current.length}개 복사됨`);
+        notify("info", copiedClips.current.length ? `클립 ${copiedClips.current.length}개 복사됨` : "복사할 클립을 먼저 선택하세요.");
         return;
       }
       if (hasCommandModifier && shortcutKey === "v") {
@@ -236,7 +238,7 @@ export default function App() {
           if (state.tracks.some(track => track.id === clip.trackId))
             state.addClip(clip.trackId, { ...clip, id: createId("clip"), startTime: state.playhead + clip.startTime - first });
         }
-        if (copiedClips.current.length) setStatus(`클립 ${copiedClips.current.length}개 붙여넣기 완료`);
+        notify("info", copiedClips.current.length ? `클립 ${copiedClips.current.length}개 붙여넣기 완료` : "붙여넣을 클립이 없습니다. 먼저 클립을 복사하세요.");
         return;
       }
       if (hasCommandModifier || event.altKey && shortcutKey !== "q") return;
@@ -322,17 +324,7 @@ export default function App() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    deleteSelectedClips,
-    quantizeSelectedClips,
-    redo,
-    selectedClipIds.length,
-    setPlaylistTool,
-    setZoom,
-    undo,
-    zoomPxPerSecond,
-    zoomToSelectedClips,
-  ]);
+  }, [selectedClipIds.length, setPlaylistTool, setZoom, zoomPxPerSecond]);
 
   useEffect(() => {
     const onPlayFrom = (event: Event) => {
@@ -428,8 +420,7 @@ export default function App() {
         status: "counting-in",
         countInRemaining: beat,
       });
-      setStatus(`${beat}박 후 녹음 시작`);
-      useDawStore.getState().setCommandMessage(`${beat}박 후 녹음 시작`);
+      notify("info", `${beat}박 후 녹음 시작`);
       playMetronomeClick(context, beat === totalBeats);
       await new Promise<void>((resolve) => {
         countInResolveRef.current = resolve;
@@ -480,8 +471,7 @@ export default function App() {
     if (recordingState.status === "counting-in") {
       clearRecordingTimers();
       resetRecordingState();
-      setStatus("녹음 카운트인이 취소되었습니다.");
-      useDawStore.getState().setCommandMessage("녹음 카운트인이 취소되었습니다.");
+      notify("info", "녹음 카운트인이 취소되었습니다.");
       return;
     }
 
@@ -603,21 +593,16 @@ export default function App() {
         countInRemaining: 0,
         waveformPeaks: [],
       });
-      setStatus(`${fileName} 녹음 중...`);
-      useDawStore.getState().setCommandMessage(`${fileName} 녹음 중...`);
+      notify("info", `${fileName} 녹음 중...`);
     } catch (error) {
       clearRecordingTimers();
       vocalRecorder.cancel();
       recordingRef.current = undefined;
       resetRecordingState();
       if ((error as Error).message === "Count-in cancelled.") {
-        setStatus("녹음 카운트인이 취소되었습니다.");
-        useDawStore.getState().setCommandMessage("녹음 카운트인이 취소되었습니다.");
+        notify("info", "녹음 카운트인이 취소되었습니다.");
       } else {
-        setStatus(`녹음 시작 실패: ${(error as Error).message}`);
-        useDawStore
-          .getState()
-          .setCommandMessage(`녹음 시작 실패: ${(error as Error).message}`);
+        notifyError("녹음 시작 실패", error);
       }
     }
   }
@@ -630,7 +615,7 @@ export default function App() {
 
     try {
       setRecordingState({ status: "stopping" });
-      setStatus(`${session.fileName} 저장 중...`);
+      notify("info", `${session.fileName} 저장 중...`);
       const result = vocalRecorder.stop();
       const { asset } = await audioEngine.decodeBlob(
         result.blob,
@@ -654,14 +639,10 @@ export default function App() {
         name: asset.fileName,
         stretchMode: "none",
       }, { history: false });
-      setStatus(`${asset.fileName} 녹음 완료`);
-      useDawStore.getState().setCommandMessage(`${asset.fileName} 녹음 완료`);
+      notify("success", `${asset.fileName} 녹음 완료`);
     } catch (error) {
       updateClip(session.clipId, { isRecording: false }, { history: false });
-      setStatus(`녹음 저장 실패: ${(error as Error).message}`);
-      useDawStore
-        .getState()
-        .setCommandMessage(`녹음 저장 실패: ${(error as Error).message}`);
+      notifyError("녹음 저장 실패", error);
     } finally {
       clearRecordingTimers();
       recordingRef.current = undefined;
@@ -673,7 +654,8 @@ export default function App() {
     const fileArray = Array.from(files);
     if (!fileArray.length) return;
 
-    setStatus(`${fileArray.length}개 파일 디코딩 중...`);
+    notify("info", `${fileArray.length}개 파일 디코딩 중...`);
+    let uploaded = 0;
 
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
@@ -690,7 +672,8 @@ export default function App() {
           if (buffer) audioEngine.registerBuffer(missingAsset.id, buffer);
           rememberAudio(missingAsset.id, file);
           updateAudioAsset(missingAsset.id, { ...asset, id: missingAsset.id }, { history: false });
-          setStatus(`${file.name} 음원을 기존 클립에 다시 연결했습니다.`);
+          notify("success", `${file.name} 음원을 기존 클립에 다시 연결했습니다.`);
+          uploaded += 1;
           continue;
         }
         const startTime = state.playhead;
@@ -724,18 +707,17 @@ export default function App() {
 
         addAudioAsset(asset);
         addClip(targetTrack.id, clip);
-        setStatus(
-          fileArray.length > 1
-            ? `(${i + 1}/${fileArray.length}) ${asset.fileName} 완료`
-            : `${asset.fileName} 업로드 완료`,
-        );
+        uploaded += 1;
+        if (fileArray.length > 1) notify("info", `(${i + 1}/${fileArray.length}) ${asset.fileName} 완료`);
+        else notify("success", `${asset.fileName} 업로드 완료`);
       } catch (error) {
-        setStatus(`${file.name} 디코딩 실패: ${(error as Error).message}`);
+        notifyError(`${file.name} 디코딩 실패`, error);
       }
     }
 
     if (fileArray.length > 1) {
-      setStatus(`${fileArray.length}개 파일 업로드 완료`);
+      if (uploaded === fileArray.length) notify("success", `${fileArray.length}개 파일 업로드 완료`);
+      else if (uploaded > 0) notify("warning", `${fileArray.length}개 중 ${uploaded}개만 업로드했습니다. 실패한 파일은 위 안내를 확인해 주세요.`);
     }
   }
 
@@ -749,15 +731,15 @@ export default function App() {
       anchor.download = `${project.name.replace(/[\\/:*?"<>|\s]+/g, "-").toLowerCase() || "project"}.json`;
       anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setStatus("음원을 포함한 프로젝트 파일을 저장했습니다.");
+      notify("success", "음원을 포함한 프로젝트 파일을 저장했습니다.");
     } catch (error) {
-      setStatus(`프로젝트 저장 실패: ${(error as Error).message}`);
+      notifyError("프로젝트 저장 실패", error);
     }
   }
 
   async function handleExportMix() {
     try {
-      setStatus("믹스 WAV를 만드는 중입니다...");
+      notify("info", "믹스 WAV를 만드는 중입니다...");
       const project = getProjectSnapshot();
       const blob = await audioEngine.renderMix(project);
       const url = URL.createObjectURL(blob);
@@ -766,30 +748,36 @@ export default function App() {
       anchor.download = `${project.name.replace(/[\\/:*?"<>|\s]+/g, "-") || "project"}-mix.wav`;
       anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setStatus("믹스 WAV 파일을 저장했습니다.");
+      notify("success", "믹스 WAV 파일을 저장했습니다.");
     } catch (error) {
-      setStatus(`믹스 저장 실패: ${(error as Error).message}`);
+      notifyError("믹스 저장 실패", error);
     }
   }
 
   async function handleLoadProject(file: File) {
     try {
       const data = await parseProjectFile(file);
-      if (!window.confirm("현재 프로젝트를 불러온 내용으로 바꾸시겠습니까? 현재 작업은 먼저 파일로 저장할 수 있습니다.")) return;
+      const confirmed = await confirmAction({
+        title: "프로젝트 불러오기",
+        message: "현재 프로젝트를 불러온 내용으로 바꾸시겠습니까? 현재 작업은 먼저 파일로 저장할 수 있습니다.",
+        confirmLabel: "불러오기",
+        tone: "danger",
+      });
+      if (!confirmed) return;
       const restored = await restoreAudio(data, decodeStoredAudio);
       audioEngine.stop();
       audioEngine.clearBuffers();
       restored.commit();
       importProject(restored.project);
-      setStatus(restored.missing ? `프로젝트를 불러왔습니다. 음원 ${restored.missing}개가 파일에 포함되지 않았습니다.` : "프로젝트와 음원을 불러왔습니다.");
+      if (restored.missing) notify("warning", `프로젝트를 불러왔습니다. 음원 ${restored.missing}개가 파일에 포함되지 않았습니다.`);
+      else notify("success", "프로젝트와 음원을 불러왔습니다.");
     } catch (error) {
-      setStatus(`프로젝트 불러오기 실패: ${(error as Error).message}`);
+      notifyError("프로젝트 불러오기 실패", error);
     }
   }
 
   return (
     <AppShell
-      status={status}
       topBar={
         <TopBar
           isRecording={isRecording}

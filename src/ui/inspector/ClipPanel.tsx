@@ -4,6 +4,7 @@ import { audioEngine } from "../../audio/audioEngine";
 import { estimateBpm } from "../../audio/bpmDetector";
 import { CommittedNumberInput } from "../../components/CommittedNumberInput";
 import { useDawStore } from "../../store/useDawStore";
+import { deleteClip } from "../../app/actions";
 import { findClip, getClipPlaybackRate, getClipTimelineDuration } from "../../utils/audioMath";
 import { PanelSection } from "./PanelSection";
 
@@ -19,7 +20,6 @@ export function ClipPanel() {
   const setBpm = useDawStore((state) => state.setBpm);
   const updateClip = useDawStore((state) => state.updateClip);
   const updateAudioAsset = useDawStore((state) => state.updateAudioAsset);
-  const deleteClip = useDawStore((state) => state.deleteClip);
   const beginHistoryGroup = useDawStore((state) => state.beginHistoryGroup);
   const endHistoryGroup = useDawStore((state) => state.endHistoryGroup);
   const [bpmStatus, setBpmStatus] = useState("");

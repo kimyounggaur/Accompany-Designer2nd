@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { AudioAsset, Clip } from "../types";
 import { useDawStore } from "../store/useDawStore";
+import { deleteClip, sliceClipAt } from "../app/actions";
 import {
   clamp,
   getClipPlaybackRate,
@@ -44,9 +45,7 @@ export function ClipView({
   const captureHistory = useDawStore((state) => state.captureHistory);
   const updateClip = useDawStore((state) => state.updateClip);
   const moveClip = useDawStore((state) => state.moveClip);
-  const deleteClip = useDawStore((state) => state.deleteClip);
   const toggleClipMuted = useDawStore((state) => state.toggleClipMuted);
-  const sliceClipAt = useDawStore((state) => state.sliceClipAt);
   const selectClip = useDawStore((state) => state.selectClip);
   const setPlayhead = useDawStore((state) => state.setPlayhead);
   const bpm = useDawStore((state) => state.bpm);

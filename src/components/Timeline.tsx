@@ -2,6 +2,7 @@ import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDawStore } from "../store/useDawStore";
+import { addClipFromSource, deleteTrackWithConfirm, setSelectedClips, toggleRecordingArm } from "../app/actions";
 import type { PlaylistTool } from "../types";
 import {
   clamp,
@@ -84,11 +85,8 @@ export function Timeline() {
   const captureHistory = useDawStore((state) => state.captureHistory);
   const setPlayhead = useDawStore((state) => state.setPlayhead);
   const clearSelection = useDawStore((state) => state.clearSelection);
-  const setSelectedClips = useDawStore((state) => state.setSelectedClips);
-  const addClipFromSource = useDawStore((state) => state.addClipFromSource);
   const moveClip = useDawStore((state) => state.moveClip);
   const addTrack = useDawStore((state) => state.addTrack);
-  const deleteTrack = useDawStore((state) => state.deleteTrack);
   const reorderTrack = useDawStore((state) => state.reorderTrack);
   const beginHistoryGroup = useDawStore((state) => state.beginHistoryGroup);
   const endHistoryGroup = useDawStore((state) => state.endHistoryGroup);
@@ -100,7 +98,6 @@ export function Timeline() {
   }, [endHistoryGroup]);
   const updateTrack = useDawStore((state) => state.updateTrack);
   const selectTrack = useDawStore((state) => state.selectTrack);
-  const toggleRecordingArm = useDawStore((state) => state.toggleRecordingArm);
   const setZoom = useDawStore((state) => state.setZoom);
 
   const CLIP_HEIGHT = TRACK_HEIGHT - 32;
@@ -460,7 +457,7 @@ export function Timeline() {
                 onClick={(event) => { event.stopPropagation(); reorderTrack(track.id, 1); }}><ArrowDown size={14} /></button>
               <button type="button" className="track-order-button" disabled={tracks.length <= 1 || isRecording}
                 aria-label={`${track.name} 삭제`} title={tracks.length <= 1 ? "트랙은 하나 이상 필요합니다" : "트랙 삭제"}
-                onClick={(event) => { event.stopPropagation(); if (window.confirm(`'${track.name}' 트랙과 클립 ${track.clips.length}개를 삭제할까요? 실행 취소로 복원할 수 있습니다.`)) deleteTrack(track.id); }}><Trash2 size={14} /></button>
+                onClick={(event) => { event.stopPropagation(); void deleteTrackWithConfirm(track.id); }}><Trash2 size={14} /></button>
             </div>
             <div className="track-toggles">
               <button
