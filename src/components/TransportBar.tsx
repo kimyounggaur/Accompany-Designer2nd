@@ -105,7 +105,7 @@ export function TransportBar({
   }, []);
 
   return (
-    <header className="transport">
+    <header className="transport" data-testid="topbar">
       <div className="transport-group session-name">
         <input
           aria-label="프로젝트 이름"
@@ -125,17 +125,19 @@ export function TransportBar({
             onStop();
           }}
           title="재생/일시정지"
+          data-testid="transport-play"
           type="button"
         >
           {isPlaying ? <Pause size={18} /> : <Play size={18} />}
         </button>
-        <button className="icon-button" onClick={onStop} title="정지" type="button">
+        <button className="icon-button" onClick={onStop} title="정지" data-testid="transport-stop" type="button">
           <Square size={17} />
         </button>
         <button
           className={`icon-button record-button ${isRecording ? "recording" : ""}`}
           onClick={onRecordToggle}
           title={isRecording ? "녹음 정지" : "보컬 녹음"}
+          data-testid="transport-record"
           type="button"
         >
           <Circle size={16} fill="currentColor" />
@@ -151,7 +153,7 @@ export function TransportBar({
         >
           <Headphones size={16} />
         </button>
-        <output className="time-display">{formatTime(playhead)}</output>
+        <output className="time-display" data-testid="time-display">{formatTime(playhead)}</output>
       </div>
 
       <div className="transport-group record-options-group">
@@ -206,7 +208,7 @@ export function TransportBar({
       <div className="transport-group">
         <label className="number-control">
           <span>템포</span>
-          <CommittedNumberInput label="템포" min={20} max={300} value={bpm} onCommit={setBpm} />
+          <CommittedNumberInput label="템포" testId="tempo-input" min={20} max={300} value={bpm} onCommit={setBpm} />
         </label>
         <button
           className={`icon-button ${snapEnabled ? "active" : ""}`}
@@ -241,6 +243,7 @@ export function TransportBar({
         <input
           ref={fileInputRef}
           accept="audio/*,.mp3,.wav,.m4a"
+          data-testid="upload-input"
           hidden
           multiple
           onChange={(event) => {
@@ -330,7 +333,7 @@ export function TransportBar({
         </div>
       </div>
 
-      <p className="status-line">{status}</p>
+      <p className="status-line" data-testid="status-line">{status}</p>
     </header>
   );
 }

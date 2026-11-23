@@ -306,6 +306,7 @@ export function ClipView({
 
   return (
     <article
+      data-testid="clip"
       className={`clip ${isSelected ? "selected" : ""} ${
         clip.muted ? "muted" : ""
       } ${clip.groupId ? "grouped" : ""} ${clip.isRecording ? "recording" : ""}`}
