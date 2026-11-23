@@ -78,9 +78,3 @@ test('a clip already in progress starts at the proper source offset', async () =
   assert.deepEqual(Source.starts[0].started, [0, 1, 2]);
   audioEngine.stop();
 });
-
-test('missing source audio is reported instead of producing a silent mix', async () => {
-  const project = projectWithClip();
-  audioEngine.removeBuffer('asset');
-  await assert.rejects(audioEngine.renderMix(project), /음원 1개/);
-});

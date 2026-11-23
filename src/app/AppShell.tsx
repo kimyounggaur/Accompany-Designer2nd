@@ -4,6 +4,7 @@ import { useDawStore } from "../store/useDawStore";
 import { AutosaveStatus } from "../ui/feedback/AutosaveStatus";
 import { BuildStamp } from "../ui/feedback/BuildStamp";
 import { ConfirmDialog } from "../ui/feedback/ConfirmDialog";
+import { ExportDialog } from "../ui/feedback/ExportDialog";
 import { StatusLine } from "../ui/feedback/StatusLine";
 import { ToastRegion } from "../ui/feedback/ToastRegion";
 import { useStoredFlag } from "../ui/useStoredFlag";
@@ -53,6 +54,7 @@ export function AppShell({ topBar, timeline, inspector }: AppShellProps) {
       </footer>
       <ToastRegion />
       <ConfirmDialog />
+      <ExportDialog />
     </main>
   );
 }

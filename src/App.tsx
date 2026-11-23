@@ -7,11 +7,13 @@ import { quantizeSelectedClips, redo, undo, zoomToSelectedClips, deleteSelectedC
 import { startApp } from "./app/bootstrap";
 import { decodeStoredAudio, saveProjectFile } from "./app/projectFile";
 import { getProjectSnapshot } from "./app/projectSnapshot";
+import { openExportDialog, resetExport } from "./app/exporting";
 import { cancelRecording, disposeRecording, stopRecording, toggleRecording } from "./app/recording";
 import { ko } from "./i18n/ko";
 import { confirmAction } from "./services/confirm";
 import { notify, notifyError } from "./services/notify";
 import { useDialogStore } from "./state/dialogStore";
+import { isExportOpen } from "./state/exportStore";
 import { isRecordingBusy, useRecordingStore } from "./state/recordingStore";
 import { TopBar } from "./ui/transport/TopBar";
 import type { Clip } from "./types";
@@ -83,8 +85,8 @@ export default function App() {
         return;
       }
 
-      // 확인창이 열려 있는 동안에는 뒤의 화면을 건드리는 단축키(삭제·재생 등)를 막는다.
-      if (useDialogStore.getState().confirm) {
+      // 확인창·내보내기 대화상자가 열려 있는 동안에는 뒤의 화면을 건드리는 단축키(삭제·재생 등)를 막는다.
+      if (useDialogStore.getState().confirm || isExportOpen()) {
         return;
       }
 
@@ -237,6 +239,7 @@ export default function App() {
 
   useEffect(() => {
     return () => {
+      resetExport();
       disposeRecording();
       audioEngine.stop();
     };
@@ -348,23 +351,6 @@ export default function App() {
     }
   }
 
-  async function handleExportMix() {
-    try {
-      notify("info", ko.notice.mixRendering);
-      const project = getProjectSnapshot();
-      const blob = await audioEngine.renderMix(project);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${project.name.replace(/[\\/:*?"<>|\s]+/g, "-") || "project"}-mix.wav`;
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      notify("success", ko.notice.mixSaved);
-    } catch (error) {
-      notifyError(error, { kind: "generic", title: ko.failed.mixSave });
-    }
-  }
-
   async function handleLoadProject(file: File) {
     try {
       const data = await parseProjectFile(file);
@@ -398,7 +384,7 @@ export default function App() {
           onPlayPause={handlePlayPause}
           onRecordToggle={handleRecordToggle}
           onSaveProject={saveProjectFile}
-          onExportMix={handleExportMix}
+          onExportMix={openExportDialog}
           onStop={handleStop}
         />
       }

@@ -23,5 +23,9 @@ writeFileSync("e2e/fixtures/quiet-loud-8s.wav",
 // 정상 신호의 이웃 샘플 차이가 0.02 안팎이라, 튐 기준(0.2)을 넘으면 전부 엔진이 만든 클릭이다.
 writeFileSync("e2e/fixtures/steady-220hz-12s.wav",
   wav({ seconds: 12, sample: (t) => Math.sin(2 * Math.PI * 220 * t) * 0.5 }));
+// 3분 내내 같은 크기(0.4)의 220Hz 사인파 — 믹스 내보내기(P3-6)의 '3분짜리 곡에서 화면이 멈추지 않는다·진행률·취소'를 재기 위한 긴 음원.
+// 파일이 31 MB라 이 음원을 쓰는 시험만 올린다.
+writeFileSync("e2e/fixtures/steady-220hz-180s.wav",
+  wav({ seconds: 180, sample: (t) => Math.sin(2 * Math.PI * 220 * t) * 0.4 }));
 writeFileSync("e2e/fixtures/not-audio.txt", "not audio");
 console.log("fixtures ready");
