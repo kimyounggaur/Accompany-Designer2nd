@@ -1,5 +1,7 @@
 # Browser DAW MVP
 
+> 공식 주소: **(확정 전)** — Vercel 프로젝트를 연결한 뒤 이 줄에 하나만 적습니다. ([결정 0001](docs/decisions/0001-official-url.md), [운영 설정 체크리스트](docs/ops-checklist.md))
+
 브라우저에서 오디오 파일을 업로드하고, FL Studio Playlist처럼 타임라인에 클립을 놓아 기본 컷 편집을 할 수 있는 Phase 1 MVP입니다.
 
 ## 실행

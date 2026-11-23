@@ -7,7 +7,6 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "build:pages": "tsc --noEmit && vite build --base=/Accompany-Designer2nd/",
     "check": "tsc --noEmit",
     "test": "node --import ./tests/register-typescript.mjs --test tests/*.test.mjs",
     "test:e2e": "node scripts/make-fixtures.mjs && playwright test",
