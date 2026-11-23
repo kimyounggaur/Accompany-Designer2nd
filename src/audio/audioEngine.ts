@@ -1,8 +1,9 @@
-import type { AudioAsset, Clip, DawProject, FadeCurve, Track } from "../types";
-import { createDelayInsert } from "./delay";
-import { createReverbInsert } from "./reverb";
+import type { AudioAsset, Clip, DawProject } from "../types";
 import { attachProbe, isProbeEnabled } from "./probe";
 import { planSync, type SyncDoc } from "./engine/syncPlan";
+import { clipSignature } from "./engine/clipSignature";
+import { scheduleClipGainEnvelope } from "./engine/clipEnvelope";
+import { createTrackGraph, disposeGraph, graphSignature, updateTrackGraph, type TrackGraph } from "./engine/trackGraph";
 import { encodeWav } from "../utils/wavEncoder";
 import { getDelayTimeMs, normalizeDelaySettings } from "../utils/delay";
 import {
@@ -16,14 +17,18 @@ interface DecodedAudio {
   buffer: AudioBuffer;
 }
 
-class BrowserAudioEngine {
-  private context?: AudioContext;
-  private master?: GainNode;
-  private analyser?: AnalyserNode;
-  private buffers = new Map<string, AudioBuffer>();
+/**
+ * 옛 엔진(재생 구조 교체 전). 새 엔진(`engine/AudioEngine.ts`, `?engine=v2`)이 이 클래스를 이어받아 소리 경로·마스터·음원 보관 같은
+ * 아직 옮기지 않은 부분을 그대로 쓴다. 3단계가 끝나 옛 엔진을 지울 때 함께 정리된다.
+ */
+export class BrowserAudioEngine {
+  protected context?: AudioContext;
+  protected master?: GainNode;
+  protected analyser?: AnalyserNode;
+  protected buffers = new Map<string, AudioBuffer>();
   private sources = new Map<string, ScheduledClip>();
-  private trackGraphs = new Map<string, TrackGraph>();
-  private trackAnalysers = new Map<string, AnalyserNode>();
+  protected trackGraphs = new Map<string, TrackGraph>();
+  protected trackAnalysers = new Map<string, AnalyserNode>();
   private startedAt = 0;
   private playheadAtStart = 0;
   private playing = false;
@@ -301,87 +306,10 @@ function createSafetyCeiling(context: BaseAudioContext): WaveShaperNode {
 }
 
 interface ScheduledClip { source: AudioBufferSourceNode; signature: string; trackId: string; clip: Clip; }
-interface TrackGraph {
-  input: GainNode; output: GainNode; analyser: AnalyserNode; signature: string;
-  pan: StereoPannerNode; eq: BiquadFilterNode[]; compressor: DynamicsCompressorNode;
-  delay?: ReturnType<typeof createDelayInsert>; reverb?: ReturnType<typeof createReverbInsert>;
-}
-
-function disposeGraph(graph: TrackGraph) {
-  graph.input.disconnect(); graph.output.disconnect(); graph.analyser.disconnect();
-  graph.delay?.dispose();
-}
 
 function stopSource(source: AudioBufferSourceNode) {
   try { source.stop(); } catch { /* source may already have ended */ }
   try { source.disconnect(); } catch { /* already disconnected */ }
-}
-
-function graphSignature(track: Track, _bpm: number) {
-  // Effect topology and effect settings require a new graph. Mixer and EQ/comp parameters update in place.
-  return JSON.stringify([track.effectChain, track.eq.enabled, track.compressor.enabled,
-    track.delay?.enabled, track.delay?.pingPong, track.reverb?.enabled]);
-}
-
-/** 클립의 소리에 영향을 주는 값만 모은 표시. 이름·그룹처럼 소리와 무관한 값이 바뀌어도 같다. */
-function clipSignature(trackId: string, clip: Clip, bpm: number) {
-  return JSON.stringify([trackId, clip.audioBufferId, clip.startTime, clip.offset, clip.duration,
-    getClipPlaybackRate(bpm, clip), clip.gain, clip.fadeIn, clip.fadeOut, clip.fadeCurve]);
-}
-
-function updateTrackGraph(graph: TrackGraph, track: Track, solo: boolean, time: number, bpm: number) {
-  const smooth = (param: AudioParam, value: number) => param.setTargetAtTime(value, time, 0.01);
-  smooth(graph.output.gain, track.muted || (solo && !track.solo) ? 0 : track.volume);
-  smooth(graph.pan.pan, track.pan);
-  [track.eq.bassGain, track.eq.middleLowGain, track.eq.middleHighGain, track.eq.highGain, track.eq.presenceGain]
-    .forEach((gain, i) => smooth(graph.eq[i].gain, gain));
-  smooth(graph.compressor.threshold, track.compressor.threshold);
-  smooth(graph.compressor.ratio, track.compressor.ratio);
-  smooth(graph.compressor.attack, track.compressor.attack);
-  smooth(graph.compressor.release, track.compressor.release);
-  graph.delay?.update(track.delay, bpm);
-  graph.reverb?.update(track.reverb);
-}
-
-function createTrackGraph(context: BaseAudioContext, master: AudioNode, track: Track, bpm: number): TrackGraph {
-  const input = context.createGain();
-  const eq = [context.createBiquadFilter(), context.createBiquadFilter(), context.createBiquadFilter(),
-    context.createBiquadFilter(), context.createBiquadFilter()];
-  const [bass, middleLow, middleHigh, high, presence] = eq;
-  bass.type = "lowshelf"; bass.frequency.value = 110; bass.gain.value = track.eq.bassGain;
-  middleLow.type = "peaking"; middleLow.frequency.value = 360; middleLow.Q.value = 0.9; middleLow.gain.value = track.eq.middleLowGain;
-  middleHigh.type = "peaking"; middleHigh.frequency.value = 1800; middleHigh.Q.value = 0.85; middleHigh.gain.value = track.eq.middleHighGain;
-  high.type = "highshelf"; high.frequency.value = 5600; high.gain.value = track.eq.highGain;
-  presence.type = "peaking"; presence.frequency.value = 10000; presence.Q.value = 0.75; presence.gain.value = track.eq.presenceGain;
-  const compressor = context.createDynamicsCompressor();
-  compressor.threshold.value = track.compressor.threshold; compressor.ratio.value = track.compressor.ratio;
-  compressor.attack.value = track.compressor.attack; compressor.release.value = track.compressor.release;
-  const pan = context.createStereoPanner(); pan.pan.value = track.pan;
-  const output = context.createGain(); output.gain.value = track.volume;
-  const analyser = context.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0.72;
-  let delay: ReturnType<typeof createDelayInsert> | undefined;
-  let reverb: ReturnType<typeof createReverbInsert> | undefined;
-  let effectOutput: AudioNode = input;
-  const chain = track.effectChain?.length ? track.effectChain : [
-    {id: "eq", type: "eq" as const, enabled: track.eq.enabled},
-    {id: "comp", type: "comp" as const, enabled: track.compressor.enabled},
-    {id: "delay", type: "delay" as const, enabled: track.delay?.enabled ?? false},
-    {id: "reverb", type: "reverb" as const, enabled: track.reverb?.enabled ?? false},
-  ];
-  for (const slot of chain) {
-    if (!slot.enabled) continue;
-    if (slot.type === "eq" && track.eq.enabled) {
-      effectOutput.connect(bass); bass.connect(middleLow); middleLow.connect(middleHigh); middleHigh.connect(high); high.connect(presence); effectOutput = presence;
-    } else if (slot.type === "comp" && track.compressor.enabled) {
-      effectOutput.connect(compressor); effectOutput = compressor;
-    } else if (slot.type === "delay" && track.delay?.enabled) {
-      delay = createDelayInsert(context, track.delay, bpm); effectOutput.connect(delay.input); effectOutput = delay.output;
-    } else if (slot.type === "reverb" && track.reverb?.enabled) {
-      reverb = createReverbInsert(context, track.reverb); effectOutput.connect(reverb.input); effectOutput = reverb.output;
-    }
-  }
-  effectOutput.connect(pan); pan.connect(output); output.connect(analyser); analyser.connect(master);
-  return { input, output, analyser, signature: graphSignature(track, bpm), pan, eq, compressor, delay, reverb };
 }
 
 function scheduleClip(context: BaseAudioContext, input: AudioNode, buffer: AudioBuffer, clip: Clip, bpm: number, playhead: number) {
@@ -398,156 +326,6 @@ function scheduleClip(context: BaseAudioContext, input: AudioNode, buffer: Audio
   scheduleClipGainEnvelope(gain.gain, clip, when, elapsed, duration / rate, timelineDuration);
   source.start(when, offset, duration);
   return source;
-}
-
-function createFadeCurve(
-  curve: FadeCurve,
-  direction: "in" | "out",
-  startRatio: number,
-  endRatio: number,
-  gain: number,
-) {
-  const sampleCount = 64;
-  const values = new Float32Array(sampleCount);
-
-  for (let index = 0; index < sampleCount; index += 1) {
-    const position = startRatio + ((endRatio - startRatio) * index) / (sampleCount - 1);
-    const safePosition = Math.min(1, Math.max(0, position));
-    const value =
-      direction === "in"
-        ? curve === "linear"
-          ? safePosition
-          : Math.sin((Math.PI / 2) * safePosition)
-        : curve === "linear"
-          ? 1 - safePosition
-          : Math.cos((Math.PI / 2) * safePosition);
-    values[index] = Math.max(0.0001, value * gain);
-  }
-
-  return values;
-}
-
-function getFadeGainAt(
-  position: number,
-  clipGain: number,
-  fadeIn: number,
-  fadeOut: number,
-  timelineDuration: number,
-  curve: FadeCurve,
-) {
-  let gain = clipGain;
-
-  if (fadeIn > 0 && position < fadeIn) {
-    const ratio = Math.min(1, Math.max(0, position / fadeIn));
-    gain *= curve === "linear" ? ratio : Math.sin((Math.PI / 2) * ratio);
-  }
-
-  if (fadeOut > 0 && position > timelineDuration - fadeOut) {
-    const ratio = Math.min(1, Math.max(0, (position - (timelineDuration - fadeOut)) / fadeOut));
-    gain *= curve === "linear" ? 1 - ratio : Math.cos((Math.PI / 2) * ratio);
-  }
-
-  return Math.max(0.0001, gain);
-}
-
-function scheduleFadeSegment(
-  param: AudioParam,
-  curve: FadeCurve,
-  direction: "in" | "out",
-  gain: number,
-  when: number,
-  segmentStart: number,
-  segmentEnd: number,
-  fadeStart: number,
-  fadeDuration: number,
-  playbackSegmentStart: number,
-) {
-  const duration = Math.max(0, segmentEnd - segmentStart);
-  if (duration <= 0.001) {
-    return;
-  }
-
-  const startRatio = Math.min(1, Math.max(0, (segmentStart - fadeStart) / fadeDuration));
-  const endRatio = Math.min(1, Math.max(0, (segmentEnd - fadeStart) / fadeDuration));
-  const startTime = when + (segmentStart - playbackSegmentStart);
-
-  if (curve === "linear") {
-    const startGain =
-      direction === "in" ? gain * startRatio : gain * (1 - startRatio);
-    const endGain = direction === "in" ? gain * endRatio : gain * (1 - endRatio);
-    param.setValueAtTime(Math.max(0.0001, startGain), startTime);
-    param.linearRampToValueAtTime(Math.max(0.0001, endGain), startTime + duration);
-    return;
-  }
-
-  param.setValueCurveAtTime(
-    createFadeCurve(curve, direction, startRatio, endRatio, gain),
-    startTime,
-    duration,
-  );
-}
-
-function scheduleClipGainEnvelope(
-  param: AudioParam,
-  clip: Clip,
-  when: number,
-  elapsedInsideClip: number,
-  scheduledTimelineDuration: number,
-  timelineDuration: number,
-) {
-  const gain = Math.max(0, clip.gain);
-  const curve = clip.fadeCurve ?? "equalPower";
-  const fadeLimit = Math.max(0, timelineDuration / 2);
-  const fadeIn = Math.min(Math.max(0, clip.fadeIn || 0), fadeLimit);
-  const fadeOut = Math.min(Math.max(0, clip.fadeOut || 0), fadeLimit);
-  const segmentStart = Math.max(0, elapsedInsideClip);
-  const segmentEnd = Math.min(timelineDuration, segmentStart + scheduledTimelineDuration);
-
-  param.cancelScheduledValues(when);
-  if (gain <= 0) {
-    param.setValueAtTime(0, when);
-    return;
-  }
-
-  param.setValueAtTime(
-    getFadeGainAt(segmentStart, gain, fadeIn, fadeOut, timelineDuration, curve),
-    when,
-  );
-
-  if (fadeIn > 0 && segmentStart < fadeIn && segmentEnd > 0) {
-    scheduleFadeSegment(
-      param,
-      curve,
-      "in",
-      gain,
-      when,
-      Math.max(segmentStart, 0),
-      Math.min(segmentEnd, fadeIn),
-      0,
-      fadeIn,
-      segmentStart,
-    );
-  }
-
-  if (fadeIn > 0 && segmentStart < fadeIn && segmentEnd > fadeIn) {
-    param.setValueAtTime(gain, when + (fadeIn - segmentStart));
-  }
-
-  const fadeOutStart = Math.max(0, timelineDuration - fadeOut);
-  if (fadeOut > 0 && segmentEnd > fadeOutStart) {
-    scheduleFadeSegment(
-      param,
-      curve,
-      "out",
-      gain,
-      when,
-      Math.max(segmentStart, fadeOutStart),
-      segmentEnd,
-      fadeOutStart,
-      fadeOut,
-      segmentStart,
-    );
-  }
 }
 
 function createWaveformPeaks(buffer: AudioBuffer, targetPeaks = 1800) {

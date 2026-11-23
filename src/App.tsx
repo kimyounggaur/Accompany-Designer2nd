@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { audioEngine } from "./audio/audioEngine";
+import { audioEngine } from "./audio/currentEngine";
 import { vocalRecorder } from "./audio/recorder";
 import { Inspector } from "./components/Inspector";
 import { Timeline } from "./components/Timeline";

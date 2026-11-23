@@ -1,4 +1,5 @@
-import { audioEngine } from "../audio/audioEngine";
+import { audioEngine } from "../audio/currentEngine";
+import { AudioEngineV2 } from "../audio/engine/AudioEngine";
 import { ko } from "../i18n/ko";
 import { notify, notifyError } from "../services/notify";
 import { loadAutosave, startAutosave } from "../services/persistence/autosave";
@@ -24,6 +25,10 @@ export function startApp(): () => void {
 
   // 문서가 바뀌면 재생 중인 소리 경로를 바뀐 부분만 맞춘다(예전 App.tsx의 schedulingSignature 효과를 대체).
   const offEngineSync = connectEngineSync(audioEngine);
+  // 새 엔진(?engine=v2)은 곡 끝에 닿으면 멈추는데, 녹음 중에는 멈추면 안 된다.
+  if (audioEngine instanceof AudioEngineV2) {
+    audioEngine.setHoldOpen(() => useDawStore.getState().recording.status === "recording");
+  }
 
   const autosave = startAutosave({
     getProject: getProjectSnapshot,

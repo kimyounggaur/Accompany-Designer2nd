@@ -41,7 +41,8 @@ npm run test:e2e     # 회귀 테스트 (Playwright, 처음에는 npx playwright
 
 ### 개발용 주소 (화면에 보이는 단추는 없음)
 
-- `?probe=1` — 스피커로 나가는 신호를 직접 재서 `window.__probe`(`jumps` 튐·`gaps` 끊김·`peak`·`longestGapMs`, 0.1초마다 갱신)에 둡니다. 재생 직전에 `window.__probeReset()`으로 0으로 되돌립니다. 회귀 시험이 이 값을 읽습니다.
+- `?probe=1` — 스피커로 나가는 신호를 직접 재서 `window.__probe`(`jumps` 튐·`gaps` 끊김·`peak`·`longestGapMs`·`jumpLog` 튄 지점 앞 8개, 0.1초마다 갱신)에 둡니다. 재생 직전에 `window.__probeReset()`으로 0으로 되돌립니다. 회귀 시험이 이 값을 읽습니다.
+- `?engine=v2` — 새 재생 엔진(재생 시계·예약기, P3-2)을 켭니다. 같은 값을 `localStorage["ad.engine"] = "v2"`로 저장해 두면 주소 없이도 켜지고, `?engine=v1`은 언제나 옛 엔진으로 되돌립니다(기본은 옛 엔진). 켜진 쪽은 `<html data-engine>`에 보입니다. 회귀 시험은 `E2E_ENGINE=v2`로 전체를 새 엔진에서 돌릴 수 있습니다.
 - `?crash=1` — 그리는 즉시 오류를 내서 "문제가 생겼습니다" 안내 화면을 확인합니다.
 
 ## 폴더 구조
@@ -54,7 +55,8 @@ src/
   components/         화면 부품(타임라인 등, 순차적으로 ui/로 이동 중)
   i18n/               화면 문구(ko.ts)
   services/           안내(notify)·오류 변환(errors)·확인창, 자동 저장(persistence/)
-  audio/              소리 엔진(audioEngine.ts), 바뀐 트랙만 고르는 계획(engine/syncPlan.ts), 녹음, 이펙트
+  audio/              소리 엔진: 옛 엔진(audioEngine.ts) · 새 엔진(engine/AudioEngine.ts: 재생 시계 Transport · 예약기 Scheduler · 클립 재생 단위 ClipVoice) · 엔진 고르기(currentEngine.ts) · 바뀐 트랙만 고르는 계획(engine/syncPlan.ts) · 예약 타이머(workers/tick.worker.ts) · 녹음 · 이펙트
+  domain/             화면·소리 없이 시험할 수 있는 순수 계산(timeline/clipMath.ts: 클립을 어떻게 재생할지 정하는 planVoice)
   store/, state/      상태: 프로젝트 문서(state/projectStore.ts, immer로 불변 갱신) · 편집 함수(state/commands/) · 이력(state/history.ts) / 화면 상태(store/useDawStore.ts, 문서를 거울처럼 비춤) / 안내·확인창·자동 저장 상태
   storage/            프로젝트 파일 형식(읽기·쓰기·검증)
   styles/             화면 틀·안내·글자 가독성 CSS

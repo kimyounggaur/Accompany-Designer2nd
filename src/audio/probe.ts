@@ -4,6 +4,8 @@ export interface ProbeReport {
   gaps: number;
   peak: number;
   longestGapMs: number;
+  /** 튄 지점을 앞에서 8개까지: [오디오 시각(초), 직전 값, 지금 값] */
+  jumpLog: [number, number, number][];
 }
 
 declare global {
