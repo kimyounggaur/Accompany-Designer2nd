@@ -49,13 +49,13 @@ npm run test:e2e     # 회귀 테스트 (Playwright, 처음에는 npx playwright
 ```text
 src/
   App.tsx, main.tsx   화면 조립과 진입점
-  app/                화면 틀(AppShell), 사용자 동작(actions), 앱 시작(bootstrap)
+  app/                화면 틀(AppShell), 사용자 동작(actions), 앱 시작(bootstrap), 엔진 연결(engineSync)
   ui/                 화면 부품: 안내·확인창·자동 저장 표시(feedback), 상단 바, 인스펙터
   components/         화면 부품(타임라인 등, 순차적으로 ui/로 이동 중)
   i18n/               화면 문구(ko.ts)
   services/           안내(notify)·오류 변환(errors)·확인창, 자동 저장(persistence/)
-  audio/              소리 엔진, 녹음, 이펙트
-  store/, state/      상태(Zustand): 프로젝트 문서 / 안내·확인창·자동 저장 상태
+  audio/              소리 엔진(audioEngine.ts), 바뀐 트랙만 고르는 계획(engine/syncPlan.ts), 녹음, 이펙트
+  store/, state/      상태: 프로젝트 문서(state/projectStore.ts, immer로 불변 갱신) · 편집 함수(state/commands/) · 이력(state/history.ts) / 화면 상태(store/useDawStore.ts, 문서를 거울처럼 비춤) / 안내·확인창·자동 저장 상태
   storage/            프로젝트 파일 형식(읽기·쓰기·검증)
   styles/             화면 틀·안내·글자 가독성 CSS
   utils/              계산·인코딩 함수

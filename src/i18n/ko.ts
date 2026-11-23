@@ -188,6 +188,7 @@ export const ko = {
     projectLoad: "프로젝트 불러오기 실패",
     autosave: "자동 저장 실패",
     autosaveRecover: "자동 저장 복구 실패",
+    playbackSync: "재생 중 변경 반영 실패",
     /** 어디서 난 오류인지 알 수 없는 예외(window 오류·처리되지 않은 약속 거절) */
     unexpected: "동작 실패",
   },

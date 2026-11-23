@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { audioEngine } from "./audio/audioEngine";
 import { vocalRecorder } from "./audio/recorder";
 import { Inspector } from "./components/Inspector";
@@ -21,8 +21,6 @@ import { hasRememberedAudio, parseProjectFile, rememberAudio, restoreAudio } fro
 
 export default function App() {
   const isPlaying = useDawStore((state) => state.isPlaying);
-  const tracks = useDawStore((state) => state.tracks);
-  const bpm = useDawStore((state) => state.bpm);
   const setIsPlaying = useDawStore((state) => state.setIsPlaying);
   const setPlayhead = useDawStore((state) => state.setPlayhead);
   const addAudioAsset = useDawStore((state) => state.addAudioAsset);
@@ -61,15 +59,6 @@ export default function App() {
   // 자동 저장 시작과 저장된 프로젝트 복구는 app/bootstrap.ts가 맡는다.
   useEffect(() => startApp(), []);
 
-  const schedulingSignature = useMemo(
-    () =>
-      JSON.stringify({
-        bpm,
-        tracks,
-      }),
-    [bpm, tracks],
-  );
-
   useEffect(() => {
     if (!isPlaying) {
       return;
@@ -98,14 +87,6 @@ export default function App() {
       }
     };
   }, [isPlaying, setIsPlaying, setPlayhead]);
-
-  useEffect(() => {
-    if (!isPlaying) {
-      return;
-    }
-
-    audioEngine.sync(getProjectSnapshot());
-  }, [isPlaying, schedulingSignature]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

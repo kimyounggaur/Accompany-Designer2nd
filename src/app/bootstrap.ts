@@ -5,6 +5,7 @@ import { loadAutosave, startAutosave } from "../services/persistence/autosave";
 import { useAutosaveStore } from "../state/autosaveStore";
 import { recallAudio, restoreAudio } from "../storage/projectStorage";
 import { useDawStore } from "../store/useDawStore";
+import { connectEngineSync } from "./engineSync";
 import { decodeStoredAudio, saveProjectFile } from "./projectFile";
 import { getProjectSnapshot } from "./projectSnapshot";
 import { consumeSkipRecover } from "./recoverFlag";
@@ -20,6 +21,9 @@ import { consumeSkipRecover } from "./recoverFlag";
 export function startApp(): () => void {
   let cancelled = false;
   const initial = getProjectSnapshot();
+
+  // 문서가 바뀌면 재생 중인 소리 경로를 바뀐 부분만 맞춘다(예전 App.tsx의 schedulingSignature 효과를 대체).
+  const offEngineSync = connectEngineSync(audioEngine);
 
   const autosave = startAutosave({
     getProject: getProjectSnapshot,
@@ -71,6 +75,7 @@ export function startApp(): () => void {
 
   return () => {
     cancelled = true;
+    offEngineSync();
     autosave.dispose();
   };
 }
