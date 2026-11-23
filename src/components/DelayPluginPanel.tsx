@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { ko } from "../i18n/ko";
 import type { DelaySettings } from "../types";
 import { DELAY_SYNC_OPTIONS, getDelayTimeMs } from "../utils/delay";
 
@@ -155,7 +156,7 @@ export function DelayPluginPanel({ bpm, delay, onChange }: DelayPluginPanelProps
           <div className="dly-header">
             <div className="dly-brand-block">
               <span className="dly-brand">공간 딜레이</span>
-              <span className="dly-sub">DELAY</span>
+              <span className="dly-sub">{ko.delay.subtitle}</span>
             </div>
             <button
               className={`dly-power ${delay.enabled ? "on" : ""}`}

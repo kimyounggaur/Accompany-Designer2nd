@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ko } from "../i18n/ko";
 import { useDawStore } from "../store/useDawStore";
 import { addClipFromSource, deleteTrackWithConfirm, setSelectedClips, toggleRecordingArm } from "../app/actions";
 import type { PlaylistTool } from "../types";
@@ -472,34 +473,34 @@ export function Timeline() {
                   recording.status === "stopping"
                 }
                 onClick={() => toggleRecordingArm(track.id)}
-                title="Arm this track for vocal recording"
-                aria-label={`${track.name} 녹음 대기`}
+                title={ko.trackHeader.armHint}
+                aria-label={`${track.name} ${ko.trackHeader.arm}`}
                 aria-pressed={recording.armedTrackId === track.id}
                 type="button"
               >
-                ARM
+                {ko.trackHeader.arm}
               </button>
               <button
                 className={track.muted ? "toggle active danger" : "toggle"}
                 onClick={() => updateTrack(track.id, { muted: !track.muted })}
-                aria-label={`${track.name} 음소거`}
+                aria-label={`${track.name} ${ko.trackHeader.mute}`}
                 aria-pressed={track.muted}
                 type="button"
               >
-                M
+                {ko.trackHeader.mute}
               </button>
               <button
                 className={track.solo ? "toggle active" : "toggle"}
                 onClick={() => updateTrack(track.id, { solo: !track.solo })}
-                aria-label={`${track.name} 솔로`}
+                aria-label={`${track.name} ${ko.trackHeader.solo}`}
                 aria-pressed={track.solo}
                 type="button"
               >
-                S
+                {ko.trackHeader.solo}
               </button>
             </div>
             <label>
-              Vol
+              {ko.trackHeader.volume}
               <input
                 type="range"
                 min={0}

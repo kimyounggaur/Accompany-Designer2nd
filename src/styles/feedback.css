@@ -52,10 +52,36 @@
   border-left-color: var(--mistral-orange);
 }
 
-.toast__message {
+.toast__body {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.toast__message {
+  display: block;
   overflow-wrap: anywhere;
+}
+
+/* 브라우저 원문 오류: 접어 두고 필요할 때만 연다(개발·문의용) */
+.toast__details {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.toast__details summary {
+  width: fit-content;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.toast__details pre {
+  margin: 4px 0 0;
+  max-height: 96px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
 }
 
 .toast__count {

@@ -5,7 +5,9 @@ import { Inspector } from "./components/Inspector";
 import { Timeline } from "./components/Timeline";
 import { AppShell } from "./app/AppShell";
 import { quantizeSelectedClips, redo, undo, zoomToSelectedClips, deleteSelectedClips } from "./app/actions";
+import { ko } from "./i18n/ko";
 import { confirmAction } from "./services/confirm";
+import { CountInCancelledError, isCountInCancelled } from "./services/errors";
 import { notify, notifyError } from "./services/notify";
 import { useDialogStore } from "./state/dialogStore";
 import { TopBar } from "./ui/transport/TopBar";
@@ -100,8 +102,8 @@ export default function App() {
         const project = getProjectSnapshot();
         pending = pending.catch(() => {}).then(() => saveAutosave(project)).then(() => {
           if (!timer) unsaved = false;
-        }).catch(() => {
-          if (!cancelled) notify("error", "자동 저장에 실패했습니다. 프로젝트 파일을 따로 저장해 주세요.");
+        }).catch((error) => {
+          if (!cancelled) notifyError(error, { kind: "autosave", title: ko.failed.autosave }, { action: { label: ko.action.saveProjectFile, run: () => void handleSaveProject() } });
         });
       }, 1200);
     });
@@ -119,12 +121,12 @@ export default function App() {
             audioEngine.clearBuffers();
             restored.commit();
             importProject(restored.project);
-            if (restored.missing) notify("warning", `자동 저장된 프로젝트를 복구했습니다. 음원 ${restored.missing}개를 다시 연결해 주세요.`);
-            else notify("success", "자동 저장된 프로젝트와 음원을 복구했습니다.");
+            if (restored.missing) notify("warning", ko.notice.autosaveRestoredMissing(restored.missing));
+            else notify("success", ko.notice.autosaveRestored);
           }
         }
-      } catch {
-        if (!cancelled) notify("error", "자동 저장된 작업을 복구하지 못했습니다. 프로젝트 파일을 확인해 주세요.");
+      } catch (error) {
+        if (!cancelled) notifyError(error, { kind: "projectFile", title: ko.failed.autosaveRecover });
       } finally { ready = true; }
     };
     void recover();
@@ -227,7 +229,7 @@ export default function App() {
         event.preventDefault();
         const state = useDawStore.getState();
         copiedClips.current = state.tracks.flatMap(track => track.clips.filter(clip => state.selectedClipIds.includes(clip.id))).map(clip => ({ ...clip }));
-        notify("info", copiedClips.current.length ? `클립 ${copiedClips.current.length}개 복사됨` : "복사할 클립을 먼저 선택하세요.");
+        notify("info", copiedClips.current.length ? ko.notice.clipsCopied(copiedClips.current.length) : ko.notice.copyNeedsSelection);
         return;
       }
       if (hasCommandModifier && shortcutKey === "v") {
@@ -238,7 +240,7 @@ export default function App() {
           if (state.tracks.some(track => track.id === clip.trackId))
             state.addClip(clip.trackId, { ...clip, id: createId("clip"), startTime: state.playhead + clip.startTime - first });
         }
-        notify("info", copiedClips.current.length ? `클립 ${copiedClips.current.length}개 붙여넣기 완료` : "붙여넣을 클립이 없습니다. 먼저 클립을 복사하세요.");
+        notify("info", copiedClips.current.length ? ko.notice.clipsPasted(copiedClips.current.length) : ko.notice.pasteNeedsCopy);
         return;
       }
       if (hasCommandModifier || event.altKey && shortcutKey !== "q") return;
@@ -420,7 +422,7 @@ export default function App() {
         status: "counting-in",
         countInRemaining: beat,
       });
-      notify("info", `${beat}박 후 녹음 시작`);
+      notify("info", ko.notice.countInStarted(beat));
       playMetronomeClick(context, beat === totalBeats);
       await new Promise<void>((resolve) => {
         countInResolveRef.current = resolve;
@@ -430,7 +432,7 @@ export default function App() {
       countInResolveRef.current = undefined;
 
       if (useDawStore.getState().recording.status !== "counting-in") {
-        throw new Error("Count-in cancelled.");
+        throw new CountInCancelledError();
       }
     }
 
@@ -471,7 +473,7 @@ export default function App() {
     if (recordingState.status === "counting-in") {
       clearRecordingTimers();
       resetRecordingState();
-      notify("info", "녹음 카운트인이 취소되었습니다.");
+      notify("info", ko.notice.countInCancelled);
       return;
     }
 
@@ -593,16 +595,16 @@ export default function App() {
         countInRemaining: 0,
         waveformPeaks: [],
       });
-      notify("info", `${fileName} 녹음 중...`);
+      notify("info", ko.notice.recordingNow(fileName));
     } catch (error) {
       clearRecordingTimers();
       vocalRecorder.cancel();
       recordingRef.current = undefined;
       resetRecordingState();
-      if ((error as Error).message === "Count-in cancelled.") {
-        notify("info", "녹음 카운트인이 취소되었습니다.");
+      if (isCountInCancelled(error)) {
+        notify("info", ko.notice.countInCancelled);
       } else {
-        notifyError("녹음 시작 실패", error);
+        notifyError(error, { kind: "microphone", title: ko.failed.recordStart });
       }
     }
   }
@@ -615,7 +617,7 @@ export default function App() {
 
     try {
       setRecordingState({ status: "stopping" });
-      notify("info", `${session.fileName} 저장 중...`);
+      notify("info", ko.notice.recordingSaving(session.fileName));
       const result = vocalRecorder.stop();
       const { asset } = await audioEngine.decodeBlob(
         result.blob,
@@ -639,10 +641,10 @@ export default function App() {
         name: asset.fileName,
         stretchMode: "none",
       }, { history: false });
-      notify("success", `${asset.fileName} 녹음 완료`);
+      notify("success", ko.notice.recordingDone(asset.fileName));
     } catch (error) {
       updateClip(session.clipId, { isRecording: false }, { history: false });
-      notifyError("녹음 저장 실패", error);
+      notifyError(error, { kind: "generic", title: ko.failed.recordSave });
     } finally {
       clearRecordingTimers();
       recordingRef.current = undefined;
@@ -654,7 +656,7 @@ export default function App() {
     const fileArray = Array.from(files);
     if (!fileArray.length) return;
 
-    notify("info", `${fileArray.length}개 파일 디코딩 중...`);
+    notify("info", ko.notice.decoding(fileArray.length));
     let uploaded = 0;
 
     for (let i = 0; i < fileArray.length; i++) {
@@ -672,7 +674,7 @@ export default function App() {
           if (buffer) audioEngine.registerBuffer(missingAsset.id, buffer);
           rememberAudio(missingAsset.id, file);
           updateAudioAsset(missingAsset.id, { ...asset, id: missingAsset.id }, { history: false });
-          notify("success", `${file.name} 음원을 기존 클립에 다시 연결했습니다.`);
+          notify("success", ko.notice.relinked(file.name));
           uploaded += 1;
           continue;
         }
@@ -708,16 +710,16 @@ export default function App() {
         addAudioAsset(asset);
         addClip(targetTrack.id, clip);
         uploaded += 1;
-        if (fileArray.length > 1) notify("info", `(${i + 1}/${fileArray.length}) ${asset.fileName} 완료`);
-        else notify("success", `${asset.fileName} 업로드 완료`);
+        if (fileArray.length > 1) notify("info", ko.notice.uploadProgress(i + 1, fileArray.length, asset.fileName));
+        else notify("success", ko.notice.uploadDone(asset.fileName));
       } catch (error) {
-        notifyError(`${file.name} 디코딩 실패`, error);
+        notifyError(error, { kind: "decode", title: ko.failed.decode(file.name), fileName: file.name });
       }
     }
 
     if (fileArray.length > 1) {
-      if (uploaded === fileArray.length) notify("success", `${fileArray.length}개 파일 업로드 완료`);
-      else if (uploaded > 0) notify("warning", `${fileArray.length}개 중 ${uploaded}개만 업로드했습니다. 실패한 파일은 위 안내를 확인해 주세요.`);
+      if (uploaded === fileArray.length) notify("success", ko.notice.uploadAllDone(fileArray.length));
+      else if (uploaded > 0) notify("warning", ko.notice.uploadPartial(fileArray.length, uploaded));
     }
   }
 
@@ -731,15 +733,15 @@ export default function App() {
       anchor.download = `${project.name.replace(/[\\/:*?"<>|\s]+/g, "-").toLowerCase() || "project"}.json`;
       anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      notify("success", "음원을 포함한 프로젝트 파일을 저장했습니다.");
+      notify("success", ko.notice.projectSaved);
     } catch (error) {
-      notifyError("프로젝트 저장 실패", error);
+      notifyError(error, { kind: "generic", title: ko.failed.projectSave });
     }
   }
 
   async function handleExportMix() {
     try {
-      notify("info", "믹스 WAV를 만드는 중입니다...");
+      notify("info", ko.notice.mixRendering);
       const project = getProjectSnapshot();
       const blob = await audioEngine.renderMix(project);
       const url = URL.createObjectURL(blob);
@@ -748,9 +750,9 @@ export default function App() {
       anchor.download = `${project.name.replace(/[\\/:*?"<>|\s]+/g, "-") || "project"}-mix.wav`;
       anchor.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      notify("success", "믹스 WAV 파일을 저장했습니다.");
+      notify("success", ko.notice.mixSaved);
     } catch (error) {
-      notifyError("믹스 저장 실패", error);
+      notifyError(error, { kind: "generic", title: ko.failed.mixSave });
     }
   }
 
@@ -758,9 +760,9 @@ export default function App() {
     try {
       const data = await parseProjectFile(file);
       const confirmed = await confirmAction({
-        title: "프로젝트 불러오기",
-        message: "현재 프로젝트를 불러온 내용으로 바꾸시겠습니까? 현재 작업은 먼저 파일로 저장할 수 있습니다.",
-        confirmLabel: "불러오기",
+        title: ko.confirm.loadProject.title,
+        message: ko.confirm.loadProject.message,
+        confirmLabel: ko.confirm.loadProject.confirmLabel,
         tone: "danger",
       });
       if (!confirmed) return;
@@ -769,10 +771,10 @@ export default function App() {
       audioEngine.clearBuffers();
       restored.commit();
       importProject(restored.project);
-      if (restored.missing) notify("warning", `프로젝트를 불러왔습니다. 음원 ${restored.missing}개가 파일에 포함되지 않았습니다.`);
-      else notify("success", "프로젝트와 음원을 불러왔습니다.");
+      if (restored.missing) notify("warning", ko.notice.projectLoadedMissing(restored.missing));
+      else notify("success", ko.notice.projectLoaded);
     } catch (error) {
-      notifyError("프로젝트 불러오기 실패", error);
+      notifyError(error, { kind: "projectFile", title: ko.failed.projectLoad });
     }
   }
 

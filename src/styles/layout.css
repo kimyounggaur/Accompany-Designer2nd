@@ -358,6 +358,22 @@
   color: var(--mistral-orange);
 }
 
+/* ───────── 타임라인 트랙 머리: 한국어 이름표(녹음 대기·음소거·솔로)가 한 줄에 들어가게 ───────── */
+
+.track-header .track-toggles {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.track-header .track-toggles .toggle {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0 8px;
+  font-size: 12px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
 /* ───────── 아래 상태 줄 ───────── */
 
 .statusbar {

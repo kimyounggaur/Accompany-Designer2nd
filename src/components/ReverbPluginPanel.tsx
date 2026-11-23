@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { ko } from "../i18n/ko";
 import type { ReverbSettings } from "../types";
 import { REVERB_MODE_OPTIONS } from "../utils/reverb";
 
@@ -78,7 +79,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
             <section className="reverb-brand-module">
               <div>
                 <span className="reverb-brand">공간 리버브</span>
-                <span className="reverb-subtitle">REVERB</span>
+                <span className="reverb-subtitle">{ko.reverb.subtitle}</span>
               </div>
               <button
                 className={`reverb-power ${reverb.enabled ? "on" : ""}`}
@@ -98,7 +99,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
               </div>
               <Knob
                 display={formatPercent(reverb.drive)}
-                label="Drive"
+                label={ko.reverb.drive}
                 max={1}
                 min={0}
                 onChange={(drive) => onChange({ drive })}
@@ -137,11 +138,11 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
                   value={reverb.decay}
                 />
                 <div className="reverb-decay-scale" aria-hidden="true">
-                  <span>MAX</span>
+                  <span>{ko.reverb.decayLong}</span>
                   <span>8</span>
                   <span>4</span>
                   <span>2</span>
-                  <span>MIN</span>
+                  <span>{ko.reverb.decayShort}</span>
                 </div>
               </div>
               <strong>{reverb.decay.toFixed(1)} s</strong>
@@ -150,7 +151,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
             <section className="reverb-blend-module">
               <Knob
                 display={formatPercent(wetBlend)}
-                label="Blend"
+                label={ko.reverb.blend}
                 max={1}
                 min={0}
                 onChange={(blend) =>
@@ -164,7 +165,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
               />
               <Knob
                 display={formatPercent(reverb.width)}
-                label="Width"
+                label={ko.reverb.width}
                 max={1}
                 min={0}
                 onChange={(width) => onChange({ width })}
@@ -178,7 +179,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
             <div className="reverb-arturia-mark" aria-label="반주 디자이너">RD</div>
             <Knob
               display={`${Math.round(reverb.preDelayMs)} ms`}
-              label="Pre-delay"
+              label={ko.reverb.preDelay}
               max={250}
               min={0}
               onChange={(preDelayMs) => onChange({ preDelayMs })}
@@ -188,7 +189,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
             />
             <Knob
               display={`${Math.round(reverb.highPassHz)} Hz`}
-              label="HP Filter"
+              label={ko.reverb.highPass}
               max={2000}
               min={20}
               onChange={(highPassHz) => onChange({ highPassHz })}
@@ -198,7 +199,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
             />
             <Knob
               display={`${Math.round(reverb.lowPassHz)} Hz`}
-              label="LP Filter"
+              label={ko.reverb.lowPass}
               max={20000}
               min={1000}
               onChange={(lowPassHz) => onChange({ lowPassHz })}
@@ -208,7 +209,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
             />
 
             <section className="reverb-mod-section">
-              <span>MODULATION</span>
+              <span>{ko.reverb.modulation}</span>
               <label className="reverb-toggle">
                 <input
                   checked={reverb.modEnabled}
@@ -220,7 +221,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
               </label>
               <Knob
                 display={formatPercent(reverb.modAmount)}
-                label="Amount"
+                label={ko.reverb.amount}
                 max={1}
                 min={0}
                 onChange={(modAmount) => onChange({ modAmount })}
@@ -231,10 +232,10 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
             </section>
 
             <section className="reverb-eq-section">
-              <span>POST EQUALIZER</span>
+              <span>{ko.reverb.postEq}</span>
               <Knob
                 display={formatDb(reverb.postEqLowGain)}
-                label="Low"
+                label={ko.reverb.low}
                 max={12}
                 min={-12}
                 onChange={(postEqLowGain) => onChange({ postEqLowGain })}
@@ -244,7 +245,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
               />
               <Knob
                 display={formatDb(reverb.postEqMidGain)}
-                label="Mid"
+                label={ko.reverb.mid}
                 max={12}
                 min={-12}
                 onChange={(postEqMidGain) => onChange({ postEqMidGain })}
@@ -254,7 +255,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
               />
               <Knob
                 display={formatDb(reverb.postEqHighGain)}
-                label="High"
+                label={ko.reverb.high}
                 max={12}
                 min={-12}
                 onChange={(postEqHighGain) => onChange({ postEqHighGain })}

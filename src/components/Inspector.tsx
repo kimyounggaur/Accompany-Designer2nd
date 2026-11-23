@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import { audioEngine } from "../audio/audioEngine";
+import { ko } from "../i18n/ko";
 import { useDawStore } from "../store/useDawStore";
 import { SpectrumAnalyzer } from "./SpectrumAnalyzer";
 import { DelayPluginPanel } from "./DelayPluginPanel";
@@ -226,7 +227,7 @@ export function Inspector() {
           />
           {/* 노브 그라디언트 정의 */}
           <defs>
-            <radialGradient id={`traxGrad_${label}`} cx="40%" cy="30%" r="65%" gradientUnits="userSpaceOnUse"
+            <radialGradient id={`traxGrad_${large ? "large" : "small"}`} cx="40%" cy="30%" r="65%" gradientUnits="userSpaceOnUse"
               x1="0" y1="0" x2={size} y2={size}>
               <stop offset="0%" stopColor="#4a3a1a" />
               <stop offset="50%" stopColor="#1a1510" />
@@ -236,7 +237,7 @@ export function Inspector() {
           {/* 노브 테두리 */}
           <circle cx={cx} cy={cy} r={knobR + 2} fill="#5a4a20" />
           {/* 노브 본체 */}
-          <circle cx={cx} cy={cy} r={knobR} fill={`url(#traxGrad_${label})`} />
+          <circle cx={cx} cy={cy} r={knobR} fill={`url(#traxGrad_${large ? "large" : "small"})`} />
           <circle cx={cx} cy={cy} r={innerR} fill="#0f0d09" />
           {/* 오렌지 인디케이터 선 (T-RackS 스트라이프) */}
           <line
@@ -383,7 +384,7 @@ export function Inspector() {
         <div className="trax-rack">
           {/* 헤더 */}
           <div className="trax-header">
-            <span className="trax-brand">TRACK MIX</span>
+            <span className="trax-brand">{ko.trackMix.title}</span>
             <div className="trax-toggles">
               <div className="trax-toggle-group">
                 <button
@@ -393,7 +394,7 @@ export function Inspector() {
                 >
                   <span className="trax-switch-lever" />
                 </button>
-                <span className="trax-switch-label">MUTE</span>
+                <span className="trax-switch-label">{ko.trackMix.mute}</span>
               </div>
               <div className="trax-toggle-group">
                 <button
@@ -403,7 +404,7 @@ export function Inspector() {
                 >
                   <span className="trax-switch-lever" />
                 </button>
-                <span className="trax-switch-label">SOLO</span>
+                <span className="trax-switch-label">{ko.trackMix.solo}</span>
               </div>
             </div>
           </div>
@@ -411,7 +412,7 @@ export function Inspector() {
           {/* 노브 영역 */}
           <div className="trax-knobs">
             <TraxKnob
-              label="VOLUME"
+              label={ko.trackMix.volume}
               value={selectedTrack.volume}
               min={0} max={1}
               displayVal={`${Math.round(selectedTrack.volume * 100)}%`}
@@ -419,7 +420,7 @@ export function Inspector() {
               onChange={(v) => updateTrack(selectedTrack.id, { volume: v })}
             />
             <TraxKnob
-              label="PAN"
+              label={ko.trackMix.pan}
               value={selectedTrack.pan}
               min={-1} max={1}
               displayVal={
@@ -456,37 +457,37 @@ export function Inspector() {
             aria-label="이퀄라이저 켜기"
             type="button"
           >
-            {selectedTrack.eq.enabled ? "ON" : "OFF"}
+            {selectedTrack.eq.enabled ? ko.state.on : ko.state.off}
           </button>
         }
       >
         <div className="eq-bands">
           <EqKnob
-            label="BASS"
+            label={ko.eq.bass}
             value={selectedTrack.eq.bassGain}
             color="#3fb46b"
             onChange={(v) => updateEq({ bassGain: v })}
           />
           <EqKnob
-            label="MIDDLE LOW"
+            label={ko.eq.middleLow}
             value={selectedTrack.eq.middleLowGain}
             color="#9dbd3a"
             onChange={(v) => updateEq({ middleLowGain: v })}
           />
           <EqKnob
-            label="MIDDLE HIGH"
+            label={ko.eq.middleHigh}
             value={selectedTrack.eq.middleHighGain}
             color="#d0a338"
             onChange={(v) => updateEq({ middleHighGain: v })}
           />
           <EqKnob
-            label="HIGH"
+            label={ko.eq.high}
             value={selectedTrack.eq.highGain}
             color="#df7148"
             onChange={(v) => updateEq({ highGain: v })}
           />
           <EqKnob
-            label="PRESENCE"
+            label={ko.eq.presence}
             value={selectedTrack.eq.presenceGain}
             color="#d75c6f"
             onChange={(v) => updateEq({ presenceGain: v })}
@@ -498,7 +499,7 @@ export function Inspector() {
         <div className="comp-rack">
           {/* 상단 VU 미터 */}
           <div className="comp-vu-row">
-            <span className="comp-title">COMPRESSOR</span>
+            <span className="comp-title">{ko.compressor.title}</span>
             <div className="comp-vu-meter">
               <div className="comp-vu-scale">
                 {["20","15","10","7","5","3","1","0"].map(v => (
@@ -515,7 +516,7 @@ export function Inspector() {
                   }}
                 />
               </div>
-              <div className="comp-vu-label">DB GAIN REDUCTION</div>
+              <div className="comp-vu-label">{ko.compressor.gainReduction}</div>
             </div>
             <button
               className={`comp-power-btn ${selectedTrack.compressor.enabled ? "on" : ""}`}
@@ -524,7 +525,7 @@ export function Inspector() {
               <span className="comp-power-ring">
                 <span className="comp-power-dot" />
               </span>
-              <span className="comp-power-label">{selectedTrack.compressor.enabled ? "ON" : "OFF"}</span>
+              <span className="comp-power-label">{selectedTrack.compressor.enabled ? ko.state.on : ko.state.off}</span>
             </button>
           </div>
 
@@ -533,28 +534,28 @@ export function Inspector() {
             {(
               [
                 {
-                  label: "THRESHOLD",
+                  label: ko.compressor.threshold,
                   sub: `${selectedTrack.compressor.threshold}dB`,
                   value: selectedTrack.compressor.threshold,
                   min: -60, max: 0,
                   onChange: (v: number) => updateCompressor({ threshold: v }),
                 },
                 {
-                  label: "RATIO",
+                  label: ko.compressor.ratio,
                   sub: `${selectedTrack.compressor.ratio}:1`,
                   value: selectedTrack.compressor.ratio,
                   min: 1, max: 20,
                   onChange: (v: number) => updateCompressor({ ratio: v }),
                 },
                 {
-                  label: "ATTACK",
+                  label: ko.compressor.attack,
                   sub: `${Math.round(selectedTrack.compressor.attack * 1000)}ms`,
                   value: selectedTrack.compressor.attack,
                   min: 0.001, max: 1,
                   onChange: (v: number) => updateCompressor({ attack: v }),
                 },
                 {
-                  label: "RELEASE",
+                  label: ko.compressor.release,
                   sub: `${Math.round(selectedTrack.compressor.release * 1000)}ms`,
                   value: selectedTrack.compressor.release,
                   min: 0.01, max: 1,

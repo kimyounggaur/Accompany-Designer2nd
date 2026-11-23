@@ -8,15 +8,17 @@ import {
   Upload,
 } from "lucide-react";
 import { useRef, useState } from "react";
+import { ko } from "../i18n/ko";
+import { notify } from "../services/notify";
 import type { EffectSlot, EffectSlotType, Track } from "../types";
 
 const PRESET_KEY = "browser-daw.effectRackPresets";
 
 const EFFECT_LABELS: Record<EffectSlotType, string> = {
-  eq: "EQ",
-  comp: "Compressor",
-  delay: "Delay",
-  reverb: "Reverb",
+  eq: ko.effectRack.eq,
+  comp: ko.effectRack.comp,
+  delay: ko.effectRack.delay,
+  reverb: ko.effectRack.reverb,
 };
 
 interface EffectRackPreset {
@@ -128,13 +130,12 @@ function moveSlot(slots: EffectSlot[], slotId: string, direction: -1 | 1) {
 export function EffectRack({ track, onChange }: EffectRackProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [draggingId, setDraggingId] = useState<string>();
-  const [presetName, setPresetName] = useState(`${track.name} Rack`);
+  const [presetName, setPresetName] = useState(ko.effectRack.defaultPresetName(track.name));
   const [selectedPresetName, setSelectedPresetName] = useState("");
   const [presets, setPresets] = useState<EffectRackPreset[]>(readPresets);
-  const [message, setMessage] = useState("");
 
   function savePreset() {
-    const name = presetName.trim() || `${track.name} Rack`;
+    const name = presetName.trim() || ko.effectRack.defaultPresetName(track.name);
     const preset = createPreset(track, name);
     const next = [
       preset,
@@ -144,7 +145,7 @@ export function EffectRack({ track, onChange }: EffectRackProps) {
     writePresets(next);
     setPresets(next);
     setSelectedPresetName(name);
-    setMessage(`${name} 프리셋 저장됨`);
+    notify("success", ko.effectRack.presetSaved(name));
   }
 
   function loadPreset(preset: EffectRackPreset | undefined) {
@@ -161,11 +162,11 @@ export function EffectRack({ track, onChange }: EffectRackProps) {
     });
     setPresetName(preset.name);
     setSelectedPresetName(preset.name);
-    setMessage(`${preset.name} 프리셋 불러옴`);
+    notify("info", ko.effectRack.presetLoaded(preset.name));
   }
 
   function exportPreset() {
-    const name = presetName.trim() || `${track.name} Rack`;
+    const name = presetName.trim() || ko.effectRack.defaultPresetName(track.name);
     const preset = createPreset(track, name);
     const blob = new Blob([JSON.stringify(preset, null, 2)], {
       type: "application/json",
@@ -186,7 +187,7 @@ export function EffectRack({ track, onChange }: EffectRackProps) {
       }
       loadPreset(preset);
     } catch {
-      setMessage("프리셋 파일을 불러오지 못했습니다.");
+      notify("error", ko.effectRack.presetImportFailed);
     }
   }
 
@@ -281,7 +282,7 @@ export function EffectRack({ track, onChange }: EffectRackProps) {
               </button>
               <div className="effect-slot-label">
                 <strong>{EFFECT_LABELS[slot.type]}</strong>
-                <span>{active ? "ON" : "BYPASS"}</span>
+                <span>{active ? ko.effectRack.on : ko.effectRack.off}</span>
               </div>
               <div className="effect-order-buttons">
                 <button
@@ -307,8 +308,6 @@ export function EffectRack({ track, onChange }: EffectRackProps) {
           );
         })}
       </div>
-
-      {message && <p className="effect-rack-message">{message}</p>}
     </div>
   );
 }

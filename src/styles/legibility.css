@@ -1,0 +1,33 @@
+/*
+ * 읽을 수 있는 글자색 보정 — P2-3 (보고서 C6 '안 보이는 글자')
+ *
+ * 밝은 테마로 바뀐 뒤에도 어두운 테마용 연한 글자색이 그대로 남아 배경과 구분되지 않던 곳만 고친다
+ * (이펙트 랙 이름 1.05:1, 레벨 미터 이름·dB 1.0~1.8:1, 컴프레서 보조 글자 2.2:1 등).
+ * 화면 전체의 명암 점검(axe)과 색 토큰 정리는 P6-1·P6-2에서 한다.
+ */
+
+/* 밝은 바탕 위의 이름 */
+.effect-slot-label strong,
+.level-meter-label strong {
+  color: var(--mistral-black);
+}
+
+/* 밝은 바탕 위의 보조 글자 */
+.effect-slot-label span,
+.effect-rack-heading span,
+.meter-rack-heading span,
+.level-meter-label span,
+.level-meter-scale span,
+.comp-knob-sub {
+  color: var(--text-muted);
+}
+
+/* 컴프레서 VU 화면(어두운 바탕) 위의 글자 */
+.comp-vu-label {
+  color: #c9c9c9;
+  font-size: 9px;
+}
+
+.comp-vu-scale span {
+  color: #b0b0b0;
+}

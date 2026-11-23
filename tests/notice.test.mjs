@@ -78,10 +78,36 @@ test("정보 안내가 와도 열려 있는 오류 토스트는 지워지지 않
   assert.equal(status(), "클립 삭제됨");
 });
 
-test("notifyError는 상황과 원인을 붙여 오류 토스트로 보낸다", () => {
-  notifyError("a.txt 디코딩 실패", new Error("원인"));
+test("notifyError는 한국어 문장으로 바꿔 오류 토스트로 보내고 원문은 detail에만 둔다", () => {
+  const original = new DOMException("Unable to decode audio data", "EncodingError");
+  notifyError(original, { kind: "decode", title: "a.txt 디코딩 실패", fileName: "a.txt" });
   assert.equal(notices()[0].level, "error");
-  assert.equal(notices()[0].message, "a.txt 디코딩 실패: 원인");
+  assert.equal(notices()[0].message, "'a.txt'은(는) 오디오로 읽을 수 없습니다. mp3·wav·m4a 파일인지 확인해 주세요.");
+  assert.equal(notices()[0].detail, "EncodingError: Unable to decode audio data");
+  assert.equal(status(), notices()[0].message, "상태 줄에는 한국어 문장만 나간다");
+});
+
+test("notifyError는 이 앱이 던진 한국어 사유를 '○○ 실패: 사유'로 보인다", () => {
+  notifyError(new Error("프로젝트 파일이 올바르지 않습니다."), { kind: "projectFile", title: "프로젝트 불러오기 실패" });
+  assert.equal(notices()[0].message, "프로젝트 불러오기 실패: 프로젝트 파일이 올바르지 않습니다.");
+  assert.equal(notices()[0].detail, undefined);
+});
+
+test("같은 오류가 이어지면 ×N으로 합치고 원문 detail은 유지한다", () => {
+  const context = { kind: "generic", title: "믹스 저장 실패" };
+  notifyError(new TypeError("Failed to fetch"), context);
+  notifyError(new TypeError("Failed to fetch"), context);
+  assert.equal(notices().length, 1);
+  assert.equal(notices()[0].count, 2);
+  assert.equal(notices()[0].detail, "TypeError: Failed to fetch");
+});
+
+test("notifyError의 action 단추가 토스트에 실린다", () => {
+  let ran = 0;
+  notifyError(new DOMException("full", "QuotaExceededError"), { kind: "autosave", title: "자동 저장 실패" }, { action: { label: "프로젝트 파일로 저장", run: () => { ran += 1; } } });
+  assert.equal(notices()[0].action?.label, "프로젝트 파일로 저장");
+  notices()[0].action.run();
+  assert.equal(ran, 1);
 });
 
 test("초기 상태 줄 문구", () => {

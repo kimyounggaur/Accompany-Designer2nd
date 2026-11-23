@@ -45,7 +45,7 @@ const S = {
   confirmCancel: '[data-testid="confirm-cancel"]',
   layoutNotice: '[data-testid="layout-notice"]',
   layoutNoticeDismiss: '[data-testid="layout-notice-dismiss"]',
-  eqBassKnob: '[role=slider][aria-label="BASS 이퀄라이저"]',
+  eqBassKnob: '[role=slider][aria-label="저음 이퀄라이저"]',
 };
 
 /** 소리 소스 시작 횟수, rAF 호출 수, 최종 출력 분석기를 잡아 두는 측정 훅 */
@@ -408,10 +408,76 @@ test.describe("A6·C6 안내 문구", () => {
   });
 
   test("실패 안내에 브라우저 영어 오류 문장이 그대로 나오지 않는다", async ({ page }) => {
-    test.fail(true, 'P2-3에서 해결 예정 (11/13 기준 "Unable to decode audio data" 노출)');
     await openApp(page);
     await upload(page, NOT_AUDIO);
     await expect(page.locator(S.status)).not.toContainText(/unable|decode|error/i);
+  });
+});
+
+test.describe("P2-3 한국어 문구", () => {
+  test("업로드 실패는 해결 방법이 담긴 한국어이고, 브라우저 원문은 접힌 '자세히 보기'에만 있다", async ({ page }) => {
+    await openApp(page);
+    await upload(page, NOT_AUDIO);
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("'not-audio.txt'은(는) 오디오로 읽을 수 없습니다");
+    await expect(alert).toContainText("mp3·wav·m4a 파일인지 확인해 주세요");
+    await expect(page.locator(S.status)).not.toContainText(/unable|decode|error/i);
+
+    const details = alert.locator("details");
+    await expect(details).toBeVisible();
+    await expect(details).not.toHaveAttribute("open", "");
+    await details.locator("summary").click();
+    await expect(details).toHaveAttribute("open", "");
+    await expect(details.locator("pre")).toContainText("Unable to decode audio data");
+  });
+
+  test("마이크 권한이 거부되면 사이트 설정을 안내하는 한국어 오류가 나온다", async ({ page }) => {
+    await page.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException("Permission denied", "NotAllowedError"));
+    });
+    await openApp(page);
+    await page.click('button[title="보컬 녹음"]');
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("마이크 사용이 허용되지 않았습니다", { timeout: 10_000 });
+    await expect(alert).toContainText("사이트 설정");
+    await expect(page.locator(S.status)).not.toContainText(/denied|NotAllowed/i);
+  });
+
+  test("트랙 머리의 녹음 대기·음소거·솔로 단추가 한국어이고 머리 폭 안에 들어온다", async ({ page }) => {
+    await openApp(page);
+    const header = page.locator(S.trackHeader).first();
+    const frame = (await header.boundingBox())!;
+    const labels = ["녹음 대기", "음소거", "솔로"];
+    const boxes = [];
+    for (const label of labels) {
+      const button = header.getByRole("button", { name: new RegExp(`${label}$`) });
+      await expect(button).toHaveText(label);
+      const box = (await button.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(frame.x - 0.5);
+      expect(box.x + box.width).toBeLessThanOrEqual(frame.x + frame.width + 0.5);
+      // 글자가 단추 밖으로 넘치거나 두 줄로 꺾이지 않는다
+      expect(await button.evaluate((el) => el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+      boxes.push(box);
+    }
+    // 서로 겹치지 않는다
+    for (let i = 1; i < boxes.length; i += 1) {
+      expect(boxes[i].x).toBeGreaterThanOrEqual(boxes[i - 1].x + boxes[i - 1].width - 0.5);
+    }
+  });
+
+  test("인스펙터의 라벨·이름표에 영어 이름이 남아 있지 않다", async ({ page }) => {
+    await openApp(page);
+    const inspector = page.locator(S.inspector);
+    const text = (await inspector.textContent()) ?? "";
+    for (const korean of ["트랙 믹스", "저음", "중저음", "중고음", "고음", "프레즌스", "컴프레서", "기준 음량", "압축 비율", "반응 시간", "회복 시간", "이퀄라이저", "딜레이", "리버브"]) {
+      expect(text, korean).toContain(korean);
+    }
+    const english = /track mix|mute|solo|volume|bass|presence|compressor|threshold|ratio|attack|release|bypass|reverb|delay|modulation|equalizer|blend|width|filter/i;
+    expect(text).not.toMatch(english);
+    const names = await inspector.locator("[aria-label],[title]").evaluateAll((els) =>
+      els.flatMap((el) => [el.getAttribute("aria-label"), el.getAttribute("title")].filter(Boolean) as string[]),
+    );
+    expect(names.filter((name) => english.test(name))).toEqual([]);
   });
 });
 
