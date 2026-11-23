@@ -21,12 +21,28 @@ export class Param {
 }
 
 export class Node {
-  constructor() {
+  /** 만들 때 붙는 이름(gain, delay, convolver …). 시험에서 노드를 종류별로 찾는 데 쓴다. */
+  kind;
+  /** 지금 이어져 있는 도착 노드들(연결선 기록) */
+  connections = [];
+  constructor(kind = 'node') {
+    this.kind = kind;
     for (const name of ['gain', 'frequency', 'Q', 'threshold', 'ratio', 'attack', 'release', 'pan', 'delayTime', 'knee']) this[name] = new Param();
   }
-  /** 실제 Web Audio처럼 받는 노드를 돌려준다(이어 붙여 쓸 수 있게). */
-  connect(destination) { return destination; }
-  disconnect() { this.disconnected = true; }
+  /** 실제 Web Audio처럼 받는 노드를 돌려준다(이어 붙여 쓸 수 있게). 같은 도착지에 또 이어도 한 줄이다. */
+  connect(destination) {
+    if (!this.connections.includes(destination)) this.connections.push(destination);
+    return destination;
+  }
+  /** 도착지를 주면 그 줄만, 없으면 모두 끊는다(모두 끊을 때만 `disconnected`가 켜진다). */
+  disconnect(destination) {
+    if (destination === undefined) {
+      this.connections = [];
+      this.disconnected = true;
+    } else {
+      this.connections = this.connections.filter((to) => to !== destination);
+    }
+  }
 }
 
 export class Source extends Node {
@@ -45,22 +61,65 @@ export class Source extends Node {
 }
 
 export class FakeContext {
-  state = 'running'; currentTime = 0; sampleRate = 44100; destination = new Node();
-  createGain() { return new Node(); }
-  createAnalyser() { return new Node(); }
-  createDynamicsCompressor() { return new Node(); }
-  createWaveShaper() { return new Node(); }
-  createBiquadFilter() { return new Node(); }
-  createStereoPanner() { return new Node(); }
-  createDelay() { return new Node(); }
-  createConvolver() { return new Node(); }
-  createChannelSplitter() { return new Node(); }
-  createChannelMerger() { return new Node(); }
-  createBufferSource() { return new Source(); }
+  state = 'running'; currentTime = 0; sampleRate = 44100; destination = new Node('destination');
+  /** 만든 노드들(종류별로 세어 볼 때) */
+  nodes = [];
+  /** createBuffer 호출 기록: { channels, length, sampleRate } */
+  buffersCreated = [];
+  make(kind) { const node = new Node(kind); this.nodes.push(node); return node; }
+  createGain() { return this.make('gain'); }
+  createAnalyser() { return this.make('analyser'); }
+  createDynamicsCompressor() { return this.make('compressor'); }
+  createWaveShaper() { return this.make('waveshaper'); }
+  createBiquadFilter() { return this.make('biquad'); }
+  createStereoPanner() { return this.make('panner'); }
+  createDelay() { return this.make('delay'); }
+  createConvolver() { return this.make('convolver'); }
+  createChannelSplitter() { return this.make('splitter'); }
+  createChannelMerger() { return this.make('merger'); }
+  createBufferSource() { const source = new Source('source'); this.nodes.push(source); return source; }
   createBuffer(channels, length, sampleRate) {
+    this.buffersCreated.push({ channels, length, sampleRate });
     const data = Array.from({ length: channels }, () => new Float32Array(length));
-    return { duration: length / sampleRate, length, numberOfChannels: channels, sampleRate, getChannelData: (n) => data[n] };
+    return {
+      duration: length / sampleRate, length, numberOfChannels: channels, sampleRate,
+      getChannelData: (n) => data[n],
+      copyToChannel: (source, channel) => { data[channel].set(source); },
+    };
   }
+  /** 종류별로 만든 노드 */
+  all(kind) { return this.nodes.filter((node) => node.kind === kind); }
+}
+
+/**
+ * 손으로 돌리는 이펙트 타이머(가상 시간). `advance(ms)`를 부르면 그 시간 안에 닿은 일을 시각 순서대로 한다.
+ * 이펙트가 맡기는 일 `after(ms, action)`은 취소 함수를 돌려준다.
+ */
+export function createManualTimers() {
+  let now = 0;
+  let nextId = 1;
+  const pending = new Map();
+  return {
+    after(ms, action) {
+      const id = nextId++;
+      pending.set(id, { due: now + ms, action });
+      return () => { pending.delete(id); };
+    },
+    advance(ms) {
+      const until = now + ms;
+      for (;;) {
+        let first;
+        for (const [id, entry] of pending) if (entry.due <= until && (!first || entry.due < first.entry.due)) first = { id, entry };
+        if (!first) break;
+        pending.delete(first.id);
+        now = Math.max(now, first.entry.due);
+        first.entry.action();
+      }
+      now = until;
+    },
+    get pending() { return pending.size; },
+    get now() { return now; },
+  };
 }
 
 /** 손으로 돌리는 틱 타이머. `fire()`를 부르면 예약기가 한 번 깨어난다. */

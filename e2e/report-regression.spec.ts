@@ -950,6 +950,133 @@ test.describe("P3-2 재생 시계·예약기", () => {
   });
 });
 
+// ───────────────────────── P3-3 트랙 경로와 이펙트 약속 ─────────────────────────
+
+/** 같은 규칙으로 한 줄 측정을 남긴다(병합 기록의 이전/이후 표용). */
+const measured33 = (name: string, value: unknown) => console.log(`P3-3 측정 [${P32_ENGINE}] ${name}: ${JSON.stringify(value)}`);
+
+const delayPower = '[aria-label="딜레이 켜기"]';
+const reverbPower = '[aria-label="리버브 켜기"]';
+const reverbDecay = '[aria-label="잔향 길이"]';
+
+test.describe("P3-3 트랙 경로와 이펙트 약속", () => {
+  test("재생 중 딜레이·리버브를 5번씩 켜고 꺼도 소리 소스는 다시 시작하지 않고 튐이 0회다", async ({ page }) => {
+    await openApp(page, { query: P32_QUERY });
+    await upload(page, STEADY);
+    await page.click(S.play);
+    await page.waitForTimeout(600);
+    await resetProbe(page);
+    const startsBefore = await starts(page);
+
+    for (let i = 0; i < 5; i++) {
+      for (const power of [delayPower, reverbPower]) {
+        await page.click(power); // 켜기
+        await page.waitForTimeout(150);
+        await page.click(power); // 끄기
+        await page.waitForTimeout(150);
+      }
+    }
+    await page.waitForTimeout(400);
+    const probe = await readProbe(page);
+    const restarted = (await starts(page)) - startsBefore;
+    measured33("딜레이·리버브 5번씩 켜고 끄기", { ...probe, 새로_시작한_소리: restarted });
+    if (probe.jumps > 0) console.log("P3-3 진단", JSON.stringify(await explainJumps(page, probe)));
+    expect(probe.peak).toBeGreaterThan(0.15); // 내내 소리가 났다(헛통과 방지)
+    if (onNewEngine) {
+      expect(restarted).toBe(0);
+      expect(probe.jumps).toBe(0);
+    }
+  });
+
+  test("재생 중 이펙트 순서를 10번 바꿔도 소리 소스는 다시 시작하지 않고 튐이 0회다", async ({ page }) => {
+    await openApp(page, { query: P32_QUERY });
+    await upload(page, STEADY);
+    await page.click(S.play);
+    await page.waitForTimeout(600);
+    await resetProbe(page);
+    const startsBefore = await starts(page);
+
+    const down = page.locator('.effect-slot').first().locator('button[title="아래로 이동"]');
+    const up = page.locator('.effect-slot').nth(1).locator('button[title="위로 이동"]');
+    for (let i = 0; i < 5; i++) {
+      await down.click(); // 1번 슬롯을 아래로
+      await page.waitForTimeout(200);
+      await up.click(); // 다시 위로
+      await page.waitForTimeout(200);
+    }
+    await page.waitForTimeout(300);
+    const probe = await readProbe(page);
+    const restarted = (await starts(page)) - startsBefore;
+    measured33("이펙트 순서 10번 바꾸기", { ...probe, 새로_시작한_소리: restarted });
+    if (probe.jumps > 0) console.log("P3-3 진단", JSON.stringify(await explainJumps(page, probe)));
+    expect(probe.peak).toBeGreaterThan(0.15);
+    if (onNewEngine) {
+      expect(restarted).toBe(0);
+      expect(probe.jumps).toBe(0);
+      expect(probe.longestGapMs).toBeLessThanOrEqual(20);
+    }
+  });
+
+  test("딜레이를 켜고 재생하며 녹음을 시작해도 출력 최대값이 5% 넘게 바뀌지 않는다(딜레이 소리 유지)", async ({ page }) => {
+    await openApp(page, { query: P32_QUERY });
+    await upload(page, STEADY);
+    await page.click(S.play);
+    await page.waitForTimeout(600);
+    const dry = await outputPeak(page, 1000); // 딜레이 끔
+    await page.click(delayPower);
+    await page.waitForTimeout(800);
+    const before = await outputPeak(page, 1000); // 딜레이 켬
+    const startsBefore = await starts(page);
+
+    await page.click('button[title="보컬 녹음"]');
+    await expect(page.locator(S.record)).toHaveClass(/recording/, { timeout: 8000 });
+    await page.waitForTimeout(800);
+    const during = await outputPeak(page, 1000);
+    const restarted = (await starts(page)) - startsBefore;
+    await page.click(S.stop);
+    measured33("딜레이+녹음 출력 최대값", { 딜레이_끔: dry, 녹음_전: before, 녹음_중: during, 차이: Math.abs(during - before) / before, 새로_시작한_소리: restarted });
+
+    expect(before).toBeLessThan(dry * 0.9); // 딜레이가 정말 들어가 있다(220Hz에 에코가 겹쳐 작아진다)
+    expect(Math.abs(during - before) / before).toBeLessThanOrEqual(0.05);
+    if (onNewEngine) expect(restarted).toBe(0);
+  });
+
+  test("잔향 길이 노브를 1초 동안 끄는 동안 잔향을 만들지 않고, 놓은 뒤에 한 번 만든다", async ({ page }) => {
+    await page.addInitScript(() => {
+      (window as any).__irBuilds = 0;
+      const create = BaseAudioContext.prototype.createBuffer;
+      BaseAudioContext.prototype.createBuffer = function (channels: number, length: number, sampleRate: number) {
+        // 잔향(임펄스 응답)은 스테레오이고 0.2초 이상이다. 다른 곳에서 만드는 짧은 버퍼는 세지 않는다.
+        if (channels === 2 && length >= sampleRate * 0.2 - 1) (window as any).__irBuilds++;
+        return create.call(this, channels, length, sampleRate);
+      };
+    });
+    await openApp(page, { query: P32_QUERY });
+    await upload(page, STEADY);
+    await page.click(reverbPower);
+    await page.click(S.play);
+    await page.waitForTimeout(800);
+    const irBuilds = () => page.evaluate(() => (window as any).__irBuilds as number);
+    const base = await irBuilds();
+
+    // 노브를 끄는 것처럼 30ms마다 값을 바꾼다(약 1초)
+    for (let step = 1; step <= 33; step++) {
+      await setRange(page, reverbDecay, Math.round((2.4 + step * 0.1) * 10) / 10);
+      await page.waitForTimeout(30);
+    }
+    const whileDragging = (await irBuilds()) - base;
+    await page.waitForTimeout(500); // 놓은 뒤(150ms 조용해지면 한 번 만든다)
+    const afterRelease = (await irBuilds()) - base;
+    measured33("잔향 길이 노브 1초", { 끄는_동안_만든_수: whileDragging, 놓은_뒤_만든_수: afterRelease });
+    if (onNewEngine) {
+      expect(whileDragging).toBe(0);
+      expect(afterRelease).toBe(1);
+    } else {
+      expect(afterRelease).toBeGreaterThanOrEqual(1);
+    }
+  });
+});
+
 test.describe("A6·C6 안내 문구", () => {
   test("도구를 바꾼 뒤에도 업로드 실패가 화면에 보인다", async ({ page }) => {
     await openApp(page);
