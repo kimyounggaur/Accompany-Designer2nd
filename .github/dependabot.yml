@@ -1,0 +1,11 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      react: { patterns: ["react", "react-dom", "@types/react*"] }
+      build: { patterns: ["vite", "typescript", "@playwright/test"] }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
