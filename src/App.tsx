@@ -9,17 +9,20 @@ import { decodeStoredAudio, saveProjectFile } from "./app/projectFile";
 import { getProjectSnapshot } from "./app/projectSnapshot";
 import { openExportDialog, resetExport } from "./app/exporting";
 import { cancelRecording, disposeRecording, stopRecording, toggleRecording } from "./app/recording";
+import { countFixed } from "./domain/project/issues";
 import { ko } from "./i18n/ko";
 import { confirmAction } from "./services/confirm";
 import { notify, notifyError } from "./services/notify";
+import { setPeaks } from "./services/peaksCache";
+import { hasRememberedAudio, rememberAudio } from "./services/persistence/audioBlobs";
+import { readProjectFile, restoreAudio } from "./services/persistence/projectFile";
 import { useDialogStore } from "./state/dialogStore";
 import { isExportOpen } from "./state/exportStore";
 import { isRecordingBusy, useRecordingStore } from "./state/recordingStore";
 import { TopBar } from "./ui/transport/TopBar";
-import type { Clip } from "./types";
+import type { Clip } from "./domain/types";
 import { createId, getProjectDuration } from "./utils/audioMath";
 import { useDawStore } from "./store/useDawStore";
-import { hasRememberedAudio, parseProjectFile, rememberAudio, restoreAudio } from "./storage/projectStorage";
 
 export default function App() {
   const isPlaying = useDawStore((state) => state.isPlaying);
@@ -290,17 +293,17 @@ export default function App() {
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
       try {
-        const { asset } = await audioEngine.decodeFile(file);
-        rememberAudio(asset.id, file);
+        const { asset, peaks } = await audioEngine.decodeFile(file);
 
         const state = useDawStore.getState();
-        const missingAsset = Object.values(state.audioAssets).find((existing) =>
+        const missingAsset = Object.values(state.assets).find((existing) =>
           !hasRememberedAudio(existing.id) && existing.fileName === file.name && Math.abs(existing.duration - asset.duration) < 0.25,
         );
         if (missingAsset) {
           const buffer = audioEngine.getBuffer(asset.id);
           if (buffer) audioEngine.registerBuffer(missingAsset.id, buffer);
           rememberAudio(missingAsset.id, file);
+          setPeaks(missingAsset.id, peaks);
           updateAudioAsset(missingAsset.id, { ...asset, id: missingAsset.id }, { history: false });
           notify("success", ko.notice.relinked(file.name));
           uploaded += 1;
@@ -335,6 +338,8 @@ export default function App() {
           muted: false,
         };
 
+        rememberAudio(asset.id, file);
+        setPeaks(asset.id, peaks);
         addAudioAsset(asset);
         addClip(targetTrack.id, clip);
         uploaded += 1;
@@ -353,7 +358,7 @@ export default function App() {
 
   async function handleLoadProject(file: File) {
     try {
-      const data = await parseProjectFile(file);
+      const loaded = await readProjectFile(file);
       const confirmed = await confirmAction({
         title: ko.confirm.loadProject.title,
         message: ko.confirm.loadProject.message,
@@ -361,14 +366,16 @@ export default function App() {
         tone: "danger",
       });
       if (!confirmed) return;
-      const restored = await restoreAudio(data, decodeStoredAudio);
+      const restored = await restoreAudio(loaded, decodeStoredAudio);
       cancelRecording();
       audioEngine.stop();
       audioEngine.clearBuffers();
       restored.commit();
-      importProject(restored.project);
+      importProject(restored.doc);
       if (restored.missing) notify("warning", ko.notice.projectLoadedMissing(restored.missing));
       else notify("success", ko.notice.projectLoaded);
+      const fixed = countFixed(loaded.issues);
+      if (fixed) notify("info", ko.notice.valuesFixed(fixed));
     } catch (error) {
       notifyError(error, { kind: "projectFile", title: ko.failed.projectLoad });
     }

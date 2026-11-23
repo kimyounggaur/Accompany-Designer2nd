@@ -1,6 +1,6 @@
 /** 녹음 결과를 문서에 넣는 변경 함수 */
-import type { AudioAsset, Clip } from "../../types";
-import { createDefaultTrack } from "../docDefaults";
+import type { AssetMeta, Clip } from "../../domain/types";
+import { createDefaultTrack } from "../../domain/project/defaults";
 import { history, type EditOptions } from "../history";
 import { baseOf, locateTrack } from "./locate";
 
@@ -8,7 +8,7 @@ export interface AddRecordingInput {
   /** 녹음을 놓을 트랙. 그 사이 사라졌다면 새 트랙을 만들어 놓는다. */
   trackId: string;
   /** 디코드한 녹음 음원 */
-  asset: AudioAsset;
+  asset: AssetMeta;
   clipId: string;
   /** 클립이 놓일 곡 위치(초) */
   startTime: number;
@@ -46,7 +46,7 @@ export function createRecordingClip(input: AddRecordingInput): Clip {
 export function addRecording(input: AddRecordingInput, options?: EditOptions): string {
   let placedOn = input.trackId;
   history.edit("녹음 추가", (doc) => {
-    doc.audioAssets[input.asset.id] = input.asset;
+    doc.assets[input.asset.id] = input.asset;
     let index = locateTrack(baseOf(doc), input.trackId);
     if (index < 0) {
       const track = createDefaultTrack(doc.tracks.length + 1);

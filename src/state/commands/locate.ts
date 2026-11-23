@@ -1,5 +1,5 @@
 import { isDraft, original, type Draft } from "immer";
-import type { ProjectDoc } from "../../types";
+import type { ProjectDoc } from "../../domain/types";
 
 /**
  * 편집 함수(recipe) 안에서 "바꾸기 전 문서"를 프록시 없이 읽기 위한 도우미.

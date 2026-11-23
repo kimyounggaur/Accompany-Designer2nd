@@ -12,7 +12,7 @@
  * 올림 처리(onupgradeneeded) 안에서는 비동기 해시 계산을 기다릴 수 없으므로 새 저장소만 만든다.
  * 옛 자동 저장(v1)을 새 구조로 옮기는 일은 연 다음에 한다(autosave.ts의 migrateLegacyAutosave).
  */
-import type { DawProject } from "../../types";
+import type { ProjectDoc } from "../../domain/types";
 
 export const DB_NAME = "accompany-designer";
 export const DB_VERSION = 2;
@@ -32,8 +32,11 @@ export const PROJECT_SCHEMA_VERSION = 2;
 
 export interface ProjectRecord {
   schemaVersion: typeof PROJECT_SCHEMA_VERSION;
-  /** blobUrl 같은 실행 중에만 의미 있는 값을 뺀 프로젝트 문서 */
-  doc: DawProject;
+  /**
+   * 프로젝트 문서(문서 형식 v2). 기록의 `schemaVersion`은 이 기록의 칸 구조 버전이라 그대로 2다.
+   * 6월~11월 초에 저장된 기록의 문서는 옛 모양(audioAssets·timeMarkers·waveformPeaks)이며, 읽을 때 검사기(parseProject)가 새 모양으로 바꾼다.
+   */
+  doc: ProjectDoc;
   /** 음원 id → 해시. 음원 데이터는 assets 저장소에 있다. 데이터가 없는 음원(다시 연결 필요)은 빠져 있다. */
   assetHashes: Record<string, string>;
   updatedAt: number;

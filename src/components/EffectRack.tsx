@@ -8,9 +8,11 @@ import {
   Upload,
 } from "lucide-react";
 import { useRef, useState } from "react";
+import { countFixed } from "../domain/project/issues";
+import { parsePreset, parsePresetList } from "../domain/project/parsePreset";
+import type { EffectRackPreset, EffectSlot, EffectSlotType, Track } from "../domain/types";
 import { ko } from "../i18n/ko";
 import { notify } from "../services/notify";
-import type { EffectSlot, EffectSlotType, Track } from "../types";
 
 const PRESET_KEY = "browser-daw.effectRackPresets";
 
@@ -21,25 +23,16 @@ const EFFECT_LABELS: Record<EffectSlotType, string> = {
   reverb: ko.effectRack.reverb,
 };
 
-interface EffectRackPreset {
-  name: string;
-  createdAt: string;
-  effectChain: EffectSlot[];
-  eq: Track["eq"];
-  compressor: Track["compressor"];
-  delay: Track["delay"];
-  reverb: Track["reverb"];
-}
-
 interface EffectRackProps {
   track: Track;
   onChange: (patch: Partial<Omit<Track, "clips">>) => void;
 }
 
+/** 브라우저 저장소의 프리셋 목록. 읽을 수 없는 항목은 건너뛴다(검사는 도메인의 parsePreset). */
 function readPresets(): EffectRackPreset[] {
   try {
     const raw = window.localStorage.getItem(PRESET_KEY);
-    return raw ? JSON.parse(raw) as EffectRackPreset[] : [];
+    return raw ? parsePresetList(JSON.parse(raw) as unknown) : [];
   } catch {
     return [];
   }
@@ -181,11 +174,14 @@ export function EffectRack({ track, onChange }: EffectRackProps) {
 
   async function importPreset(file: File) {
     try {
-      const preset = JSON.parse(await file.text()) as EffectRackPreset;
-      if (!preset.effectChain?.length) {
-        throw new Error("Invalid preset.");
+      const parsed = parsePreset(JSON.parse(await file.text()) as unknown);
+      if (!parsed.ok) {
+        notify("error", ko.effectRack.presetImportFailed);
+        return;
       }
-      loadPreset(preset);
+      loadPreset(parsed.value);
+      const fixed = countFixed(parsed.issues);
+      if (fixed) notify("info", ko.notice.valuesFixed(fixed));
     } catch {
       notify("error", ko.effectRack.presetImportFailed);
     }

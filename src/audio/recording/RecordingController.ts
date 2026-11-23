@@ -11,7 +11,7 @@
  *
  * 이 파일은 `audio/` 층이라 스토어·문서·안내 문구를 모른다. 그런 것은 `host`로 주입받고, 연결은 `app/recording.ts`가 한다.
  */
-import type { AudioAsset } from "../../types";
+import type { AssetMeta } from "../../domain/types";
 import { clamp } from "../../utils/audioMath";
 import { Metronome, planCountIn, type Click, type CountInPlan } from "../Metronome";
 import type { TickTimer } from "../engine/tickTimer";
@@ -54,7 +54,7 @@ export type RecordingEvent =
 export interface RecordingCommit {
   trackId: string;
   /** 디코드한 음원 정보(이름·길이·파형 …) */
-  asset: AudioAsset;
+  asset: AssetMeta;
   clipId: string;
   /** 클립이 놓일 곳(초) */
   startTime: number;
@@ -79,7 +79,7 @@ export interface RecordingEngine {
   getBaseLatency(): number;
   getMonitorInput(): AudioNode | undefined;
   /** 녹음 WAV를 디코드해 엔진에 등록하고 음원 정보를 돌려준다. */
-  decode(blob: Blob, fileName: string, assetId: string): Promise<AudioAsset>;
+  decode(blob: Blob, fileName: string, assetId: string): Promise<AssetMeta>;
 }
 
 /** 컨트롤러가 스토어·문서·안내에 하는 일 */

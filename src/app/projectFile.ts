@@ -1,17 +1,25 @@
 import { audioEngine } from "../audio/currentEngine";
+import { createWaveformPeaks } from "../audio/waveformPeaks";
+import type { AssetMeta } from "../domain/types";
 import { ko } from "../i18n/ko";
 import { notify, notifyError } from "../services/notify";
-import { exportProject } from "../storage/projectStorage";
-import type { AudioAsset } from "../types";
+import { setPeaks } from "../services/peaksCache";
+import { exportProject } from "../services/persistence/projectFile";
 import { getProjectSnapshot } from "./projectSnapshot";
 
-/** 저장된 음원 데이터를 소리 데이터로 풀어 둔다. 자동 복구 때도 쓰므로 소리 재생 허락(제스처)이 없어도 풀 수 있게 OfflineAudioContext를 쓴다. */
-export async function decodeStoredAudio(blob: Blob, asset: AudioAsset): Promise<{ asset: AudioAsset; commit: () => void }> {
+/**
+ * 저장된 음원 데이터를 소리 데이터로 풀어 둔다. 자동 복구 때도 쓰므로 소리 재생 허락(제스처)이 없어도 풀 수 있게 OfflineAudioContext를 쓴다.
+ * `commit()`을 부르면 소리 엔진에 올리고 파형을 채운다(풀기만 하는 동안에는 지금 프로젝트에 영향이 없다).
+ */
+export async function decodeStoredAudio(blob: Blob, asset: AssetMeta): Promise<{ commit: () => void }> {
   const context = new OfflineAudioContext(1, 1, 44100);
   const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+  const peaks = createWaveformPeaks(buffer);
   return {
-    asset: { ...asset, blobUrl: asset.sourceType === "recording" ? URL.createObjectURL(blob) : undefined },
-    commit: () => audioEngine.registerBuffer(asset.id, buffer),
+    commit: () => {
+      audioEngine.registerBuffer(asset.id, buffer);
+      setPeaks(asset.id, peaks);
+    },
   };
 }
 

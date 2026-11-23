@@ -1,5 +1,5 @@
 /** 클립에 대한 문서 변경 함수. 선택(selection) 같은 화면 상태는 다루지 않는다 — 부르는 쪽이 정해서 넘긴다. */
-import type { Clip, ProjectDoc } from "../../types";
+import type { Clip, ProjectDoc } from "../../domain/types";
 import { clamp, createId, findClip, getClipPlaybackRate, getClipTimelineDuration, snapTime } from "../../utils/audioMath";
 import { fail, ok, type CommandResult } from "../commandResult";
 import { history, type EditOptions } from "../history";
@@ -32,7 +32,7 @@ function cloneClipFromSource(doc: ProjectDoc, sourceClipId: string | undefined, 
     };
   }
 
-  const firstAsset = Object.values(doc.audioAssets)[0];
+  const firstAsset = Object.values(doc.assets)[0];
   if (!firstAsset) return undefined;
 
   return {
@@ -199,7 +199,7 @@ export function resetClipSources(clipIds: readonly string[], options?: EditOptio
       const before = base.tracks[trackIndex].clips[clipIndex];
       const clip = doc.tracks[trackIndex].clips[clipIndex];
       clip.offset = 0;
-      clip.duration = base.audioAssets[before.audioBufferId]?.duration ?? before.duration;
+      clip.duration = base.assets[before.audioBufferId]?.duration ?? before.duration;
     }
   }, options);
 }

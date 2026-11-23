@@ -94,8 +94,7 @@ export function createHarness(options = {}) {
         duration: config.assetDuration,
         sampleRate: SAMPLE_RATE,
         channels: 1,
-        waveformPeaks: [0.1, 0.2],
-        sourceType: "recording",
+        source: "recording",
       };
     },
   };

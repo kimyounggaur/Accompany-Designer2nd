@@ -12,7 +12,7 @@
  */
 import { produce, type Draft } from "immer";
 import type { StoreApi } from "zustand/vanilla";
-import type { ProjectDoc } from "../types";
+import type { ProjectDoc } from "../domain/types";
 import { projectStore, type ProjectState } from "./projectStore";
 
 export interface EditOptions {

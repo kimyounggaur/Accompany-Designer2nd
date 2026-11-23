@@ -1,0 +1,258 @@
+{
+  "format": "accompany-designer-project",
+  "version": 1,
+  "project": {
+    "id": "project-nov",
+    "name": "11월 반주",
+    "bpm": 100,
+    "sampleRate": 44100,
+    "tracks": [
+      {
+        "id": "track-1",
+        "name": "트랙 1",
+        "volume": 0.86,
+        "pan": 0,
+        "muted": false,
+        "solo": false,
+        "eq": {
+          "enabled": true,
+          "bassGain": 0,
+          "middleLowGain": 0,
+          "middleHighGain": 0,
+          "highGain": 0,
+          "presenceGain": 0
+        },
+        "compressor": {
+          "enabled": false,
+          "threshold": -18,
+          "ratio": 3,
+          "attack": 0.012,
+          "release": 0.2
+        },
+        "delay": {
+          "enabled": false,
+          "delayTimeMs": 375,
+          "feedback": 0.35,
+          "dry": 1,
+          "wet": 0.35,
+          "highCutHz": 8000,
+          "syncEnabled": false,
+          "syncDivision": "1/4",
+          "pingPong": false
+        },
+        "reverb": {
+          "enabled": false,
+          "mode": "plate",
+          "preDelayMs": 20,
+          "decay": 2.4,
+          "drive": 0.15,
+          "dry": 1,
+          "wet": 0.28,
+          "width": 0.8,
+          "highPassHz": 200,
+          "lowPassHz": 8000,
+          "modEnabled": false,
+          "modAmount": 0.15,
+          "postEqLowGain": 0,
+          "postEqMidGain": 0,
+          "postEqHighGain": 0
+        },
+        "effectChain": [
+          {
+            "id": "fx-1-eq",
+            "type": "eq",
+            "enabled": true
+          },
+          {
+            "id": "fx-1-comp",
+            "type": "comp",
+            "enabled": false
+          },
+          {
+            "id": "fx-1-delay",
+            "type": "delay",
+            "enabled": false
+          },
+          {
+            "id": "fx-1-reverb",
+            "type": "reverb",
+            "enabled": false
+          }
+        ],
+        "clips": [
+          {
+            "id": "clip-1",
+            "audioBufferId": "asset-1",
+            "name": "칼림바 반주.wav",
+            "trackId": "track-1",
+            "startTime": 0,
+            "offset": 0,
+            "duration": 8,
+            "sourceBpm": 100,
+            "stretchMode": "resample",
+            "gain": 1,
+            "fadeIn": 0,
+            "fadeOut": 0,
+            "fadeCurve": "equalPower",
+            "muted": false
+          },
+          {
+            "id": "clip-2",
+            "audioBufferId": "asset-1",
+            "name": "칼림바 반주.wav",
+            "trackId": "track-1",
+            "startTime": 8,
+            "offset": 2,
+            "duration": 4,
+            "sourceBpm": 100,
+            "stretchMode": "resample",
+            "gain": 0.8,
+            "fadeIn": 0.5,
+            "fadeOut": 0.5,
+            "fadeCurve": "equalPower",
+            "muted": false
+          }
+        ]
+      },
+      {
+        "id": "track-2",
+        "name": "녹음",
+        "volume": 1,
+        "pan": -0.25,
+        "muted": false,
+        "solo": false,
+        "eq": {
+          "enabled": true,
+          "bassGain": 3,
+          "middleLowGain": -2,
+          "middleHighGain": -2,
+          "highGain": 1,
+          "presenceGain": 0
+        },
+        "compressor": {
+          "enabled": true,
+          "threshold": -18,
+          "ratio": 3,
+          "attack": 0.012,
+          "release": 0.2
+        },
+        "delay": {
+          "enabled": false,
+          "delayTimeMs": 375,
+          "feedback": 0.35,
+          "dry": 1,
+          "wet": 0.35,
+          "highCutHz": 8000,
+          "syncEnabled": false,
+          "syncDivision": "1/4",
+          "pingPong": false
+        },
+        "reverb": {
+          "enabled": true,
+          "mode": "hall",
+          "preDelayMs": 20,
+          "decay": 2.4,
+          "drive": 0.15,
+          "dry": 1,
+          "wet": 0.28,
+          "width": 0.8,
+          "highPassHz": 200,
+          "lowPassHz": 8000,
+          "modEnabled": false,
+          "modAmount": 0.15,
+          "postEqLowGain": 0,
+          "postEqMidGain": 0,
+          "postEqHighGain": 0
+        },
+        "effectChain": [
+          {
+            "id": "fx-2-eq",
+            "type": "eq",
+            "enabled": true
+          },
+          {
+            "id": "fx-2-comp",
+            "type": "comp",
+            "enabled": false
+          },
+          {
+            "id": "fx-2-delay",
+            "type": "delay",
+            "enabled": false
+          },
+          {
+            "id": "fx-2-reverb",
+            "type": "reverb",
+            "enabled": false
+          }
+        ],
+        "clips": [
+          {
+            "id": "clip-3",
+            "audioBufferId": "asset-2",
+            "name": "녹음 001.wav",
+            "trackId": "track-2",
+            "startTime": 1.5,
+            "offset": 0,
+            "duration": 3.2,
+            "sourceBpm": 100,
+            "stretchMode": "none",
+            "gain": 1,
+            "fadeIn": 0,
+            "fadeOut": 0,
+            "fadeCurve": "equalPower",
+            "muted": false
+          }
+        ]
+      }
+    ],
+    "audioAssets": {
+      "asset-1": {
+        "id": "asset-1",
+        "fileName": "칼림바 반주.wav",
+        "duration": 8,
+        "sampleRate": 44100,
+        "channels": 2,
+        "waveformPeaks": [
+          0,
+          0.25,
+          0.5,
+          1,
+          0.5,
+          0.25,
+          0
+        ],
+        "mimeType": "audio/wav",
+        "byteSize": 1411244
+      },
+      "asset-2": {
+        "id": "asset-2",
+        "fileName": "녹음 001.wav",
+        "duration": 3.2,
+        "sampleRate": 48000,
+        "channels": 1,
+        "waveformPeaks": [
+          0.1,
+          0.9,
+          0.4
+        ],
+        "sourceType": "recording",
+        "mimeType": "audio/wav",
+        "byteSize": 307244,
+        "recordedAt": "2026-06-12T05:14:09.120Z",
+        "detectedBpm": 98
+      }
+    },
+    "timeMarkers": [
+      {
+        "id": "marker-1",
+        "time": 4,
+        "name": "후렴"
+      }
+    ]
+  },
+  "audio": {
+    "asset-1": "data:audio/wav;base64,AQID",
+    "asset-2": "data:audio/wav;base64,BAUG"
+  }
+}

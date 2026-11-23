@@ -1,4 +1,4 @@
-import type { Clip } from "../../types";
+import type { Clip } from "../../domain/types";
 import type { VoicePlan } from "../../domain/timeline/clipMath";
 import { scheduleClipEnvelope } from "./clipEnvelope";
 

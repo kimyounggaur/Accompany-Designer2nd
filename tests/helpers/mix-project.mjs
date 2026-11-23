@@ -1,7 +1,7 @@
 /** 믹스 내보내기 시험에 쓰는 프로젝트 만들기 */
 import { produce } from "immer";
 
-const { createDefaultTrack } = await import("../../src/state/docDefaults.ts");
+const { createDefaultTrack } = await import("../../src/domain/project/defaults.ts");
 
 let counter = 0;
 
@@ -34,5 +34,5 @@ export function enableEffect(track, type) {
 }
 
 export function makeProject({ bpm = 120, tracks = [makeTrack([makeClip()])], master, sampleRate = 44100, name = "프로젝트" } = {}) {
-  return { id: "project", name, bpm, sampleRate, master, tracks, audioAssets: {}, timeMarkers: [] };
+  return { schemaVersion: 2, id: "project", name, bpm, timeSignature: { beats: 4, unit: 4 }, sampleRate, master, tracks, assets: {}, markers: [] };
 }

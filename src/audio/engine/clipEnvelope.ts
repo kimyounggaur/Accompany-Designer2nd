@@ -1,4 +1,4 @@
-import type { Clip, FadeCurve } from "../../types";
+import type { Clip, FadeCurve } from "../../domain/types";
 import type { VoicePlan } from "../../domain/timeline/clipMath";
 
 function createFadeCurve(

@@ -7,11 +7,11 @@ globalThis.window = { AudioContext: FakeContext };
 const { projectStore, getDoc } = await import("../src/state/projectStore.ts");
 const { history } = await import("../src/state/history.ts");
 const commands = await import("../src/state/commands/index.ts");
-const { createEmptyDoc } = await import("../src/state/docDefaults.ts");
+const { createEmptyDoc } = await import("../src/domain/project/defaults.ts");
 const { getProjectSnapshot } = await import("../src/app/projectSnapshot.ts");
 const { connectEngineSync } = await import("../src/app/engineSync.ts");
 const { documentChanged } = await import("../src/services/persistence/projectRecord.ts");
-const { parseProjectFile } = await import("../src/storage/projectStorage.ts");
+const { projectFromJson } = await import("../src/services/persistence/projectFile.ts");
 const { useDawStore } = await import("../src/store/useDawStore.ts");
 const { normalizeMasterVolumeDb } = await import("../src/domain/master/volume.ts");
 
@@ -82,16 +82,29 @@ test("끌면서 이어지는 변경은 한 단계로 묶인다", () => {
   assert.equal(getDoc().master.volumeDb, 0);
 });
 
-test("프로젝트를 열면 마스터 볼륨도 따라오고, 없거나 범위 밖이면 보정한다", () => {
-  const project = (master) => ({ ...createEmptyDoc(), id: "p", ...(master === undefined ? {} : { master }) });
-  const noMaster = project();
-  delete noMaster.master;
+// 파일은 JSON을 거치므로(Infinity는 null이 된다) 같은 길을 따라 만든다.
+const viaJson = (value) => JSON.parse(JSON.stringify(value));
+const stored = (project) => viaJson({ format: "accompany-designer-project", version: 1, project, audio: {} });
+/** 6월~11월 초의 프로젝트 모양(v1 껍데기 안): 음원 목록 이름이 audioAssets, 마커 이름이 timeMarkers */
+function legacyProject() {
+  const { schemaVersion, timeSignature, assets, markers, ...rest } = createEmptyDoc();
+  return { ...rest, audioAssets: {}, timeMarkers: [] };
+}
+
+test("프로젝트를 열면 마스터 볼륨도 따라온다(없는 옛 파일은 0 dB, 범위 밖은 읽을 때 한 번 보정한다)", () => {
+  // 채우기·보정은 문서를 바꾸는 쪽(replaceDoc)이 아니라 읽는 쪽(검사기)이 한다.
+  const open = (master) => {
+    const project = legacyProject();
+    if (master === undefined) delete project.master;
+    else project.master = master;
+    commands.replaceDoc(projectFromJson(stored(project)).doc);
+  };
   commands.setMasterVolumeDb(-9);
-  commands.replaceDoc(noMaster);
+  open(undefined);
   assert.deepEqual(getDoc().master, { volumeDb: 0 }, "옛 프로젝트는 0 dB");
-  commands.replaceDoc(project({ volumeDb: -12 }));
+  open({ volumeDb: -12 });
   assert.equal(getDoc().master.volumeDb, -12);
-  commands.replaceDoc(project({ volumeDb: 40 }));
+  open({ volumeDb: 40 });
   assert.equal(getDoc().master.volumeDb, 6);
 });
 
@@ -108,7 +121,7 @@ test("저장용 스냅샷과 화면 저장소에 마스터가 비친다", () => 
 });
 
 test("자동 저장은 마스터만 바뀌어도 저장 대상으로 본다", () => {
-  const base = { name: "a", bpm: 120, tracks: [], audioAssets: {}, timeMarkers: [] };
+  const base = { name: "a", bpm: 120, tracks: [], assets: {}, markers: [] };
   const master = { volumeDb: 0 };
   assert.equal(documentChanged({ ...base, master }, { ...base, master }), false);
   assert.equal(documentChanged({ ...base, master: { volumeDb: -3 } }, { ...base, master }), true);
@@ -126,20 +139,23 @@ test("마스터만 바뀌어도 엔진에 알린다(트랙 참조는 그대로)"
   assert.equal(calls[0].doc.tracks, before.tracks);
 });
 
-const file = (value) => new File([JSON.stringify(value)], "session.json", { type: "application/json" });
-const stored = (project) => ({ format: "accompany-designer-project", version: 1, project, audio: {} });
-
-test("저장 파일: 마스터가 없어도(옛 파일) 열리고, 있으면 그대로 읽는다", async () => {
-  const project = { ...createEmptyDoc() };
+test("저장 파일: 마스터가 없어도(옛 파일) 열리고 0 dB로 채워지며, 있으면 그대로 읽는다", () => {
+  const project = legacyProject();
   delete project.master;
-  assert.equal((await parseProjectFile(file(stored(project)))).project.master, undefined);
+  assert.deepEqual(projectFromJson(stored(project)).doc.master, { volumeDb: 0 });
   const withMaster = { ...project, master: { volumeDb: -6 } };
-  assert.deepEqual((await parseProjectFile(file(stored(withMaster)))).project.master, { volumeDb: -6 });
+  assert.deepEqual(projectFromJson(stored(withMaster)).doc.master, { volumeDb: -6 });
 });
 
-test("저장 파일: 마스터 모양이 틀리면 거부한다", async () => {
+test("저장 파일: 마스터 모양이 틀리면 거부한다", () => {
   for (const master of ["bad", { volumeDb: "x" }, {}, { volumeDb: Number.POSITIVE_INFINITY }, [], null]) {
-    const project = { ...createEmptyDoc(), master };
-    await assert.rejects(parseProjectFile(file(stored(project))), undefined, JSON.stringify(master));
+    const project = { ...legacyProject(), master };
+    assert.throws(() => projectFromJson(stored(project)), undefined, JSON.stringify(master));
   }
+});
+
+test("저장 파일: 마스터 볼륨이 범위를 벗어나면 가까운 값으로 고친다", () => {
+  const loaded = projectFromJson(stored({ ...legacyProject(), master: { volumeDb: 40 } }));
+  assert.equal(loaded.doc.master.volumeDb, 6);
+  assert.ok(loaded.issues.some((issue) => issue.path === "master.volumeDb" && issue.fixed));
 });

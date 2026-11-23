@@ -1,7 +1,8 @@
-import type { EffectSlotType, Track } from "../../types";
+import { DEFAULT_EFFECT_ORDER } from "../../domain/project/defaults";
+import type { EffectSlotType, Track } from "../../domain/types";
 
-/** 이펙트 사슬이 비어 있는(옛 프로젝트) 트랙의 기본 순서 */
-export const DEFAULT_EFFECT_ORDER: readonly EffectSlotType[] = ["eq", "comp", "delay", "reverb"];
+/** 기본 이펙트 순서는 문서 기본값(domain/project/defaults.ts) 한 곳에만 둔다. 사슬이 비어 있는 트랙은 이 순서로 본다. */
+export { DEFAULT_EFFECT_ORDER };
 
 /** 이펙트 자신의 켜기 값. 딜레이·리버브는 옛 프로젝트에서 없을 수 있다. */
 function settingsEnabled(track: Pick<Track, "eq" | "compressor" | "delay" | "reverb">, type: EffectSlotType): boolean {

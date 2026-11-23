@@ -1,7 +1,7 @@
 /**
  * 저장소에 넣고 빼는 기록의 모양을 만드는 순수 함수들(브라우저 저장소 없이 시험할 수 있다).
  */
-import type { DawProject } from "../../types";
+import type { ProjectDoc } from "../../domain/types";
 import { PROJECT_SCHEMA_VERSION, type ProjectRecord } from "./db";
 
 /** 프로젝트 기록을 몇 개까지 남길지. 새 프로젝트를 시작해도 바로 이전 작업을 잃지 않게 한다(v1은 한 칸을 덮어썼다). */
@@ -26,7 +26,7 @@ export function isProjectRecord(value: unknown): value is ProjectRecord {
   );
 }
 
-export function buildProjectRecord(doc: DawProject, assetHashes: Record<string, string>, updatedAt: number): ProjectRecord {
+export function buildProjectRecord(doc: ProjectDoc, assetHashes: Record<string, string>, updatedAt: number): ProjectRecord {
   return { schemaVersion: PROJECT_SCHEMA_VERSION, doc, assetHashes, updatedAt };
 }
 
@@ -77,10 +77,11 @@ export interface AutosaveSlice {
   name: string;
   bpm: number;
   tracks: unknown;
-  audioAssets: unknown;
-  timeMarkers: unknown;
-  /** 마스터 설정(볼륨). 옛 시험 자료에는 없을 수 있다 */
+  assets: unknown;
+  markers: unknown;
+  /** 마스터 설정(볼륨)·박자표. 옛 시험 자료에는 없을 수 있다 */
   master?: unknown;
+  timeSignature?: unknown;
 }
 
 /** 저장해야 할 문서(이름·템포·마스터·트랙·음원·마커)가 바뀌었는가. 선택·재생 위치·확대 같은 화면 상태는 저장 대상이 아니다. */
@@ -89,9 +90,10 @@ export function documentChanged(state: AutosaveSlice, previous: AutosaveSlice): 
     state.name !== previous.name ||
     state.bpm !== previous.bpm ||
     state.tracks !== previous.tracks ||
-    state.audioAssets !== previous.audioAssets ||
-    state.timeMarkers !== previous.timeMarkers ||
-    state.master !== previous.master
+    state.assets !== previous.assets ||
+    state.markers !== previous.markers ||
+    state.master !== previous.master ||
+    state.timeSignature !== previous.timeSignature
   );
 }
 

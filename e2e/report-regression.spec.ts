@@ -634,7 +634,8 @@ test.describe("P2-4 자동 저장 서비스", () => {
     await (await download).saveAs(saved); // 파일 이름은 운영체제 글자 처리에 따라 달라지므로 내용으로 확인한다
     const file = JSON.parse(fs.readFileSync(saved, "utf8"));
     expect(file.format).toBe("accompany-designer-project");
-    expect(file.project.bpm).toBe(95); // 저장하지 못한 변경도 파일에는 들어 있다
+    expect(file.schemaVersion).toBe(2);
+    expect(file.doc.bpm).toBe(95); // 저장하지 못한 변경도 파일에는 들어 있다
     fs.rmSync(saved, { force: true });
 
     // 공간이 생기면 다음 변경부터 다시 저장된다.
@@ -1976,4 +1977,81 @@ test("C12·D6 노브를 키보드로 3번 올리면 3단계 오르고 초점이 
   for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowUp");
   await expect(page.locator(S.eqBassKnob)).toHaveAttribute("aria-valuenow", "1.5");
   await expect(page.locator(S.eqBassKnob)).toBeFocused();
+});
+
+test.describe("P4-1 문서 형식 v2", () => {
+  /** 6월~11월 초의 프로젝트 모양(음원 목록 audioAssets, 마커 timeMarkers, 음원 안에 파형·blobUrl) */
+  const legacyProject = (overrides: Record<string, unknown> = {}) => ({
+    id: "legacy-file",
+    name: "옛 파일",
+    bpm: 100,
+    sampleRate: 44100,
+    tracks: [
+      {
+        id: "t1", name: "트랙 1", volume: 0.86, pan: 0, muted: false, solo: false,
+        clips: [{ id: "c1", audioBufferId: "a1", trackId: "t1", name: "옛 음원", startTime: 0, offset: 0, duration: 8, sourceBpm: 100, stretchMode: "none", gain: 1, fadeIn: 0, fadeOut: 0 }],
+      },
+    ],
+    audioAssets: { a1: { id: "a1", fileName: "옛 음원.wav", duration: 8, sampleRate: 44100, channels: 2, waveformPeaks: [0, 0.5, 1], blobUrl: "javascript:alert(1)" } },
+    timeMarkers: [],
+    ...overrides,
+  });
+
+  const writeTemp = (testInfo: TestInfo, value: unknown) => {
+    const file = path.join(os.tmpdir(), `ad2-p41-${testInfo.workerIndex}-${Date.now()}.json`);
+    fs.writeFileSync(file, JSON.stringify(value));
+    return file;
+  };
+
+  test("11월 형식 파일을 열면 소리와 파형이 돌아오고, 범위를 벗어난 값은 고쳐서 알린다", async ({ page }, testInfo) => {
+    await openApp(page);
+    const wav = fs.readFileSync(WAV).toString("base64");
+    // 템포 999는 허용 범위(20~300)를 벗어난다 → 300으로 고치고 1개로 센다. 파형 점·blobUrl은 읽지 않는다.
+    const file = writeTemp(testInfo, {
+      format: "accompany-designer-project", version: 1, project: legacyProject({ bpm: 999 }), audio: { a1: `data:audio/wav;base64,${wav}` },
+    });
+    await page.setInputFiles(S.projectInput, file);
+    await page.locator(S.confirmOk).click();
+
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 5000 });
+    await expect(page.locator(S.tempo)).toHaveValue("300");
+    await expect(page.locator(S.status)).toContainText("값 1개를 허용 범위로 고쳤습니다");
+
+    // 문서에는 파형이 없다. 음원을 풀면서 다시 계산해 그린다.
+    const painted = await page.locator(`${S.clip} canvas`).first().evaluate((canvas: HTMLCanvasElement) => {
+      const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+      let count = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] > 0) count += 1;
+      return count;
+    });
+    expect(painted).toBeGreaterThan(200);
+    fs.rmSync(file, { force: true });
+  });
+
+  test("6월 형식 파일(음원 없음)은 열리고, 음원이 빠졌다고 알린다", async ({ page }, testInfo) => {
+    await openApp(page);
+    const file = writeTemp(testInfo, legacyProject());
+    await page.setInputFiles(S.projectInput, file);
+    await page.locator(S.confirmOk).click();
+    await expect(page.locator(S.status)).toContainText("음원 1개가 파일에 포함되지 않았습니다");
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    await expect(page.locator(S.tempo)).toHaveValue("100");
+    fs.rmSync(file, { force: true });
+  });
+
+  test("프로젝트 파일이 아닌 JSON과 악의적인 값은 열지 않고, 지금 작업은 그대로다", async ({ page }, testInfo) => {
+    await openApp(page);
+    await upload(page);
+    for (const bad of [{ anything: true }, legacyProject({ tracks: [{ id: "__proto__", name: "x", volume: 1, pan: 0, muted: false, solo: false, clips: [] }] })]) {
+      const file = writeTemp(testInfo, bad);
+      await page.setInputFiles(S.projectInput, file);
+      const alert = page.getByRole("alert").filter({ hasText: "프로젝트 불러오기 실패" });
+      await expect(alert).toBeVisible();
+      await expect(page.locator(S.clip)).toHaveCount(1); // 확인창을 거치기 전에 거부되므로 지금 작업은 그대로
+      await expect(page.locator(S.confirmDialog)).toBeHidden();
+      fs.rmSync(file, { force: true });
+      await alert.getByRole("button", { name: "안내 닫기" }).click();
+      await expect(alert).toHaveCount(0);
+    }
+  });
 });

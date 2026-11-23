@@ -1,8 +1,8 @@
 /** 프로젝트 전체(이름·템포·음원·마커·통째로 바꾸기)에 대한 문서 변경 함수 */
 import { MASTER_VOLUME_DEFAULT_DB, normalizeMasterVolumeDb } from "../../domain/master/volume";
-import type { AudioAsset, ProjectDoc } from "../../types";
+import { createEmptyDoc } from "../../domain/project/defaults";
+import type { AssetMeta, ProjectDoc } from "../../domain/types";
 import { clamp, createId } from "../../utils/audioMath";
-import { createDefaultTrack, createEmptyDoc, normalizeTrack } from "../docDefaults";
 import { history, type EditOptions } from "../history";
 import { getDoc } from "../projectStore";
 import { baseOf } from "./locate";
@@ -29,17 +29,17 @@ export function setMasterVolumeDb(volumeDb: number, options?: EditOptions): bool
   }, { key: "master-volume", ...options });
 }
 
-export function addAudioAsset(asset: AudioAsset, options?: EditOptions): boolean {
-  return history.edit("음원 추가", (doc) => { doc.audioAssets[asset.id] = asset; }, options);
+export function addAudioAsset(asset: AssetMeta, options?: EditOptions): boolean {
+  return history.edit("음원 추가", (doc) => { doc.assets[asset.id] = asset; }, options);
 }
 
 /** 음원 정보를 고친다. 값이 모두 같으면 아무것도 하지 않는다. 없는 id면 patch로 새로 만든다(예전 동작). */
-export function updateAudioAsset(assetId: string, patch: Partial<AudioAsset>, options?: EditOptions): boolean {
+export function updateAudioAsset(assetId: string, patch: Partial<AssetMeta>, options?: EditOptions): boolean {
   return history.edit("음원 정보 변경", (doc) => {
-    const existing = baseOf(doc).audioAssets[assetId];
-    const same = existing && Object.entries(patch).every(([key, value]) => existing[key as keyof AudioAsset] === value);
+    const existing = baseOf(doc).assets[assetId];
+    const same = existing && Object.entries(patch).every(([key, value]) => existing[key as keyof AssetMeta] === value);
     if (same) return;
-    doc.audioAssets[assetId] = { ...existing, ...patch } as AudioAsset;
+    doc.assets[assetId] = { ...existing, ...patch } as AssetMeta;
   }, options);
 }
 
@@ -47,31 +47,23 @@ export function addTimeMarker(time: number, options?: EditOptions): boolean {
   const markerTime = Math.max(0, time);
   const id = createId("marker");
   return history.edit("마커 추가", (doc) => {
-    doc.timeMarkers.push({ id, time: markerTime, name: `마커 ${doc.timeMarkers.length + 1}` });
+    doc.markers.push({ id, time: markerTime, name: `마커 ${doc.markers.length + 1}` });
   }, options);
 }
 
 export function clearTimeMarkers(options?: EditOptions): boolean {
   return history.edit("마커 모두 지우기", (doc) => {
-    if (!baseOf(doc).timeMarkers.length) return;
-    doc.timeMarkers = [];
+    if (!baseOf(doc).markers.length) return;
+    doc.markers = [];
   }, options);
 }
 
-/** 불러온 프로젝트로 문서를 통째로 바꾼다. 빠진 값은 기본값으로 채우고 범위를 보정한다. */
+/**
+ * 불러온 프로젝트로 문서를 통째로 바꾼다. 받는 문서는 이미 검사기(parseProject)를 거친 것이어야 한다
+ * (빠진 값 채우기·범위 보정은 그쪽에서 한 번만 한다).
+ */
 export function replaceDoc(project: ProjectDoc, options?: EditOptions): boolean {
-  return history.edit("프로젝트 열기", (doc) => {
-    doc.id = project.id || createId("project");
-    doc.name = project.name || "가져온 세션";
-    doc.bpm = clamp(project.bpm || 120, 20, 300);
-    doc.sampleRate = project.sampleRate || 44100;
-    doc.master = { volumeDb: normalizeMasterVolumeDb(project.master?.volumeDb ?? MASTER_VOLUME_DEFAULT_DB) };
-    doc.tracks = project.tracks?.length
-      ? project.tracks.map((track, index) => normalizeTrack(track, index))
-      : [createDefaultTrack(1)];
-    doc.audioAssets = project.audioAssets || {};
-    doc.timeMarkers = project.timeMarkers || [];
-  }, options);
+  return history.edit("프로젝트 열기", (doc) => { Object.assign(doc, project); }, options);
 }
 
 /** 새 프로젝트(트랙 1개) */

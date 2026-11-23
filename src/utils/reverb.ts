@@ -1,5 +1,6 @@
+import { DEFAULT_REVERB_SETTINGS } from "../domain/project/defaults";
+import type { ReverbMode, ReverbSettings } from "../domain/types";
 import { ko } from "../i18n/ko";
-import type { ReverbMode, ReverbSettings } from "../types";
 import { clamp } from "./audioMath";
 
 const REVERB_MODES: ReverbMode[] = ["plate", "room", "hall"];
@@ -12,24 +13,6 @@ export const REVERB_MODE_OPTIONS: Array<{
   { value: "room", label: ko.reverb.modes.room },
   { value: "hall", label: ko.reverb.modes.hall },
 ];
-
-export const DEFAULT_REVERB_SETTINGS: ReverbSettings = {
-  enabled: false,
-  mode: "plate",
-  preDelayMs: 20,
-  decay: 2.4,
-  drive: 0.15,
-  dry: 1,
-  wet: 0.28,
-  width: 0.8,
-  highPassHz: 200,
-  lowPassHz: 8000,
-  modEnabled: false,
-  modAmount: 0.15,
-  postEqLowGain: 0,
-  postEqMidGain: 0,
-  postEqHighGain: 0,
-};
 
 export function normalizeReverbSettings(
   reverb?: Partial<ReverbSettings>,

@@ -7,7 +7,7 @@
 import { ko } from "../i18n/ko";
 import { notifyError } from "../services/notify";
 import { projectStore, type ProjectState } from "../state/projectStore";
-import type { ProjectDoc } from "../types";
+import type { ProjectDoc } from "../domain/types";
 import type { StoreApi } from "zustand/vanilla";
 
 export interface DocSyncTarget {

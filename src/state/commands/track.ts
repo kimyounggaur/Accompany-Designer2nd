@@ -1,6 +1,6 @@
 /** 트랙에 대한 문서 변경 함수 */
-import type { Track } from "../../types";
-import { createDefaultTrack } from "../docDefaults";
+import type { Track } from "../../domain/types";
+import { createDefaultTrack } from "../../domain/project/defaults";
 import { history, type EditOptions } from "../history";
 import { getDoc } from "../projectStore";
 import { baseOf, locateTrack } from "./locate";

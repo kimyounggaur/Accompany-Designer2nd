@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { produce } from "immer";
 import { FakeContext, createManualTimers } from "./helpers/fake-audio.mjs";
 
-const { createDefaultTrack } = await import("../src/state/docDefaults.ts");
+const { createDefaultTrack } = await import("../src/domain/project/defaults.ts");
 const { TrackStrip, CROSSFADE_SECONDS, REORDER_DIP_SECONDS, IDLE_DISCONNECT_MS } = await import("../src/audio/engine/TrackStrip.ts");
 
 const near = (actual, expected, message = "") => assert.ok(Math.abs(actual - expected) < 1e-9, `${message} ${actual} ≠ ${expected}`);

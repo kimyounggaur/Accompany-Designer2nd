@@ -1,12 +1,14 @@
 import { audioEngine } from "../audio/currentEngine";
 import { AudioEngineV2 } from "../audio/engine/AudioEngine";
 import { ko } from "../i18n/ko";
+import { countFixed } from "../domain/project/issues";
 import { notify, notifyError } from "../services/notify";
+import { recallAudio } from "../services/persistence/audioBlobs";
 import { loadAutosave, startAutosave } from "../services/persistence/autosave";
+import { restoreAudio } from "../services/persistence/projectFile";
 import { readLatencyOffsetMs, writeLatencyOffsetMs } from "../services/recordingSettings";
 import { useAutosaveStore } from "../state/autosaveStore";
 import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
-import { recallAudio, restoreAudio } from "../storage/projectStorage";
 import { useDawStore } from "../store/useDawStore";
 import { connectEngineSync } from "./engineSync";
 import { decodeStoredAudio, saveProjectFile } from "./projectFile";
@@ -57,8 +59,8 @@ export function startApp(): () => void {
       now.name === initial.name &&
       now.bpm === initial.bpm &&
       now.master === initial.master &&
-      now.timeMarkers === initial.timeMarkers &&
-      Object.keys(now.audioAssets).length === 0
+      now.markers === initial.markers &&
+      Object.keys(now.assets).length === 0
     );
   };
 
@@ -69,15 +71,17 @@ export function startApp(): () => void {
       const loaded = consumeSkipRecover() ? undefined : await loadAutosave();
       if (cancelled) return;
       if (loaded && untouched()) {
-        const restored = await restoreAudio(loaded.stored, decodeStoredAudio);
+        const restored = await restoreAudio(loaded.loaded, decodeStoredAudio);
         if (cancelled) return;
         if (untouched()) {
           audioEngine.clearBuffers();
           restored.commit();
-          useDawStore.getState().importProject(restored.project);
+          useDawStore.getState().importProject(restored.doc);
           useAutosaveStore.getState().setStatus({ state: "saved", savedAt: loaded.updatedAt });
           if (restored.missing) notify("warning", ko.notice.autosaveRestoredMissing(restored.missing));
           else notify("success", ko.notice.autosaveRestored);
+          const fixed = countFixed(loaded.loaded.issues);
+          if (fixed) notify("info", ko.notice.valuesFixed(fixed));
           return;
         }
       }

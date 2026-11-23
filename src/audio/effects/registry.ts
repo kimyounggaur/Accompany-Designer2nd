@@ -1,4 +1,4 @@
-import type { EffectSlotType, Track } from "../../types";
+import type { EffectSlotType, Track } from "../../domain/types";
 import { createCompressor } from "./Compressor";
 import { createDelay, delayStructureKey } from "./Delay";
 import type { EffectNode, EffectTimers } from "./EffectNode";

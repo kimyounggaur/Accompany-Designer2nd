@@ -1,4 +1,4 @@
-import type { ReverbMode, ReverbSettings } from "../../types";
+import type { ReverbMode, ReverbSettings } from "../../domain/types";
 
 /** 같은 씨앗이면 늘 같은 수열을 내는 난수 생성기(0 이상 1 미만). */
 export function mulberry32(seed: number): () => number {

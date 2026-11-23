@@ -7,10 +7,11 @@
  *
  * 화면(React)과 오디오 엔진은 모른다. 필요한 것(현재 프로젝트, 음원 데이터, 변경 알림)은 호출하는 쪽이 넘겨 준다(AutosaveHost).
  */
+import { parseProject } from "../../domain/project/parseProject";
+import { FORMAT } from "../../domain/project/serialize";
+import type { ProjectDoc } from "../../domain/types";
 import { ko } from "../../i18n/ko";
 import { useAutosaveStore } from "../../state/autosaveStore";
-import { FORMAT, VERSION, projectCopy, validateProject, type Stored } from "../../storage/projectStorage";
-import type { DawProject } from "../../types";
 import { notify, notifyError } from "../notify";
 import { assetKey } from "./assetHash";
 import {
@@ -23,6 +24,7 @@ import {
   type AssetRecord,
   type ProjectRecord,
 } from "./db";
+import { projectFailure, type LoadedProject } from "./projectFile";
 import {
   MAX_PROJECT_RECORDS,
   STORAGE_WARN_RATIO,
@@ -36,6 +38,11 @@ import {
   type AutosaveSlice,
 } from "./projectRecord";
 import { AutosaveScheduler } from "./scheduler";
+
+const hasOwn = (target: object, key: string): boolean => Object.prototype.hasOwnProperty.call(target, key);
+
+/** 옛 자동 저장(v1) 한 칸이 쓰던 껍데기 버전 */
+const LEGACY_AUTOSAVE_VERSION = 1;
 
 // ───────────────────────── 쓰기 ─────────────────────────
 
@@ -63,14 +70,14 @@ function putAssetIfMissing(store: IDBObjectStore, hash: string, blob: Blob, adde
  * 중간에 실패(저장 공간 부족 등)하면 전부 취소되어 이전 기록이 그대로 남는다.
  */
 export async function saveAutosave(
-  project: DawProject,
+  project: ProjectDoc,
   audioFor: (assetId: string) => Blob | undefined,
   now: number = Date.now(),
 ): Promise<SaveOutcome> {
-  const doc = projectCopy(project);
+  const doc = project;
   const assetHashes: Record<string, string> = {};
   const blobsByHash = new Map<string, Blob>();
-  for (const assetId of Object.keys(doc.audioAssets)) {
+  for (const assetId of Object.keys(doc.assets)) {
     const blob = audioFor(assetId);
     if (!blob) continue; // 데이터가 없는 음원(다시 연결 필요)은 문서에만 남긴다.
     const hash = await assetKey(blob, `${doc.id}:${assetId}`);
@@ -126,8 +133,8 @@ export async function pruneStorage(protectId: string): Promise<void> {
 // ───────────────────────── 읽기 ─────────────────────────
 
 export interface LoadedAutosave {
-  /** 프로젝트 파일과 같은 모양이라 restoreAudio가 그대로 받는다 */
-  stored: Stored;
+  /** 프로젝트 파일을 읽은 것과 같은 모양이라 restoreAudio가 그대로 받는다 */
+  loaded: LoadedProject;
   updatedAt: number;
 }
 
@@ -147,18 +154,21 @@ export async function loadAutosave(): Promise<LoadedAutosave | undefined> {
     }
     if (!isProjectRecord(record)) return undefined;
 
-    const project = validateProject(record.doc);
+    // 기록 안의 문서는 옛 모양(audioAssets)일 수도 새 모양(assets)일 수도 있다. 검사기가 버전을 알아보고 v2로 읽는다.
+    const parsed = parseProject(record.doc);
+    if (!parsed.ok) throw projectFailure(parsed.issues);
+    const project = parsed.value;
     const assets = tx.objectStore(STORE.assets);
     const audio: Record<string, Blob> = {};
     await Promise.all(
       Object.entries(record.assetHashes).map(async ([assetId, hash]) => {
-        if (!(assetId in project.audioAssets)) return;
+        if (!hasOwn(project.assets, assetId)) return;
         const stored = await requestToPromise<unknown>(assets.get(hash));
         const blob = (stored as Partial<AssetRecord> | undefined)?.blob;
         if (blob instanceof Blob) audio[assetId] = blob;
       }),
     );
-    return { stored: { format: FORMAT, version: VERSION, project, audio }, updatedAt: record.updatedAt };
+    return { loaded: { doc: project, issues: parsed.issues, audio }, updatedAt: record.updatedAt };
   });
 }
 
@@ -183,14 +193,16 @@ export async function migrateLegacyAutosave(db: IDBDatabase, now: number = Date.
   if (legacy === undefined) return "none";
   if (newer !== undefined) return "skipped";
 
-  const value = legacy as Partial<Stored> | null;
-  if (!value || typeof value !== "object" || value.format !== FORMAT || value.version !== VERSION) throw new Error("지원하지 않는 자동 저장 형식입니다.");
-  const project = validateProject(value.project);
+  const value = legacy as { format?: unknown; version?: unknown; audio?: Record<string, unknown> } | null;
+  if (!value || typeof value !== "object" || value.format !== FORMAT || value.version !== LEGACY_AUTOSAVE_VERSION) throw new Error("지원하지 않는 자동 저장 형식입니다.");
+  const parsed = parseProject(value);
+  if (!parsed.ok) throw projectFailure(parsed.issues);
+  const project = parsed.value;
 
   const assetHashes: Record<string, string> = {};
   const blobsByHash = new Map<string, Blob>();
   for (const [assetId, blob] of Object.entries(value.audio ?? {})) {
-    if (!(assetId in project.audioAssets) || !(blob instanceof Blob)) continue;
+    if (!hasOwn(project.assets, assetId) || !(blob instanceof Blob)) continue;
     const hash = await assetKey(blob, `${project.id}:${assetId}`);
     assetHashes[assetId] = hash;
     if (!blobsByHash.has(hash)) blobsByHash.set(hash, blob);
@@ -258,7 +270,7 @@ export function createStorageGuard(
 
 export interface AutosaveHost {
   /** 지금 프로젝트 문서 */
-  getProject: () => DawProject;
+  getProject: () => ProjectDoc;
   /** 음원 id에 해당하는 원본 데이터(없으면 undefined) */
   recallAudio: (assetId: string) => Blob | undefined;
   /** 문서가 담긴 상태가 바뀔 때마다 (새 상태, 이전 상태)로 불린다. 해제 함수를 돌려준다. */

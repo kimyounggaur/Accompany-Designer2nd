@@ -9,7 +9,7 @@ import { notify, notifyError } from "../services/notify";
 import { readExportOptions, writeExportOptions } from "../services/exportSettings";
 import { useExportStore, isExportOpen } from "../state/exportStore";
 import { isRecordingBusy } from "../state/recordingStore";
-import type { DawProject } from "../types";
+import type { ProjectDoc } from "../domain/types";
 import { getProjectSnapshot } from "./projectSnapshot";
 
 /**
@@ -18,7 +18,7 @@ import { getProjectSnapshot } from "./projectSnapshot";
  * 이 파일은 그 셋을 잇기만 한다. 바깥 일(스냅샷·렌더·인코딩·내려받기)은 `ExportDeps`로 받아서 단위 시험에서 바꿔 끼운다.
  */
 export interface ExportDeps {
-  snapshot: () => DawProject;
+  snapshot: () => ProjectDoc;
   hasAudio: (assetId: string) => boolean;
   getBuffer: (assetId: string) => AudioBuffer | undefined;
   render: (request: MixRenderRequest) => Promise<RenderedMix>;

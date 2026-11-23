@@ -9,6 +9,7 @@ import { createTickTimer } from "../audio/engine/tickTimer";
 import { createClickPlayer } from "../audio/Metronome";
 import { MicRecorder } from "../audio/recording/Recorder";
 import { RecordingController, type RecordingEngine } from "../audio/recording/RecordingController";
+import { setPeaks } from "../services/peaksCache";
 import { getProjectSnapshot } from "./projectSnapshot";
 import { recordingHost } from "./recordingHost";
 
@@ -22,7 +23,11 @@ const engine: RecordingEngine = {
   getOutputLatency: () => audioEngine.getOutputLatency(),
   getBaseLatency: () => audioEngine.getBaseLatency(),
   getMonitorInput: () => audioEngine.getMonitorInput(),
-  decode: async (blob, fileName, assetId) => (await audioEngine.decodeBlob(blob, fileName, assetId, "recording")).asset,
+  decode: async (blob, fileName, assetId) => {
+    const decoded = await audioEngine.decodeBlob(blob, fileName, assetId, "recording");
+    setPeaks(decoded.asset.id, decoded.peaks); // 문서에는 파형이 없다. 화면은 파형 보관소에서 읽는다.
+    return decoded.asset;
+  },
 };
 
 let controller: RecordingController | undefined;

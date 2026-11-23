@@ -43,7 +43,7 @@ test("해시를 계산할 수 없는 환경에서는 음원·프로젝트 id를 
 
 // ───────── 기록 모양 · 정리 규칙 ─────────
 
-const doc = { id: "p1", name: "곡", bpm: 120, sampleRate: 44100, tracks: [], audioAssets: {}, timeMarkers: [] };
+const doc = { schemaVersion: 2, id: "p1", name: "곡", bpm: 120, timeSignature: { beats: 4, unit: 4 }, sampleRate: 44100, master: { volumeDb: 0 }, tracks: [], assets: {}, markers: [] };
 
 test("v2 기록만 기록으로 인정하고, 옛 v1 칸이나 깨진 값은 아니다", () => {
   assert.equal(isProjectRecord(buildProjectRecord(doc, { a1: "h1" }, 1000)), true);
@@ -83,7 +83,7 @@ test("저장 시각은 24시간제 HH:MM", () => {
 // ───────── 변경 감시기 ─────────
 
 // 문서 조각(트랙·음원·마커)은 참조로 비교하므로, 바뀌지 않은 상태끼리는 같은 객체를 공유한다.
-const shared = { tracks: [], audioAssets: {}, timeMarkers: [] };
+const shared = { tracks: [], assets: {}, markers: [] };
 const slice = (patch = {}) => ({ name: "곡", bpm: 120, ...shared, ...patch });
 
 test("문서가 바뀌었을 때만 변경으로 본다(재생 위치 같은 화면 상태는 아니다)", () => {
@@ -104,7 +104,7 @@ test("녹음·카운트인 중에는 예약하지 않고, 끝나면 문서가 �
 
   busy = true; // 녹음 시작(문서는 그대로)
   watch(idle, idle);
-  watch(slice({ audioAssets: {} }), idle); // 녹음 중 문서 변경(새 audioAssets 객체)
+  watch(slice({ assets: {} }), idle); // 녹음 중 문서 변경(새 assets 객체)
   assert.equal(calls, 1);
   busy = false; // 녹음 끝
   watch.idle();

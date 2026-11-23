@@ -1,10 +1,11 @@
-import type { AudioAsset, Clip, DawProject } from "../types";
+import type { AssetMeta, Clip, ProjectDoc } from "../domain/types";
 import { attachProbe, isProbeEnabled } from "./probe";
 import { planSync, type SyncDoc } from "./engine/syncPlan";
 import { clipSignature } from "./engine/clipSignature";
 import { scheduleClipGainEnvelope } from "./engine/clipEnvelope";
 import { createTrackGraph, disposeGraph, graphSignature, updateTrackGraph, type TrackGraph } from "./engine/trackGraph";
 import { getProjectDuration } from "../utils/audioMath";
+import { createWaveformPeaks } from "./waveformPeaks";
 import { smooth } from "./effects/EffectNode";
 import { clampMasterVolumeDb, dbToGain, MASTER_VOLUME_DEFAULT_DB } from "./engine/MasterBus";
 import { MONITOR_VOLUME_DEFAULT, MonitorBus, clampMonitorVolume } from "./engine/MonitorBus";
@@ -15,8 +16,10 @@ import {
 } from "../utils/audioMath";
 
 interface DecodedAudio {
-  asset: AudioAsset;
+  asset: AssetMeta;
   buffer: AudioBuffer;
+  /** 파형 점. 문서(AssetMeta)에는 담지 않으므로 부르는 쪽이 services/peaksCache에 넣는다. */
+  peaks: number[];
 }
 
 /** 옛 마스터 사슬이 처음부터 곱하던 이득. 마스터 볼륨 0 dB에서도 이 값이 남는다(새 엔진은 1.0). */
@@ -102,47 +105,44 @@ export class BrowserAudioEngine {
     const context = await this.ensureContext();
     const data = await file.arrayBuffer();
     const buffer = await context.decodeAudioData(data.slice(0));
-    const asset: AudioAsset = {
+    const asset: AssetMeta = {
       id: createId("asset"),
       fileName: file.name,
       duration: buffer.duration,
       sampleRate: buffer.sampleRate,
       channels: buffer.numberOfChannels,
-      waveformPeaks: createWaveformPeaks(buffer),
-      sourceType: "upload",
+      source: "upload",
       mimeType: file.type || undefined,
       byteSize: file.size,
     };
 
     this.buffers.set(asset.id, buffer);
-    return { asset, buffer };
+    return { asset, buffer, peaks: createWaveformPeaks(buffer) };
   }
 
   async decodeBlob(
     blob: Blob,
     fileName: string,
     assetId = createId("asset"),
-    sourceType: AudioAsset["sourceType"] = "recording",
+    source: AssetMeta["source"] = "recording",
   ): Promise<DecodedAudio> {
     const context = await this.ensureContext();
     const data = await blob.arrayBuffer();
     const buffer = await context.decodeAudioData(data.slice(0));
-    const asset: AudioAsset = {
+    const asset: AssetMeta = {
       id: assetId,
       fileName,
       duration: buffer.duration,
       sampleRate: buffer.sampleRate,
       channels: buffer.numberOfChannels,
-      waveformPeaks: createWaveformPeaks(buffer),
-      sourceType,
-      blobUrl: URL.createObjectURL(blob),
+      source,
       mimeType: blob.type || "audio/wav",
       byteSize: blob.size,
-      recordedAt: sourceType === "recording" ? new Date().toISOString() : undefined,
+      recordedAt: source === "recording" ? new Date().toISOString() : undefined,
     };
 
     this.buffers.set(asset.id, buffer);
-    return { asset, buffer };
+    return { asset, buffer, peaks: createWaveformPeaks(buffer) };
   }
 
   registerBuffer(assetId: string, buffer: AudioBuffer) {
@@ -222,7 +222,7 @@ export class BrowserAudioEngine {
   }
 
   /** 재생이 끝나는 타임라인 위치(초). 옛 엔진은 곡 길이(마지막 클립 + 여백)에서 멈춘다. */
-  getPlaybackEnd(project: Pick<DawProject, "bpm" | "tracks">): number {
+  getPlaybackEnd(project: Pick<ProjectDoc, "bpm" | "tracks">): number {
     return getProjectDuration(project);
   }
 
@@ -230,7 +230,7 @@ export class BrowserAudioEngine {
    * 재생을 시작한다. `atContextTime`을 주면 그 오디오 시각에 정확히 시작한다(녹음 카운트인 뒤에 반주를 맞출 때).
    * 아직 오지 않은 시각이면 그때까지는 곡 위치가 시작점에 머문다.
    */
-  async play(project: DawProject, playhead: number, options: { atContextTime?: number } = {}) {
+  async play(project: ProjectDoc, playhead: number, options: { atContextTime?: number } = {}) {
     const context = await this.ensureContext();
     this.stop();
     this.startedAt = options.atContextTime ?? context.currentTime;
@@ -393,33 +393,6 @@ function scheduleClip(context: BaseAudioContext, input: AudioNode, buffer: Audio
   scheduleClipGainEnvelope(gain.gain, clip, when, elapsed, duration / rate, timelineDuration);
   source.start(when, offset, duration);
   return source;
-}
-
-function createWaveformPeaks(buffer: AudioBuffer, targetPeaks = 1800) {
-  const peaks: number[] = [];
-  const channelCount = buffer.numberOfChannels;
-  const samplesPerPeak = Math.max(1, Math.floor(buffer.length / targetPeaks));
-  const peakCount = Math.ceil(buffer.length / samplesPerPeak);
-  const channels = Array.from({ length: channelCount }, (_, index) =>
-    buffer.getChannelData(index),
-  );
-
-  for (let peakIndex = 0; peakIndex < peakCount; peakIndex += 1) {
-    const start = peakIndex * samplesPerPeak;
-    const end = Math.min(start + samplesPerPeak, buffer.length);
-    let peak = 0;
-
-    for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
-      for (const channel of channels) {
-        peak = Math.max(peak, Math.abs(channel[sampleIndex]));
-      }
-    }
-
-    peaks.push(peak);
-  }
-
-  const maxPeak = Math.max(...peaks, 0.001);
-  return peaks.map((peak) => peak / maxPeak);
 }
 
 export const audioEngine = new BrowserAudioEngine();

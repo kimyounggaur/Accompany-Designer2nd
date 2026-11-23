@@ -11,14 +11,13 @@
  */
 import { create } from "zustand";
 import type {
-  AudioAsset,
+  AssetMeta,
   Clip,
-  DawProject,
   PlaylistSnap,
   PlaylistTool,
   ProjectDoc,
   Track,
-} from "../types";
+} from "../domain/types";
 import { clamp, createId, getClipTimelineDuration } from "../utils/audioMath";
 import { fail, ok, type CommandResult } from "../state/commandResult";
 import * as commands from "../state/commands/index";
@@ -31,7 +30,7 @@ type HistoryOptions = {
   history?: boolean;
 };
 
-interface DawStore extends DawProject {
+interface DawStore extends ProjectDoc {
   selectedTrackId?: string;
   selectedClipId?: string;
   selectedClipIds: string[];
@@ -61,10 +60,10 @@ interface DawStore extends DawProject {
   setPlaylistTool: (tool: PlaylistTool) => void;
   setPlaylistSnap: (snap: PlaylistSnap) => void;
   setGlobalSnap: (snap: Exclude<PlaylistSnap, "main">) => void;
-  addAudioAsset: (asset: AudioAsset, options?: HistoryOptions) => void;
+  addAudioAsset: (asset: AssetMeta, options?: HistoryOptions) => void;
   updateAudioAsset: (
     assetId: string,
-    patch: Partial<AudioAsset>,
+    patch: Partial<AssetMeta>,
     options?: HistoryOptions,
   ) => void;
   addClip: (trackId: string, clip: Clip, options?: HistoryOptions) => void;
@@ -104,21 +103,23 @@ interface DawStore extends DawProject {
   deleteTrack: (trackId: string) => CommandResult<"last-track" | "recording" | "not-found", { name: string }>;
   reorderTrack: (trackId: string, direction: -1 | 1) => void;
   updateTrack: (trackId: string, patch: Partial<Omit<Track, "clips">>) => void;
-  importProject: (project: DawProject) => void;
+  importProject: (project: ProjectDoc) => void;
   resetProject: () => void;
 }
 
 /** 이 저장소가 거울로 비추는 문서 필드 */
 function docFields(doc: ProjectDoc) {
   return {
+    schemaVersion: doc.schemaVersion,
     id: doc.id,
     name: doc.name,
     bpm: doc.bpm,
+    timeSignature: doc.timeSignature,
     sampleRate: doc.sampleRate,
     master: doc.master,
     tracks: doc.tracks,
-    audioAssets: doc.audioAssets,
-    timeMarkers: doc.timeMarkers,
+    assets: doc.assets,
+    markers: doc.markers,
   };
 }
 

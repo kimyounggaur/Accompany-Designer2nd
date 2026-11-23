@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { FakeContext, createManualTimers } from "./helpers/fake-audio.mjs";
 
-const { createDefaultTrack } = await import("../src/state/docDefaults.ts");
+const { createDefaultTrack } = await import("../src/domain/project/defaults.ts");
 const { createReverb, IR_DEBOUNCE_MS, IR_CROSSFADE_SECONDS } = await import("../src/audio/effects/Reverb.ts");
 const { createImpulseBuffer, impulseKey } = await import("../src/audio/effects/impulse.ts");
 

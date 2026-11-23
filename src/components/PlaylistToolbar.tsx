@@ -13,7 +13,7 @@ import {
   ungroupSelectedClips,
   zoomToSelectedClips,
 } from "../app/actions";
-import type { PlaylistSnap, PlaylistTool } from "../types";
+import type { PlaylistSnap, PlaylistTool } from "../domain/types";
 import { menuIcon, playlistToolIcons, snapIcon } from "../utils/playlistToolIcons";
 
 const toolButtons: Array<{

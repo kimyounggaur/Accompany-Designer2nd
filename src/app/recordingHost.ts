@@ -8,13 +8,13 @@ import { notify, notifyError } from "../services/notify";
 import * as commands from "../state/commands/index";
 import { useRecordingStore } from "../state/recordingStore";
 import { getDoc } from "../state/projectStore";
-import { rememberAudio } from "../storage/projectStorage";
+import { rememberAudio } from "../services/persistence/audioBlobs";
 import { useDawStore } from "../store/useDawStore";
 import { createId } from "../utils/audioMath";
 
 /** 녹음 파일 이름: 문서에 있는 녹음 음원 수 + 1 ("녹음 001.wav") */
 function nextFileName(): string {
-  const count = Object.values(getDoc().audioAssets).filter((asset) => asset.sourceType === "recording").length + 1;
+  const count = Object.values(getDoc().assets).filter((asset) => asset.source === "recording").length + 1;
   return `녹음 ${String(count).padStart(3, "0")}.wav`;
 }
 

@@ -7,8 +7,8 @@
  */
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
-import type { ProjectDoc } from "../types";
-import { createEmptyDoc } from "./docDefaults";
+import type { ProjectDoc } from "../domain/types";
+import { createEmptyDoc } from "../domain/project/defaults";
 
 export interface ProjectState {
   doc: ProjectDoc;

@@ -12,7 +12,7 @@ globalThis.window = { AudioContext: FakeContext };
 const { projectStore, getDoc } = await import("../src/state/projectStore.ts");
 const { history } = await import("../src/state/history.ts");
 const commands = await import("../src/state/commands/index.ts");
-const { createDefaultTrack, createEmptyDoc } = await import("../src/state/docDefaults.ts");
+const { createDefaultTrack, createEmptyDoc } = await import("../src/domain/project/defaults.ts");
 const { useDawStore } = await import("../src/store/useDawStore.ts");
 const { useRecordingStore, DEFAULT_RECORDING_SETTINGS } = await import("../src/state/recordingStore.ts");
 const { useNoticeStore } = await import("../src/state/noticeStore.ts");
@@ -74,7 +74,7 @@ test("10초 녹음: 녹음 중에는 문서가 한 번도 바뀌지 않고, 끝�
   }
   assert.equal(docChanges, 0, "녹음하는 10초 동안 문서 변경 0회");
   assert.equal(history.depth().undo, 0);
-  assert.deepEqual(getDoc().audioAssets, {});
+  assert.deepEqual(getDoc().assets, {});
   assert.equal(getDoc().tracks[0].clips.length, 0, "클립은 녹음이 끝나야 생긴다");
   const progress = useRecordingStore.getState();
   assert.ok(progress.waveformPeaks.length > 0, "그동안 파형은 녹음 저장소에 쌓인다");
@@ -87,9 +87,9 @@ test("10초 녹음: 녹음 중에는 문서가 한 번도 바뀌지 않고, 끝�
   assert.equal(history.depth().undo, 1);
   assert.equal(history.undoLabel(), "녹음 추가");
   const doc = getDoc();
-  const assets = Object.values(doc.audioAssets);
+  const assets = Object.values(doc.assets);
   assert.equal(assets.length, 1);
-  assert.equal(assets[0].sourceType, "recording");
+  assert.equal(assets[0].source, "recording");
   assert.equal(doc.tracks[0].clips.length, 1);
   const recorded = doc.tracks[0].clips[0];
   assert.equal(recorded.audioBufferId, assets[0].id);
@@ -108,10 +108,10 @@ test("10초 녹음: 녹음 중에는 문서가 한 번도 바뀌지 않고, 끝�
 
   // 음원과 클립이 한 번에 사라지고, 다시 실행하면 함께 돌아온다.
   assert.equal(history.undo(), true);
-  assert.deepEqual(getDoc().audioAssets, {});
+  assert.deepEqual(getDoc().assets, {});
   assert.equal(getDoc().tracks[0].clips.length, 0);
   assert.equal(history.redo(), true);
-  assert.equal(Object.keys(getDoc().audioAssets).length, 1);
+  assert.equal(Object.keys(getDoc().assets).length, 1);
   assert.equal(getDoc().tracks[0].clips.length, 1);
 });
 
@@ -174,7 +174,7 @@ test("새 트랙에 녹음을 마치면 클립이 그 트랙에 놓이고, 실�
   assert.equal(getDoc().tracks[2].clips.length, 1);
   assert.equal(history.depth().undo, 1);
   history.undo();
-  assert.deepEqual(getDoc().audioAssets, {});
+  assert.deepEqual(getDoc().assets, {});
   assert.equal(getDoc().tracks.length, 3, "트랙은 남고");
   assert.equal(getDoc().tracks[2].clips.length, 0, "그 안의 녹음 클립만 사라진다");
 });
@@ -192,7 +192,7 @@ test("녹음된 소리가 없으면 경고 토스트를 띄우고, 새로 만든
   assert.equal(toast.level, "warning");
   assert.equal(toast.message, "녹음된 소리가 없어 클립을 만들지 않았습니다.");
   assert.equal(getDoc().tracks.length, 1);
-  assert.equal(getDoc().audioAssets, before.audioAssets);
+  assert.equal(getDoc().assets, before.assets);
   assert.equal(history.depth().undo, 0);
 });
 
@@ -250,7 +250,7 @@ test("녹음 중에는 녹음 대기 트랙을 바꿀 수 없다", async () => {
 // ───────── 녹음 문서 변경 함수 ─────────
 
 const recordedAsset = (id = "asset-x", duration = 3) => ({
-  id, fileName: "녹음 001.wav", duration, sampleRate: 44100, channels: 1, waveformPeaks: [0.1], sourceType: "recording",
+  id, fileName: "녹음 001.wav", duration, sampleRate: 44100, channels: 1, source: "recording",
 });
 
 test("addRecording: 음원과 클립을 한 번에 넣고 이력 한 단계(녹음 추가)만 남긴다", () => {
@@ -290,7 +290,7 @@ test("addRecording: 녹음하는 사이 트랙이 사라졌다면 새 트랙을 
   assert.equal(history.depth().undo, 1, "트랙 추가와 녹음이 한 단계");
   history.undo();
   assert.equal(getDoc().tracks.some((item) => item.id === placedOn), false);
-  assert.deepEqual(getDoc().audioAssets, {});
+  assert.deepEqual(getDoc().assets, {});
 });
 
 test("addRecording으로 만든 클립은 길이가 0.01초 아래로 줄지 않는다", () => {
