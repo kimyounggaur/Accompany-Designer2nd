@@ -7,6 +7,7 @@ import { recallAudio, restoreAudio } from "../storage/projectStorage";
 import { useDawStore } from "../store/useDawStore";
 import { decodeStoredAudio, saveProjectFile } from "./projectFile";
 import { getProjectSnapshot } from "./projectSnapshot";
+import { consumeSkipRecover } from "./recoverFlag";
 
 /**
  * 앱이 켜질 때 한 번 하는 일: 자동 저장을 시작하고, 저장해 둔 프로젝트가 있으면 복구한다.
@@ -42,7 +43,8 @@ export function startApp(): () => void {
   void (async () => {
     let dirty = false;
     try {
-      const loaded = await loadAutosave();
+      // 오류 안내 화면의 [저장된 작업 없이 시작]을 눌렀다면 이번 시작에는 복구하지 않는다(기록은 그대로 둔다).
+      const loaded = consumeSkipRecover() ? undefined : await loadAutosave();
       if (cancelled) return;
       if (loaded && untouched()) {
         const restored = await restoreAudio(loaded.stored, decodeStoredAudio);

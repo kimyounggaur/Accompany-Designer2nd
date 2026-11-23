@@ -188,6 +188,21 @@ export const ko = {
     projectLoad: "프로젝트 불러오기 실패",
     autosave: "자동 저장 실패",
     autosaveRecover: "자동 저장 복구 실패",
+    /** 어디서 난 오류인지 알 수 없는 예외(window 오류·처리되지 않은 약속 거절) */
+    unexpected: "동작 실패",
+  },
+
+  /** 화면 부품에서 오류가 나 화면을 그릴 수 없을 때(app/ErrorBoundary.tsx) */
+  crash: {
+    title: "문제가 생겼습니다",
+    message: "문제가 생겨 화면을 다시 그려야 합니다. 작업은 자동 저장되어 있습니다.",
+    reload: "새로고침",
+    copy: "오류 내용 복사",
+    copied: "복사했습니다",
+    copyFailed: "복사하지 못했습니다. 아래 내용을 직접 선택해 복사해 주세요.",
+    detailsSummary: "오류 내용 보기",
+    skipRecover: "저장된 작업 없이 시작",
+    skipRecoverHint: "새로고침해도 같은 화면이 계속 나오면 저장된 작업을 불러오지 않고 시작할 수 있습니다. 저장된 작업은 지워지지 않고 최근 프로젝트 안에 남습니다.",
   },
 
   /** 브라우저 오류 → 사용자 문구 (services/errors.ts의 toUserMessage가 고른다) */

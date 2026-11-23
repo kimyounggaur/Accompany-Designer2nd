@@ -1,6 +1,7 @@
 import type { AudioAsset, Clip, DawProject, FadeCurve, Track } from "../types";
 import { createDelayInsert } from "./delay";
 import { createReverbInsert } from "./reverb";
+import { attachProbe, isProbeEnabled } from "./probe";
 import { encodeWav } from "../utils/wavEncoder";
 import { getDelayTimeMs, normalizeDelaySettings } from "../utils/delay";
 import {
@@ -49,6 +50,10 @@ class BrowserAudioEngine {
       limiter.connect(ceiling);
       ceiling.connect(this.analyser);
       this.analyser.connect(this.context.destination);
+      // 주소에 ?probe=1이 있을 때만: 스피커로 나가는 신호를 직접 재는 개발용 프로브(audio/probe.ts)
+      if (isProbeEnabled()) {
+        attachProbe(this.context, this.analyser).catch((error: unknown) => console.warn("출력 측정 프로브를 붙이지 못했습니다.", error));
+      }
     }
 
     if (this.context.state === "suspended") {

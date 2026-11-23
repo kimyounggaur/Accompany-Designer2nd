@@ -47,6 +47,7 @@ const S = {
   layoutNoticeDismiss: '[data-testid="layout-notice-dismiss"]',
   eqBassKnob: '[role=slider][aria-label="저음 이퀄라이저"]',
   autosave: '[data-testid="autosave-status"]',
+  crashScreen: '[data-testid="crash-screen"]',
 };
 
 /** 소리 소스 시작 횟수, rAF 호출 수, 최종 출력 분석기를 잡아 두는 측정 훅 */
@@ -64,7 +65,7 @@ const PROBES = `(() => {
   };
 })();`;
 
-async function openApp(page: Page, options: { layoutNotice?: boolean } = {}) {
+async function openApp(page: Page, options: { layoutNotice?: boolean; query?: string } = {}) {
   await page.addInitScript(PROBES);
   if (!options.layoutNotice) {
     // P2-2: 처음 한 번 뜨는 '화면 배치가 바뀌었습니다' 카드가 다른 측정을 가리지 않도록 본 것으로 해 둔다.
@@ -76,7 +77,7 @@ async function openApp(page: Page, options: { layoutNotice?: boolean } = {}) {
       }
     });
   }
-  await page.goto("/");
+  await page.goto(`/${options.query ?? ""}`);
   await page.locator(S.inspector).waitFor();
   await page.waitForTimeout(1200); // 자동 저장 복구가 끝날 때까지
 }
@@ -636,6 +637,120 @@ test.describe("P2-4 자동 저장 서비스", () => {
     await page.waitForTimeout(2200);
     expect(await page.evaluate(() => (window as any).__persist)).toBe(1); // 한 번만
     expect(await page.evaluate(() => (window as any).__estimate)).toBe(1); // 경고한 뒤에는 더 묻지 않는다
+  });
+});
+
+test.describe("P3-0 안전망", () => {
+  test("화면 오류가 나면 빈 화면 대신 안내가 보이고, 오류 내용을 복사할 수 있다", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.addInitScript(PROBES);
+    await page.goto("/?crash=1");
+    const screen = page.locator(S.crashScreen);
+    await expect(screen).toBeVisible();
+    await expect(screen).toContainText("문제가 생겨 화면을 다시 그려야 합니다. 작업은 자동 저장되어 있습니다.");
+    await expect(screen.getByRole("button", { name: "새로고침" })).toBeVisible();
+    await expect(page.locator(S.inspector)).toHaveCount(0); // 깨진 화면이 아니라 안내만
+
+    await screen.getByRole("button", { name: "오류 내용 복사" }).click();
+    await expect(screen.getByRole("button", { name: "복사했습니다" })).toBeVisible();
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied).toMatch(/^반주 디자이너 2 오류 내용\n빌드: (local|[0-9a-f]{7})/);
+    expect(copied).toContain("일부러 낸 화면 오류(?crash=1)");
+    expect(copied).not.toContain("?crash=1\n주소"); // 주소에는 쿼리를 싣지 않는다
+  });
+
+  test("[새로고침]은 다시 불러오고, 오류가 없는 주소에서는 앱이 정상으로 뜬다", async ({ page }) => {
+    await page.goto("/?crash=1");
+    await page.locator(S.crashScreen).waitFor();
+    await page.goto("/");
+    await expect(page.locator(S.inspector)).toBeVisible();
+    await expect(page.locator(S.crashScreen)).toHaveCount(0);
+  });
+
+  test("[저장된 작업 없이 시작]은 다음 시작 한 번만 복구를 건너뛰고, 저장된 기록은 그대로 둔다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await page.waitForTimeout(2000); // 자동 저장 지연(1.2초) 이후
+    await page.goto("/?crash=1");
+    await page.locator(S.crashScreen).getByRole("button", { name: "저장된 작업 없이 시작" }).click();
+    await page.waitForLoadState();
+    await page.goto("/"); // 오류가 없는 주소로
+    await page.locator(S.inspector).waitFor();
+    await page.waitForTimeout(1500);
+    await expect(page.locator(S.clip)).toHaveCount(0); // 이번에는 복구하지 않았다
+    await page.reload();
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 5000 }); // 기록은 남아 있어 다음에는 복구된다
+  });
+
+  test("잡히지 않은 오류와 처리되지 않은 약속 거절이 오류 안내로 보이고, 무해한 브라우저 경고는 보이지 않는다", async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() =>
+      window.dispatchEvent(new ErrorEvent("error", { message: "ResizeObserver loop completed with undelivered notifications." })),
+    );
+    await page.waitForTimeout(300);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+
+    await page.evaluate(() => {
+      setTimeout(() => {
+        throw new Error("boom");
+      }, 0);
+    });
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("동작 실패: 예상하지 못한 문제가 생겼습니다.");
+    await expect(alert.getByTestId("toast-details")).toContainText("boom"); // 원문은 접힌 '자세히 보기'에만
+
+    await page.evaluate(() => {
+      void Promise.reject(new Error("rejected"));
+    });
+    await expect(alert).toContainText("×2");
+  });
+
+  test("?probe=1에서 조작 없이 3초 재생하면 스피커 신호에 튐이 0회이고, 주소에 없으면 프로브가 붙지 않는다", async ({ page }) => {
+    await openApp(page, { query: "?probe=1" });
+    await upload(page);
+    await page.waitForFunction(() => typeof (window as any).__probeReset === "function");
+    await page.evaluate(() => (window as any).__probeReset());
+    await page.click(S.play);
+    await page.waitForTimeout(3000);
+    const probe = await page.evaluate(() => (window as any).__probe as { jumps: number; gaps: number; peak: number; longestGapMs: number });
+    expect(probe.peak).toBeGreaterThan(0.01); // 소리가 실제로 나갔다
+    expect(probe.jumps).toBe(0);
+    expect(probe.gaps).toBe(0);
+  });
+
+  test("프로브는 일부러 만든 클릭과 끊김을 실제로 센다(측정기 자체 점검)", async ({ page }) => {
+    await openApp(page, { query: "?probe=1" });
+    await upload(page); // 오디오 컨텍스트와 마스터 출력을 만든다
+    await page.waitForFunction(() => typeof (window as any).__probeReset === "function" && !!(window as any).__out);
+    await page.evaluate(() => (window as any).__probeReset());
+    await page.evaluate(async () => {
+      const out = (window as any).__out as AnalyserNode;
+      const context = out.context as AudioContext;
+      // 직류 0.9를 갑자기 켰다가(클릭) 0.2초 뒤 갑자기 끈다(소리가 난 뒤 무음이 이어짐 = 끊김)
+      const source = context.createConstantSource();
+      const gain = context.createGain();
+      gain.gain.setValueAtTime(0, context.currentTime);
+      gain.gain.setValueAtTime(0.9, context.currentTime + 0.05);
+      gain.gain.setValueAtTime(0, context.currentTime + 0.25);
+      source.connect(gain);
+      gain.connect(out);
+      source.start();
+      source.stop(context.currentTime + 0.6);
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    });
+    const probe = await page.evaluate(() => (window as any).__probe as { jumps: number; gaps: number; peak: number; longestGapMs: number });
+    expect(probe.jumps).toBeGreaterThanOrEqual(2); // 켤 때 1, 끌 때 1
+    expect(probe.gaps).toBeGreaterThanOrEqual(1);
+    expect(probe.longestGapMs).toBeGreaterThan(3);
+    expect(probe.peak).toBeGreaterThan(0.8);
+  });
+
+  test("프로브는 주소에 ?probe=1이 있을 때만 붙는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await page.click(S.play);
+    await page.waitForTimeout(800);
+    expect(await page.evaluate(() => (window as any).__probe)).toBeUndefined();
   });
 });
 
