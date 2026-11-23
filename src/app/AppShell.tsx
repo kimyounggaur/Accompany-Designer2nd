@@ -1,6 +1,7 @@
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { ReactNode } from "react";
 import { useDawStore } from "../store/useDawStore";
+import { AutosaveStatus } from "../ui/feedback/AutosaveStatus";
 import { BuildStamp } from "../ui/feedback/BuildStamp";
 import { ConfirmDialog } from "../ui/feedback/ConfirmDialog";
 import { StatusLine } from "../ui/feedback/StatusLine";
@@ -34,6 +35,7 @@ export function AppShell({ topBar, timeline, inspector }: AppShellProps) {
       </div>
       <footer className="statusbar" data-testid="statusbar">
         <StatusLine />
+        <AutosaveStatus />
         <button
           type="button"
           className="statusbar__toggle"

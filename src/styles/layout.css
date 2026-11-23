@@ -403,6 +403,26 @@
   white-space: nowrap;
 }
 
+.statusbar .autosave-status {
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 비어 있어도 화면 낭독기가 첫 안내를 읽을 수 있도록 자리는 남기고(폭 0), 남는 간격만 되돌린다. */
+.statusbar .autosave-status:empty {
+  width: 0;
+  margin-left: calc(-1 * var(--space-3));
+  overflow: hidden;
+}
+
+.statusbar .autosave-status[data-state="failed"] {
+  color: #b3261e;
+  font-weight: 700;
+}
+
 .statusbar__toggle {
   display: inline-flex;
   align-items: center;

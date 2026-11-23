@@ -76,7 +76,7 @@
   - `src/App.tsx:778` 프로젝트 불러오기 덮어쓰기 확인
   - `src/components/Timeline.tsx:463` 트랙 삭제 확인
 - [x] `App.tsx`에 들어온 코드 위치 (분리 대상)
-  - 자동 저장·복구·`beforeunload`: `App.tsx:90~139` → P2-4
+  - 자동 저장·복구·`beforeunload`: `App.tsx:90~139` → P2-4 ✅ (`services/persistence/*`, `app/bootstrap.ts`로 이동)
   - 키보드 처리(`event.code` 기반): `App.tsx:187~324` → P5-2
   - 음원 재연결(이름·길이 기준): `App.tsx:685~692` → P4-2
   - 프로젝트 내보내기·믹스 WAV 내보내기·불러오기: `App.tsx:745`, `762`, `779~783` → P4-2, P3-6

@@ -5,46 +5,19 @@ import { Inspector } from "./components/Inspector";
 import { Timeline } from "./components/Timeline";
 import { AppShell } from "./app/AppShell";
 import { quantizeSelectedClips, redo, undo, zoomToSelectedClips, deleteSelectedClips } from "./app/actions";
+import { startApp } from "./app/bootstrap";
+import { decodeStoredAudio, saveProjectFile } from "./app/projectFile";
+import { getProjectSnapshot } from "./app/projectSnapshot";
 import { ko } from "./i18n/ko";
 import { confirmAction } from "./services/confirm";
 import { CountInCancelledError, isCountInCancelled } from "./services/errors";
 import { notify, notifyError } from "./services/notify";
 import { useDialogStore } from "./state/dialogStore";
 import { TopBar } from "./ui/transport/TopBar";
-import type { AudioAsset, Clip, DawProject } from "./types";
+import type { AudioAsset, Clip } from "./types";
 import { createId, getProjectDuration } from "./utils/audioMath";
 import { useDawStore } from "./store/useDawStore";
-import { exportProject, hasRememberedAudio, loadAutosave, parseProjectFile, rememberAudio, restoreAudio, saveAutosave } from "./storage/projectStorage";
-
-async function decodeStoredAudio(blob: Blob, asset: AudioAsset): Promise<{ asset: AudioAsset; commit: () => void }> {
-  // Decode without requiring an autoplay gesture during automatic recovery.
-  const context = new OfflineAudioContext(1, 1, 44100);
-  const buffer = await context.decodeAudioData(await blob.arrayBuffer());
-  return {
-    asset: { ...asset, blobUrl: asset.sourceType === "recording" ? URL.createObjectURL(blob) : undefined },
-    commit: () => audioEngine.registerBuffer(asset.id, buffer),
-  };
-}
-
-function getProjectSnapshot(): DawProject {
-  const state = useDawStore.getState();
-  const audioAssets = Object.fromEntries(
-    Object.entries(state.audioAssets).map(([assetId, asset]) => {
-      const { blobUrl, ...serializableAsset } = asset;
-      return [assetId, serializableAsset];
-    }),
-  );
-
-  return {
-    id: state.id,
-    name: state.name,
-    bpm: state.bpm,
-    sampleRate: state.sampleRate,
-    tracks: state.tracks,
-    audioAssets,
-    timeMarkers: state.timeMarkers,
-  };
-}
+import { hasRememberedAudio, parseProjectFile, rememberAudio, restoreAudio } from "./storage/projectStorage";
 
 export default function App() {
   const isPlaying = useDawStore((state) => state.isPlaying);
@@ -85,57 +58,8 @@ export default function App() {
     | undefined
   >(undefined);
 
-  useEffect(() => {
-    let cancelled = false;
-    let ready = false;
-    let timer: number | undefined;
-    let unsaved = false;
-    let pending: Promise<void> = Promise.resolve();
-    const initial = getProjectSnapshot();
-    const subscribe = useDawStore.subscribe((state, previous) => {
-      if (!ready || state.recording.status !== "idle") return;
-      if (previous.recording.status === "idle" && state.name === previous.name && state.bpm === previous.bpm && state.tracks === previous.tracks && state.audioAssets === previous.audioAssets && state.timeMarkers === previous.timeMarkers) return;
-      if (timer) window.clearTimeout(timer);
-      unsaved = true;
-      timer = window.setTimeout(() => {
-        timer = undefined;
-        const project = getProjectSnapshot();
-        pending = pending.catch(() => {}).then(() => saveAutosave(project)).then(() => {
-          if (!timer) unsaved = false;
-        }).catch((error) => {
-          if (!cancelled) notifyError(error, { kind: "autosave", title: ko.failed.autosave }, { action: { label: ko.action.saveProjectFile, run: () => void handleSaveProject() } });
-        });
-      }, 1200);
-    });
-    const recover = async () => {
-      try {
-        const data = await loadAutosave();
-        if (cancelled) return;
-        const now = getProjectSnapshot();
-        // Do not overwrite edits made while the saved session was loading.
-        if (data && now.tracks === initial.tracks && now.name === initial.name && now.bpm === initial.bpm && Object.keys(now.audioAssets).length === 0) {
-          const restored = await restoreAudio(data, decodeStoredAudio);
-          if (cancelled) return;
-          const current = getProjectSnapshot();
-          if (current.tracks === initial.tracks && current.name === initial.name && current.bpm === initial.bpm && Object.keys(current.audioAssets).length === 0) {
-            audioEngine.clearBuffers();
-            restored.commit();
-            importProject(restored.project);
-            if (restored.missing) notify("warning", ko.notice.autosaveRestoredMissing(restored.missing));
-            else notify("success", ko.notice.autosaveRestored);
-          }
-        }
-      } catch (error) {
-        if (!cancelled) notifyError(error, { kind: "projectFile", title: ko.failed.autosaveRecover });
-      } finally { ready = true; }
-    };
-    void recover();
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (unsaved || useDawStore.getState().recording.status !== "idle") { event.preventDefault(); event.returnValue = ""; }
-    };
-    window.addEventListener("beforeunload", beforeUnload);
-    return () => { cancelled = true; subscribe(); window.removeEventListener("beforeunload", beforeUnload); if (timer) window.clearTimeout(timer); };
-  }, [importProject]);
+  // 자동 저장 시작과 저장된 프로젝트 복구는 app/bootstrap.ts가 맡는다.
+  useEffect(() => startApp(), []);
 
   const schedulingSignature = useMemo(
     () =>
@@ -222,7 +146,7 @@ export default function App() {
 
       if (hasCommandModifier && shortcutKey === "s") {
         event.preventDefault();
-        void handleSaveProject();
+        void saveProjectFile();
         return;
       }
       if (hasCommandModifier && shortcutKey === "c") {
@@ -723,22 +647,6 @@ export default function App() {
     }
   }
 
-  async function handleSaveProject() {
-    try {
-      const project = getProjectSnapshot();
-      const blob = await exportProject(project);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${project.name.replace(/[\\/:*?"<>|\s]+/g, "-").toLowerCase() || "project"}.json`;
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      notify("success", ko.notice.projectSaved);
-    } catch (error) {
-      notifyError(error, { kind: "generic", title: ko.failed.projectSave });
-    }
-  }
-
   async function handleExportMix() {
     try {
       notify("info", ko.notice.mixRendering);
@@ -787,7 +695,7 @@ export default function App() {
           onLoadProject={handleLoadProject}
           onPlayPause={handlePlayPause}
           onRecordToggle={handleRecordToggle}
-          onSaveProject={handleSaveProject}
+          onSaveProject={saveProjectFile}
           onExportMix={handleExportMix}
           onStop={handleStop}
         />

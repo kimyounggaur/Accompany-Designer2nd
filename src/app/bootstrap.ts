@@ -1,0 +1,74 @@
+import { audioEngine } from "../audio/audioEngine";
+import { ko } from "../i18n/ko";
+import { notify, notifyError } from "../services/notify";
+import { loadAutosave, startAutosave } from "../services/persistence/autosave";
+import { useAutosaveStore } from "../state/autosaveStore";
+import { recallAudio, restoreAudio } from "../storage/projectStorage";
+import { useDawStore } from "../store/useDawStore";
+import { decodeStoredAudio, saveProjectFile } from "./projectFile";
+import { getProjectSnapshot } from "./projectSnapshot";
+
+/**
+ * 앱이 켜질 때 한 번 하는 일: 자동 저장을 시작하고, 저장해 둔 프로젝트가 있으면 복구한다.
+ * 돌려주는 함수를 부르면 모두 거둔다(화면이 사라질 때).
+ *
+ * 복구 규칙(예전 App.tsx와 같다):
+ *  - 읽어 오는 동안 사용자가 이미 작업을 시작했다면 그 작업을 덮어쓰지 않는다.
+ *  - 복구가 끝나기 전에는 저장하지 않는다(빈 프로젝트가 저장된 기록을 덮어쓰지 않도록).
+ */
+export function startApp(): () => void {
+  let cancelled = false;
+  const initial = getProjectSnapshot();
+
+  const autosave = startAutosave({
+    getProject: getProjectSnapshot,
+    recallAudio,
+    subscribe: (listener) => useDawStore.subscribe(listener),
+    isRecording: () => useDawStore.getState().recording.status !== "idle",
+    exportToFile: () => void saveProjectFile(),
+  });
+
+  const untouched = () => {
+    const now = getProjectSnapshot();
+    return (
+      now.tracks === initial.tracks &&
+      now.name === initial.name &&
+      now.bpm === initial.bpm &&
+      now.timeMarkers === initial.timeMarkers &&
+      Object.keys(now.audioAssets).length === 0
+    );
+  };
+
+  void (async () => {
+    let dirty = false;
+    try {
+      const loaded = await loadAutosave();
+      if (cancelled) return;
+      if (loaded && untouched()) {
+        const restored = await restoreAudio(loaded.stored, decodeStoredAudio);
+        if (cancelled) return;
+        if (untouched()) {
+          audioEngine.clearBuffers();
+          restored.commit();
+          useDawStore.getState().importProject(restored.project);
+          useAutosaveStore.getState().setStatus({ state: "saved", savedAt: loaded.updatedAt });
+          if (restored.missing) notify("warning", ko.notice.autosaveRestoredMissing(restored.missing));
+          else notify("success", ko.notice.autosaveRestored);
+          return;
+        }
+      }
+      dirty = !untouched();
+    } catch (error) {
+      dirty = !untouched();
+      if (!cancelled) notifyError(error, { kind: "projectFile", title: ko.failed.autosaveRecover });
+    } finally {
+      // 복구를 기다리는 사이 사용자가 바꾼 내용이 있으면 이제부터 저장 대상이다.
+      if (!cancelled) autosave.markReady({ dirty });
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+    autosave.dispose();
+  };
+}
