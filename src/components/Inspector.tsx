@@ -1,6 +1,4 @@
-import { Download, Trash2 } from "lucide-react";
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
-import { estimateBpm } from "../audio/bpmDetector";
 import { audioEngine } from "../audio/audioEngine";
 import { useDawStore } from "../store/useDawStore";
 import { SpectrumAnalyzer } from "./SpectrumAnalyzer";
@@ -8,7 +6,8 @@ import { DelayPluginPanel } from "./DelayPluginPanel";
 import { ReverbPluginPanel } from "./ReverbPluginPanel";
 import { LevelMeterRack } from "./LevelMeter";
 import { EffectRack } from "./EffectRack";
-import { CommittedNumberInput } from "./CommittedNumberInput";
+import { ClipPanel } from "../ui/inspector/ClipPanel";
+import { PanelSection } from "../ui/inspector/PanelSection";
 import type {
   CompressorSettings,
   DelaySettings,
@@ -16,23 +15,14 @@ import type {
   EqSettings,
   ReverbSettings,
 } from "../types";
-import {
-  findClip,
-  getClipPlaybackRate,
-  getClipTimelineDuration,
-} from "../utils/audioMath";
+import { findClip } from "../utils/audioMath";
 
 export function Inspector() {
-  const [bpmStatus, setBpmStatus] = useState("");
-  const [bpmSuggestion, setBpmSuggestion] = useState<{ clipId: string; value: number }>();
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | undefined>(undefined);
   const tracks = useDawStore((state) => state.tracks);
-  const audioAssets = useDawStore((state) => state.audioAssets);
   const selectedTrackId = useDawStore((state) => state.selectedTrackId);
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const bpm = useDawStore((state) => state.bpm);
-  const updateClip = useDawStore((state) => state.updateClip);
-  const setBpm = useDawStore((state) => state.setBpm);
   const beginHistoryGroup = useDawStore((state) => state.beginHistoryGroup);
   const endHistoryGroup = useDawStore((state) => state.endHistoryGroup);
   useEffect(() => {
@@ -41,8 +31,6 @@ export function Inspector() {
     return () => { document.removeEventListener("pointerup", endHistoryGroup); document.removeEventListener("pointercancel", endHistoryGroup); };
   }, [endHistoryGroup]);
   const updateTrack = useDawStore((state) => state.updateTrack);
-  const updateAudioAsset = useDawStore((state) => state.updateAudioAsset);
-  const deleteClip = useDawStore((state) => state.deleteClip);
 
   // AnalyserNode를 AudioContext 초기화 후 연결
   useEffect(() => {
@@ -68,8 +56,6 @@ export function Inspector() {
     selection?.track ??
     tracks.find((track) => track.id === selectedTrackId) ??
     tracks[0];
-  const selectedClip = selection?.clip;
-  const asset = selectedClip ? audioAssets[selectedClip.audioBufferId] : undefined;
 
   function syncEffectSlot(type: EffectSlotType, enabled: boolean) {
     return selectedTrack.effectChain.map((slot) =>
@@ -382,165 +368,18 @@ export function Inspector() {
     });
   }
 
-  function detectClipBpm() {
-    if (!selectedClip) {
-      return;
-    }
-
-    const buffer = audioEngine.getBuffer(selectedClip.audioBufferId);
-    if (!buffer) {
-      setBpmStatus("오디오 버퍼가 없어 BPM을 분석할 수 없습니다.");
-      return;
-    }
-
-    setBpmStatus("BPM 분석 중...");
-    window.setTimeout(() => {
-      const detected = estimateBpm(buffer);
-      if (!detected) {
-        setBpmStatus("BPM을 안정적으로 추정하지 못했습니다.");
-        return;
-      }
-
-      updateAudioAsset(selectedClip.audioBufferId, { detectedBpm: detected }, { history: false });
-      setBpmSuggestion({ clipId: selectedClip.id, value: detected });
-      setBpmStatus(`추정 BPM ${detected} · 곡에 따라 절반이나 두 배로 감지될 수 있습니다.`);
-    }, 30);
-  }
-
-  function downloadRecordingWav() {
-    if (!asset?.blobUrl) {
-      return;
-    }
-
-    const anchor = document.createElement("a");
-    anchor.href = asset.blobUrl;
-    anchor.download = asset.fileName.toLowerCase().endsWith(".wav")
-      ? asset.fileName
-      : `${asset.fileName}.wav`;
-    anchor.click();
-  }
-
   if (!selectedTrack) {
     return <aside className="inspector" data-testid="inspector" />;
   }
 
   return (
-    <aside className="inspector" data-testid="inspector" onPointerDownCapture={(event) => {
+    <aside className="inspector" data-testid="inspector" aria-label="클립과 트랙 설정" onPointerDownCapture={(event) => {
       const target = event.target as Element;
       if (target.closest("svg") || target.matches('input[type="range"]')) beginHistoryGroup();
     }}>
-      <section className="panel">
-        <div className="panel-heading">
-          <h2>클립</h2>
-          {selectedClip && (
-            <button
-              className="icon-button danger"
-              onClick={() => deleteClip(selectedClip.id)}
-              title="클립 삭제"
-            >
-              <Trash2 size={16} />
-            </button>
-          )}
-        </div>
+      <ClipPanel />
 
-        {selectedClip ? (
-          <div className="control-stack">
-            <label>
-              이름
-              <input
-                value={selectedClip.name}
-                onFocus={beginHistoryGroup}
-                onBlur={endHistoryGroup}
-                onChange={(event) =>
-                  updateClip(selectedClip.id, { name: event.target.value })
-                }
-              />
-            </label>
-            <label>
-              소스 BPM
-              <CommittedNumberInput key={selectedClip.id} label="소스 BPM" min={20} max={300} step={0.1}
-                value={selectedClip.sourceBpm}
-                onCommit={(value) => updateClip(selectedClip.id, { sourceBpm: value })} />
-            </label>
-            <label>
-              게인
-              <input
-                max={2}
-                min={0}
-                step={0.01}
-                type="range"
-                value={selectedClip.gain}
-                onChange={(event) =>
-                  updateClip(selectedClip.id, { gain: Number(event.target.value) })
-                }
-              />
-            </label>
-            <button
-              className={selectedClip.muted ? "toggle active danger" : "toggle"}
-              onClick={() =>
-                updateClip(selectedClip.id, { muted: !selectedClip.muted })
-              }
-            >
-              클립 음소거
-            </button>
-            <label>
-              스트레치
-              <select
-                value={selectedClip.stretchMode}
-                onChange={(event) =>
-                  updateClip(selectedClip.id, {
-                    stretchMode: event.target.value as "none" | "resample",
-                  })
-                }
-              >
-                <option value="resample">실시간 재생 속도</option>
-                <option value="none">원본 속도</option>
-              </select>
-            </label>
-            <div className="mini-readout">
-              <span>속도 {getClipPlaybackRate(bpm, selectedClip).toFixed(2)}x</span>
-              <span>
-                길이 {getClipTimelineDuration(bpm, selectedClip).toFixed(2)}초
-              </span>
-            </div>
-            <button className="text-button full" onClick={detectClipBpm}>
-              BPM 감지
-            </button>
-            {bpmSuggestion?.clipId === selectedClip.id && <div className="control-stack">
-              <button className="text-button full" type="button" onClick={() => { updateClip(selectedClip.id, { sourceBpm: bpmSuggestion.value }); setBpmStatus(`클립 원본 BPM을 ${bpmSuggestion.value}(으)로 설정했습니다.`); }}>클립 원본 BPM에 적용</button>
-              <button className="text-button full" type="button" onClick={() => { setBpm(bpmSuggestion.value); setBpmStatus(`프로젝트 템포를 ${bpmSuggestion.value}(으)로 설정했습니다.`); }}>프로젝트 템포에 적용</button>
-            </div>}
-            {asset && (
-              <p className="asset-meta">
-                {asset.fileName} · {asset.duration.toFixed(2)}초 · {asset.sampleRate}Hz
-              </p>
-            )}
-            {asset?.sourceType === "recording" && (
-              <div className="recording-save-box">
-                <p className="asset-meta">
-                  WAV {asset.byteSize ? `${(asset.byteSize / 1024).toFixed(1)}KB` : ""}
-                  {asset.recordedAt ? ` · ${new Date(asset.recordedAt).toLocaleString()}` : ""}
-                </p>
-                <button
-                  className="text-button full"
-                  disabled={!asset.blobUrl}
-                  onClick={downloadRecordingWav}
-                  title={asset.blobUrl ? "녹음 WAV 저장" : "이 세션에 WAV Blob이 없습니다"}
-                  type="button"
-                >
-                  <Download size={16} />
-                  WAV 저장
-                </button>
-              </div>
-            )}
-            {bpmStatus && <p className="asset-meta">{bpmStatus}</p>}
-          </div>
-        ) : (
-          <p className="empty-state">클립을 선택하면 편집 값이 표시됩니다.</p>
-        )}
-      </section>
-
-      <section className="panel trax-panel">
+      <PanelSection id="trax" title="트랙 믹스" className="trax-panel">
         <div className="trax-rack">
           {/* 헤더 */}
           <div className="trax-header">
@@ -592,45 +431,35 @@ export function Inspector() {
             />
           </div>
         </div>
-      </section>
+      </PanelSection>
 
-      <section className="panel meter-panel">
+      <PanelSection id="meter" title="레벨 미터" className="meter-panel">
         <LevelMeterRack />
-      </section>
+      </PanelSection>
 
-      <section className="panel effect-rack-panel">
+      <PanelSection id="effect-rack" title="이펙트 랙" className="effect-rack-panel">
         <EffectRack
           track={selectedTrack}
           onChange={(patch) => updateTrack(selectedTrack.id, patch)}
         />
-      </section>
+      </PanelSection>
 
-      <section className="panel delay-panel">
-        <DelayPluginPanel
-          bpm={bpm}
-          delay={selectedTrack.delay}
-          onChange={updateDelay}
-        />
-      </section>
-
-      <section className="panel reverb-panel">
-        <ReverbPluginPanel
-          reverb={selectedTrack.reverb}
-          onChange={updateReverb}
-        />
-      </section>
-
-      <section className="panel eq-panel">
-        <div className="plugin-panel-heading">
-          <h2>이퀄라이저</h2>
+      <PanelSection
+        id="eq"
+        title="이퀄라이저"
+        className="eq-panel"
+        actions={
           <button
             className={`plugin-power-button ${selectedTrack.eq.enabled ? "on" : ""}`}
             onClick={() => updateEq({ enabled: !selectedTrack.eq.enabled })}
+            aria-pressed={selectedTrack.eq.enabled}
+            aria-label="이퀄라이저 켜기"
             type="button"
           >
             {selectedTrack.eq.enabled ? "ON" : "OFF"}
           </button>
-        </div>
+        }
+      >
         <div className="eq-bands">
           <EqKnob
             label="BASS"
@@ -663,9 +492,9 @@ export function Inspector() {
             onChange={(v) => updateEq({ presenceGain: v })}
           />
         </div>
-      </section>
+      </PanelSection>
 
-      <section className="panel comp-panel">
+      <PanelSection id="comp" title="컴프레서" className="comp-panel">
         <div className="comp-rack">
           {/* 상단 VU 미터 */}
           <div className="comp-vu-row">
@@ -745,11 +574,26 @@ export function Inspector() {
             ))}
           </div>
         </div>
-      </section>
+      </PanelSection>
 
-      <section className="panel spec-panel">
+      <PanelSection id="delay" title="딜레이" className="delay-panel">
+        <DelayPluginPanel
+          bpm={bpm}
+          delay={selectedTrack.delay}
+          onChange={updateDelay}
+        />
+      </PanelSection>
+
+      <PanelSection id="reverb" title="리버브" className="reverb-panel">
+        <ReverbPluginPanel
+          reverb={selectedTrack.reverb}
+          onChange={updateReverb}
+        />
+      </PanelSection>
+
+      <PanelSection id="spectrum" title="분석기" className="spec-panel">
         <SpectrumAnalyzer analyser={analyserNode} />
-      </section>
+      </PanelSection>
     </aside>
   );
 }

@@ -28,6 +28,14 @@ const S = {
   trackVolume: '[data-testid="track-volume"]',
   trackName: '[data-testid="track-name"]',
   timeDisplay: '[data-testid="time-display"]',
+  statusbar: '[data-testid="statusbar"]',
+  trackHeader: '[data-testid="track-header"]',
+  fileMenuTrigger: '[data-testid="file-menu-trigger"]',
+  fileMenuPanel: '[data-testid="file-menu-panel"]',
+  recordOptionsToggle: '[data-testid="record-options-toggle"]',
+  countIn: 'select[aria-label="녹음 카운트인"]',
+  inspectorToggle: '[data-testid="inspector-toggle"]',
+  warpToggle: '[data-testid="warp-toggle"]',
   eqBassKnob: '[role=slider][aria-label="BASS 이퀄라이저"]',
 };
 
@@ -102,13 +110,95 @@ test.describe("A2 화면 폭", () => {
   }
 
   test("상단 바 높이: 1280~1599px은 두 줄(≤112px), 1600px 이상은 한 줄(≤72px)", async ({ page }) => {
-    test.fail(true, "P2-1에서 해결 예정 (11/13 기준 1440px 177px, 1920px 80px)");
     for (const [width, max] of [[1280, 112], [1440, 112], [1680, 72], [1920, 72]] as const) {
       await page.setViewportSize({ width, height: 900 });
       await openApp(page);
       const h = (await page.locator(S.transport).boundingBox())!.height;
       expect(h, `${width}px`).toBeLessThanOrEqual(max);
     }
+  });
+});
+
+test.describe("P2-1 화면 틀", () => {
+  test("1280×720에서 트랙 3개가 스크롤 없이 보인다", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await openApp(page);
+    await page.locator('button[title="트랙 추가"]').click();
+    await page.locator('button[title="트랙 추가"]').click();
+    const headers = page.locator(S.trackHeader);
+    await expect(headers).toHaveCount(3);
+    const statusTop = (await page.locator(S.statusbar).boundingBox())!.y;
+    const last = (await headers.last().boundingBox())!;
+    expect(last.y + last.height).toBeLessThanOrEqual(statusTop);
+  });
+
+  test("확대 단추는 어느 폭에서도 한 군데에만 있다", async ({ page }) => {
+    for (const width of [1100, 1440, 1680]) {
+      await page.setViewportSize({ width, height: 900 });
+      await openApp(page);
+      await expect(page.locator(S.zoomOut), `${width}px`).toHaveCount(1);
+    }
+  });
+
+  test("녹음 옵션: 1280~1599px은 펼쳐 보이고, 1279px 이하는 '녹음 설정' 팝오버로 접힌다", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    await expect(page.locator(S.countIn)).toBeVisible();
+    await expect(page.locator(S.recordOptionsToggle)).toHaveCount(0);
+    await page.setViewportSize({ width: 1100, height: 900 });
+    await expect(page.locator(S.countIn)).toHaveCount(0);
+    await page.locator(S.recordOptionsToggle).click();
+    await expect(page.locator(S.countIn)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(S.countIn)).toHaveCount(0);
+  });
+
+  test("파일 메뉴 하나에 올리기·열기·저장·내보내기가 모여 있고 Esc로 닫힌다", async ({ page }) => {
+    await openApp(page);
+    const trigger = page.locator(S.fileMenuTrigger);
+    await trigger.click();
+    const items = page.locator(`${S.fileMenuPanel} [role="menuitem"]`);
+    await expect(items).toHaveCount(4);
+    await expect(items).toHaveText([/오디오 업로드/, /프로젝트 불러오기/, /프로젝트 저장/, /믹스 WAV 내보내기/]);
+    await page.keyboard.press("ArrowDown");
+    await expect(items.nth(1)).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(S.fileMenuPanel)).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  });
+
+  test("WARP는 상단 바가 아니라 오른쪽 '클립' 칸에 있고, 처음에는 꺼져 있다", async ({ page }) => {
+    await openApp(page);
+    await expect(page.locator(S.transport)).not.toContainText("WARP");
+    await upload(page);
+    await page.locator(S.clip).first().click({ position: { x: 60, y: 40 } });
+    const toggle = page.locator(`${S.inspector} ${S.warpToggle}`);
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("오른쪽 패널 접기·펴기는 새로고침해도 기억된다", async ({ page }) => {
+    await openApp(page);
+    await expect(page.locator(S.inspector)).toBeVisible();
+    await page.locator(S.inspectorToggle).click();
+    await expect(page.locator(S.inspector)).toBeHidden();
+    await page.reload();
+    await page.locator(S.statusbar).waitFor();
+    await expect(page.locator(S.inspector)).toBeHidden();
+    await page.locator(S.inspectorToggle).click();
+    await expect(page.locator(S.inspector)).toBeVisible();
+  });
+
+  test("칸을 접으면 새로고침해도 접힌 채로 있다", async ({ page }) => {
+    await openApp(page);
+    const toggle = page.locator('[data-panel="clip"] .panel-section__toggle');
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await page.reload();
+    await expect(page.locator('[data-panel="clip"] .panel-section__toggle')).toHaveAttribute("aria-expanded", "false");
   });
 });
 

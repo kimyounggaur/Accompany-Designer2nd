@@ -3,7 +3,8 @@ import { audioEngine } from "./audio/audioEngine";
 import { vocalRecorder } from "./audio/recorder";
 import { Inspector } from "./components/Inspector";
 import { Timeline } from "./components/Timeline";
-import { TransportBar } from "./components/TransportBar";
+import { AppShell } from "./app/AppShell";
+import { TopBar } from "./ui/transport/TopBar";
 import type { AudioAsset, Clip, DawProject } from "./types";
 import { createId, getProjectDuration } from "./utils/audioMath";
 import { useDawStore } from "./store/useDawStore";
@@ -61,7 +62,6 @@ export default function App() {
   const setZoom = useDawStore((state) => state.setZoom);
   const zoomPxPerSecond = useDawStore((state) => state.zoomPxPerSecond);
   const commandMessage = useDawStore((state) => state.commandMessage);
-  const playlistDetached = useDawStore((state) => state.playlistDetached);
   const recordingState = useDawStore((state) => state.recording);
   const setRecordingState = useDawStore((state) => state.setRecordingState);
   const resetRecordingState = useDawStore((state) => state.resetRecordingState);
@@ -788,22 +788,22 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
-      <TransportBar
-        isRecording={isRecording}
-        status={status}
-        onFiles={handleFiles}
-        onLoadProject={handleLoadProject}
-        onPlayPause={handlePlayPause}
-        onRecordToggle={handleRecordToggle}
-        onSaveProject={handleSaveProject}
-        onExportMix={handleExportMix}
-        onStop={handleStop}
-      />
-      <div className={`workspace ${playlistDetached ? "detached" : ""}`}>
-        <Timeline />
-        <Inspector />
-      </div>
-    </main>
+    <AppShell
+      status={status}
+      topBar={
+        <TopBar
+          isRecording={isRecording}
+          onFiles={handleFiles}
+          onLoadProject={handleLoadProject}
+          onPlayPause={handlePlayPause}
+          onRecordToggle={handleRecordToggle}
+          onSaveProject={handleSaveProject}
+          onExportMix={handleExportMix}
+          onStop={handleStop}
+        />
+      }
+      timeline={<Timeline />}
+      inspector={<Inspector />}
+    />
   );
 }

@@ -194,7 +194,6 @@ export function EffectRack({ track, onChange }: EffectRackProps) {
     <div className="effect-rack">
       <div className="effect-rack-heading">
         <div>
-          <h2>이펙트 랙</h2>
           <span>{track.name}</span>
         </div>
         <button className="icon-button" onClick={savePreset} title="랙 프리셋 저장" type="button">
