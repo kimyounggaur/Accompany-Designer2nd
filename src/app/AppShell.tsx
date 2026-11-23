@@ -2,21 +2,22 @@ import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { ReactNode } from "react";
 import { useDawStore } from "../store/useDawStore";
 import { BuildStamp } from "../ui/feedback/BuildStamp";
+import { ConfirmDialog } from "../ui/feedback/ConfirmDialog";
 import { StatusLine } from "../ui/feedback/StatusLine";
+import { ToastRegion } from "../ui/feedback/ToastRegion";
 import { useStoredFlag } from "../ui/useStoredFlag";
 
 interface AppShellProps {
   topBar: ReactNode;
   timeline: ReactNode;
   inspector: ReactNode;
-  status: string;
 }
 
 /**
  * 화면 틀: 위 상단 바 / 가운데 작업 영역(타임라인 + 오른쪽 패널) / 아래 상태 줄.
  * 내용은 창 폭을 넘지 못하고, 넘치는 부분은 각 영역 안에서만 스크롤한다(layout.css).
  */
-export function AppShell({ topBar, timeline, inspector, status }: AppShellProps) {
+export function AppShell({ topBar, timeline, inspector }: AppShellProps) {
   const playlistDetached = useDawStore((state) => state.playlistDetached);
   const [collapsed, setCollapsed] = useStoredFlag("ad.ui.inspectorCollapsed", false);
   const hidden = collapsed || playlistDetached;
@@ -32,7 +33,7 @@ export function AppShell({ topBar, timeline, inspector, status }: AppShellProps)
         {inspector}
       </div>
       <footer className="statusbar" data-testid="statusbar">
-        <StatusLine message={status} />
+        <StatusLine />
         <button
           type="button"
           className="statusbar__toggle"
@@ -48,6 +49,8 @@ export function AppShell({ topBar, timeline, inspector, status }: AppShellProps)
         </button>
         <BuildStamp />
       </footer>
+      <ToastRegion />
+      <ConfirmDialog />
     </main>
   );
 }

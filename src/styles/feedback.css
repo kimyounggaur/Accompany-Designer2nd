@@ -1,0 +1,152 @@
+/*
+ * 사용자 안내(토스트·확인창) — P2-2
+ * 배치와 색만 정한다. 안내 문구와 시간 규칙은 state/noticeStore.ts에 있다.
+ */
+
+.toast-region {
+  position: fixed;
+  left: 50%;
+  bottom: 44px; /* 아래 상태 줄(28px) 위 */
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(560px, calc(100vw - 24px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left-width: 5px;
+  background: var(--mistral-ivory);
+  color: var(--mistral-black);
+  box-shadow: var(--mistral-shadow);
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: auto;
+}
+
+.toast--error {
+  border-left-color: #c8261a;
+  background: #fff1ee;
+}
+
+.toast--warning {
+  border-left-color: #e0a100;
+  background: #fff8dc;
+}
+
+.toast--success {
+  border-left-color: #2f8f4e;
+  background: #f0faf2;
+}
+
+.toast--info {
+  border-left-color: var(--mistral-orange);
+}
+
+.toast__message {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.toast__count {
+  flex: 0 0 auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.toast__action,
+.toast__close {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.toast__action {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.toast__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.toast__action:hover,
+.toast__close:hover {
+  background: var(--mistral-gold);
+}
+
+/* 확인창 */
+.confirm-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--line);
+  background: var(--mistral-ivory);
+  color: var(--mistral-black);
+  box-shadow: var(--mistral-shadow);
+}
+
+.confirm-dialog::backdrop {
+  background: rgba(31, 31, 31, 0.42);
+}
+
+.confirm-dialog__body {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+}
+
+.confirm-dialog__body h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.confirm-dialog__body p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.confirm-dialog__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.confirm-dialog__buttons .text-button {
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--mistral-black);
+}
+
+.confirm-dialog__buttons .text-button.primary {
+  border-color: var(--mistral-orange);
+  background: var(--mistral-orange);
+  color: #ffffff;
+}
+
+.confirm-dialog__buttons .text-button.danger {
+  border-color: #a5350c;
+  background: #a5350c;
+  color: #ffffff;
+}

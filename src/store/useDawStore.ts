@@ -21,6 +21,7 @@ import {
 } from "../utils/audioMath";
 import { DEFAULT_DELAY_SETTINGS, normalizeDelaySettings } from "../utils/delay";
 import { DEFAULT_REVERB_SETTINGS, normalizeReverbSettings } from "../utils/reverb";
+import { fail, ok, type CommandResult } from "../state/commandResult";
 
 type LegacyEqSettings = Partial<Track["eq"]> & {
   lowGain?: number;
@@ -51,28 +52,6 @@ const DEFAULT_RECORDING_STATE: RecordingState = {
   waveformPeaks: [],
 };
 
-const playlistToolLabels: Record<PlaylistTool, string> = {
-  move: "이동",
-  draw: "그리기",
-  paint: "페인트",
-  delete: "삭제",
-  mute: "음소거",
-  slip: "슬립 편집",
-  slice: "자르기",
-  select: "선택",
-  zoom: "확대/축소",
-  "play-selected": "선택 재생",
-};
-
-const snapLabels: Record<PlaylistSnap, string> = {
-  main: "메인",
-  line: "라인",
-  beat: "박",
-  halfBeat: "1/2박",
-  quarterBeat: "1/4박",
-  none: "없음",
-};
-
 function createDefaultEffectChain(settings: {
   eq: Track["eq"];
   compressor: Track["compressor"];
@@ -101,14 +80,13 @@ interface DawStore extends DawProject {
   performanceMode: boolean;
   playlistDetached: boolean;
   recording: RecordingState;
-  commandMessage: string;
   past: HistorySnapshot[];
   future: HistorySnapshot[];
   captureHistory: () => void;
   beginHistoryGroup: () => void;
   endHistoryGroup: () => void;
-  undo: () => void;
-  redo: () => void;
+  undo: () => CommandResult<"empty">;
+  redo: () => CommandResult<"empty">;
   setBpm: (bpm: number) => void;
   setProjectName: (name: string) => void;
   setPlayhead: (playhead: number) => void;
@@ -118,10 +96,9 @@ interface DawStore extends DawProject {
   setPlaylistTool: (tool: PlaylistTool) => void;
   setPlaylistSnap: (snap: PlaylistSnap) => void;
   setGlobalSnap: (snap: Exclude<PlaylistSnap, "main">) => void;
-  setCommandMessage: (message: string) => void;
   setRecordingState: (patch: Partial<RecordingState>) => void;
   resetRecordingState: () => void;
-  toggleRecordingArm: (trackId: string) => void;
+  toggleRecordingArm: (trackId: string) => CommandResult<"recording", { armed: boolean }>;
   setRecordingInputDevice: (inputDeviceId?: string) => void;
   setRecordingMonitoring: (monitoringEnabled: boolean) => void;
   setRecordingMetronome: (metronomeEnabled: boolean) => void;
@@ -147,26 +124,26 @@ interface DawStore extends DawProject {
     options?: HistoryOptions,
   ) => void;
   deleteClip: (clipId: string, options?: HistoryOptions) => void;
-  deleteSelectedClips: () => void;
+  deleteSelectedClips: () => CommandResult<"none-selected", { count: number }>;
   toggleClipMuted: (clipId: string) => void;
-  sliceClipAt: (clipId: string, splitTime: number) => void;
+  sliceClipAt: (clipId: string, splitTime: number) => CommandResult<"not-found" | "outside-clip">;
   selectClip: (clipId?: string, additive?: boolean) => void;
   selectTrack: (trackId?: string) => void;
   setSelectedClips: (clipIds: string[]) => void;
   toggleClipSelection: (clipId: string) => void;
   selectAllClips: () => void;
   clearSelection: () => void;
-  quantizeSelectedClips: () => void;
-  groupSelectedClips: () => void;
-  ungroupSelectedClips: () => void;
-  zoomToSelectedClips: () => void;
-  resetSelectedClipSource: () => void;
+  quantizeSelectedClips: () => CommandResult<"none-selected", { count: number }>;
+  groupSelectedClips: () => CommandResult<"too-few", { count: number }>;
+  ungroupSelectedClips: () => CommandResult<"none-selected", { count: number }>;
+  zoomToSelectedClips: () => CommandResult<"none-selected">;
+  resetSelectedClipSource: () => CommandResult<"none-selected", { count: number }>;
   addTimeMarker: (time?: number) => void;
   clearTimeMarkers: () => void;
   togglePerformanceMode: () => void;
   togglePlaylistDetached: () => void;
   addTrack: () => void;
-  deleteTrack: (trackId: string) => void;
+  deleteTrack: (trackId: string) => CommandResult<"last-track" | "recording" | "not-found", { name: string }>;
   reorderTrack: (trackId: string, direction: -1 | 1) => void;
   updateTrack: (trackId: string, patch: Partial<Omit<Track, "clips">>) => void;
   importProject: (project: DawProject) => void;
@@ -502,7 +479,6 @@ export const useDawStore = create<DawStore>((set) => {
   performanceMode: false,
   playlistDetached: false,
   recording: DEFAULT_RECORDING_STATE,
-  commandMessage: "",
   past: [],
   future: [],
   beginHistoryGroup: () => { groupingHistory = true; groupRecorded = false; },
@@ -512,11 +488,13 @@ export const useDawStore = create<DawStore>((set) => {
       past: trimHistory([...state.past, createHistorySnapshot(state)]),
       future: [],
     })),
-  undo: () =>
+  undo: () => {
+    let result = ok() as CommandResult<"empty">;
     set((state) => {
       const previous = state.past[state.past.length - 1];
       if (!previous) {
-        return { commandMessage: "실행 취소할 작업이 없습니다." };
+        result = fail("empty");
+        return {};
       }
 
       return {
@@ -526,14 +504,17 @@ export const useDawStore = create<DawStore>((set) => {
         selectedTrackId: undefined,
         selectedClipId: undefined,
         selectedClipIds: [],
-        commandMessage: "실행 취소",
       };
-    }),
-  redo: () =>
+    });
+    return result;
+  },
+  redo: () => {
+    let result = ok() as CommandResult<"empty">;
     set((state) => {
       const next = state.future[0];
       if (!next) {
-        return { commandMessage: "다시 실행할 작업이 없습니다." };
+        result = fail("empty");
+        return {};
       }
 
       return {
@@ -543,9 +524,10 @@ export const useDawStore = create<DawStore>((set) => {
         selectedTrackId: undefined,
         selectedClipId: undefined,
         selectedClipIds: [],
-        commandMessage: "다시 실행",
       };
-    }),
+    });
+    return result;
+  },
   setBpm: (bpm) =>
     setWithHistory((state) => { const value = clamp(Number(bpm) || 120, 20, 300); return value === state.bpm ? {} : { bpm: value }; }),
   setProjectName: (name) => setWithHistory((state) => state.name === name ? {} : { name }),
@@ -559,11 +541,7 @@ export const useDawStore = create<DawStore>((set) => {
       playlistSnap: snapEnabled ? "line" : "none",
       gridDivision: snapEnabled ? getSnapDivision("line") : 2,
     }),
-  setPlaylistTool: (playlistTool) =>
-    set({
-      playlistTool,
-      commandMessage: `${playlistToolLabels[playlistTool]} 도구 선택됨`,
-    }),
+  setPlaylistTool: (playlistTool) => set({ playlistTool }),
   setPlaylistSnap: (playlistSnap) =>
     set((state) => {
       const effectiveSnap = resolveSnap(playlistSnap, state.globalSnap);
@@ -571,7 +549,6 @@ export const useDawStore = create<DawStore>((set) => {
         playlistSnap,
         snapEnabled: effectiveSnap !== "none",
         gridDivision: getSnapDivision(effectiveSnap),
-        commandMessage: `스냅: ${snapLabels[playlistSnap]}`,
       };
     }),
   setGlobalSnap: (globalSnap) =>
@@ -581,10 +558,8 @@ export const useDawStore = create<DawStore>((set) => {
         globalSnap,
         snapEnabled: effectiveSnap !== "none",
         gridDivision: getSnapDivision(effectiveSnap),
-        commandMessage: `글로벌 스냅: ${snapLabels[globalSnap]}`,
       };
     }),
-  setCommandMessage: (commandMessage) => set({ commandMessage }),
   setRecordingState: (patch) =>
     set((state) => ({
       recording: {
@@ -606,20 +581,21 @@ export const useDawStore = create<DawStore>((set) => {
         waveformPeaks: [],
       },
     })),
-  toggleRecordingArm: (trackId) =>
+  toggleRecordingArm: (trackId) => {
+    let result = ok({ armed: false }) as CommandResult<"recording", { armed: boolean }>;
     set((state) => {
       if (
         state.recording.status === "counting-in" ||
         state.recording.status === "recording" ||
         state.recording.status === "stopping"
       ) {
-        return {
-          commandMessage: "Stop recording before changing armed track.",
-        };
+        result = fail("recording");
+        return {};
       }
 
       const armedTrackId =
         state.recording.armedTrackId === trackId ? undefined : trackId;
+      result = ok({ armed: Boolean(armedTrackId) });
 
       return {
         recording: {
@@ -633,16 +609,16 @@ export const useDawStore = create<DawStore>((set) => {
           countInRemaining: 0,
           waveformPeaks: [],
         },
-        commandMessage: armedTrackId ? "이 트랙에 녹음하도록 설정했습니다." : "녹음 대기 트랙을 해제했습니다.",
       };
-    }),
+    });
+    return result;
+  },
   setRecordingInputDevice: (inputDeviceId) =>
     set((state) => ({
       recording: {
         ...state.recording,
         inputDeviceId,
       },
-      commandMessage: "녹음 입력 장치를 변경했습니다.",
     })),
   setRecordingMonitoring: (monitoringEnabled) =>
     set((state) => ({
@@ -650,9 +626,6 @@ export const useDawStore = create<DawStore>((set) => {
         ...state.recording,
         monitoringEnabled,
       },
-      commandMessage: monitoringEnabled
-        ? "Input monitoring enabled."
-        : "Input monitoring disabled.",
     })),
   setRecordingMetronome: (metronomeEnabled) =>
     set((state) => ({
@@ -660,7 +633,6 @@ export const useDawStore = create<DawStore>((set) => {
         ...state.recording,
         metronomeEnabled,
       },
-      commandMessage: metronomeEnabled ? "Metronome enabled." : "Metronome disabled.",
     })),
   setRecordingCountIn: (countInBeats) =>
     set((state) => ({
@@ -669,7 +641,6 @@ export const useDawStore = create<DawStore>((set) => {
         countInBeats: clamp(Math.round(countInBeats), 0, 8),
         countInRemaining: 0,
       },
-      commandMessage: countInBeats > 0 ? "Count-in enabled." : "Count-in disabled.",
     })),
   addAudioAsset: (asset, options) =>
     setWithHistory((state) => ({
@@ -697,7 +668,6 @@ export const useDawStore = create<DawStore>((set) => {
       ),
       selectedClipId: clip.id,
       selectedClipIds: [clip.id],
-      commandMessage: `${clip.name} 추가됨`,
     }), options),
   addClipFromSource: (sourceClipId, trackId, startTime, options) => {
     let createdId: string | undefined;
@@ -709,9 +679,7 @@ export const useDawStore = create<DawStore>((set) => {
         : undefined;
 
       if (!clip) {
-        return {
-          commandMessage: "오디오를 업로드하거나 클립을 선택한 뒤 그리세요.",
-        };
+        return {};
       }
 
       createdId = clip.id;
@@ -723,7 +691,6 @@ export const useDawStore = create<DawStore>((set) => {
         ),
         selectedClipId: clip.id,
         selectedClipIds: [clip.id],
-        commandMessage: `${clip.name} 추가됨`,
       };
     }, options);
 
@@ -789,14 +756,15 @@ export const useDawStore = create<DawStore>((set) => {
       })),
       selectedClipId: state.selectedClipId === clipId ? undefined : state.selectedClipId,
       selectedClipIds: state.selectedClipIds.filter((selectedId) => selectedId !== clipId),
-      commandMessage: "클립 삭제됨",
     }), options),
-  deleteSelectedClips: () =>
+  deleteSelectedClips: () => {
+    let result = fail("none-selected") as CommandResult<"none-selected", { count: number }>;
     setWithHistory((state) => {
       const deleting = new Set(state.selectedClipIds);
       if (!deleting.size) {
-        return { commandMessage: "선택된 클립이 없습니다." };
+        return {};
       }
+      result = ok({ count: deleting.size });
 
       return {
         tracks: state.tracks.map((track) => ({
@@ -805,9 +773,10 @@ export const useDawStore = create<DawStore>((set) => {
         })),
         selectedClipId: undefined,
         selectedClipIds: [],
-        commandMessage: `클립 ${deleting.size}개 삭제됨`,
       };
-    }),
+    });
+    return result;
+  },
   toggleClipMuted: (clipId) =>
     setWithHistory((state) => ({
       tracks: state.tracks.map((track) => ({
@@ -820,13 +789,14 @@ export const useDawStore = create<DawStore>((set) => {
       selectedClipIds: state.selectedClipIds.includes(clipId)
         ? state.selectedClipIds
         : [clipId],
-      commandMessage: "클립 음소거 전환됨",
     })),
-  sliceClipAt: (clipId, splitTime) =>
+  sliceClipAt: (clipId, splitTime) => {
+    let result = ok() as CommandResult<"not-found" | "outside-clip">;
     setWithHistory((state) => {
       const selection = findClip(state.tracks, clipId);
       if (!selection) {
-        return { commandMessage: "자를 클립을 선택하세요." };
+        result = fail("not-found");
+        return {};
       }
 
       const { clip } = selection;
@@ -835,7 +805,8 @@ export const useDawStore = create<DawStore>((set) => {
       const localTime = splitTime - clip.startTime;
 
       if (localTime <= 0.03 || localTime >= timelineDuration - 0.03) {
-        return { commandMessage: "클립 내부를 클릭해 자르세요." };
+        result = fail("outside-clip");
+        return {};
       }
 
       const sourceDelta = localTime * playbackRate;
@@ -866,9 +837,10 @@ export const useDawStore = create<DawStore>((set) => {
         ),
         selectedClipId: rightClip.id,
         selectedClipIds: [rightClip.id],
-        commandMessage: "클립 자르기 완료",
       };
-    }),
+    });
+    return result;
+  },
   selectClip: (clipId, additive = false) =>
     set((state) => {
       if (!clipId) {
@@ -901,9 +873,6 @@ export const useDawStore = create<DawStore>((set) => {
       return {
         selectedClipId: selectedClipIds[selectedClipIds.length - 1],
         selectedClipIds,
-        commandMessage: selectedClipIds.length
-          ? `클립 ${selectedClipIds.length}개 선택됨`
-          : "선택 해제됨",
       };
     }),
   toggleClipSelection: (clipId) =>
@@ -923,29 +892,27 @@ export const useDawStore = create<DawStore>((set) => {
       return {
         selectedClipId: selectedClipIds[selectedClipIds.length - 1],
         selectedClipIds,
-        commandMessage: `클립 ${selectedClipIds.length}개 선택됨`,
       };
     }),
   clearSelection: () =>
     set({
       selectedClipId: undefined,
       selectedClipIds: [],
-      commandMessage: "선택 해제됨",
     }),
   selectTrack: (trackId) =>
-    set((state) => ({
+    set({
       selectedTrackId: trackId,
       selectedClipId: undefined,
       selectedClipIds: [],
-      commandMessage:
-        state.tracks.find((track) => track.id === trackId)?.name ?? "트랙 선택됨",
-    })),
-  quantizeSelectedClips: () =>
+    }),
+  quantizeSelectedClips: () => {
+    let result = fail("none-selected") as CommandResult<"none-selected", { count: number }>;
     setWithHistory((state) => {
       const selected = new Set(state.selectedClipIds);
       if (!selected.size) {
-        return { commandMessage: "퀀타이즈할 클립이 없습니다." };
+        return {};
       }
+      result = ok({ count: selected.size });
 
       const division = state.snapEnabled ? state.gridDivision : getSnapDivision("line");
       return {
@@ -960,17 +927,20 @@ export const useDawStore = create<DawStore>((set) => {
               : clip,
           ),
         })),
-        commandMessage: `클립 ${selected.size}개 퀀타이즈됨`,
       };
-    }),
-  groupSelectedClips: () =>
+    });
+    return result;
+  },
+  groupSelectedClips: () => {
+    let result = fail("too-few") as CommandResult<"too-few", { count: number }>;
     setWithHistory((state) => {
       if (state.selectedClipIds.length < 2) {
-        return { commandMessage: "그룹화할 클립을 두 개 이상 선택하세요." };
+        return {};
       }
 
       const groupId = createId("group");
       const selected = new Set(state.selectedClipIds);
+      result = ok({ count: selected.size });
       return {
         tracks: state.tracks.map((track) => ({
           ...track,
@@ -978,15 +948,18 @@ export const useDawStore = create<DawStore>((set) => {
             selected.has(clip.id) ? { ...clip, groupId } : clip,
           ),
         })),
-        commandMessage: `클립 ${selected.size}개 그룹화됨`,
       };
-    }),
-  ungroupSelectedClips: () =>
+    });
+    return result;
+  },
+  ungroupSelectedClips: () => {
+    let result = fail("none-selected") as CommandResult<"none-selected", { count: number }>;
     setWithHistory((state) => {
       const selected = new Set(state.selectedClipIds);
       if (!selected.size) {
-        return { commandMessage: "해제할 선택 그룹이 없습니다." };
+        return {};
       }
+      result = ok({ count: selected.size });
 
       return {
         tracks: state.tracks.map((track) => ({
@@ -995,15 +968,18 @@ export const useDawStore = create<DawStore>((set) => {
             selected.has(clip.id) ? { ...clip, groupId: undefined } : clip,
           ),
         })),
-        commandMessage: "선택 클립 그룹 해제됨",
       };
-    }),
-  zoomToSelectedClips: () =>
+    });
+    return result;
+  },
+  zoomToSelectedClips: () => {
+    let result = fail("none-selected") as CommandResult<"none-selected">;
     set((state) => {
       const selected = getClipsByIds(state.tracks, state.selectedClipIds);
       if (!selected.length) {
-        return { commandMessage: "확대할 클립을 선택하세요." };
+        return {};
       }
+      result = ok();
 
       const start = Math.min(...selected.map(({ clip }) => clip.startTime));
       const end = Math.max(
@@ -1016,15 +992,18 @@ export const useDawStore = create<DawStore>((set) => {
       return {
         playhead: start,
         zoomPxPerSecond: clamp(760 / span, 40, 320),
-        commandMessage: "선택 항목으로 확대됨",
       };
-    }),
-  resetSelectedClipSource: () =>
+    });
+    return result;
+  },
+  resetSelectedClipSource: () => {
+    let result = fail("none-selected") as CommandResult<"none-selected", { count: number }>;
     setWithHistory((state) => {
       const selected = getClipsByIds(state.tracks, state.selectedClipIds);
       if (!selected.length) {
-        return { commandMessage: "소스를 초기화할 클립을 선택하세요." };
+        return {};
       }
+      result = ok({ count: selected.length });
 
       const selectedIds = new Set(selected.map(({ clip }) => clip.id));
       return {
@@ -1043,9 +1022,10 @@ export const useDawStore = create<DawStore>((set) => {
             };
           }),
         })),
-        commandMessage: "선택 클립 소스 초기화됨",
       };
-    }),
+    });
+    return result;
+  },
   addTimeMarker: (time) =>
     setWithHistory((state) => {
       const markerTime = Math.max(0, time ?? state.playhead);
@@ -1057,28 +1037,16 @@ export const useDawStore = create<DawStore>((set) => {
 
       return {
         timeMarkers: [...state.timeMarkers, marker],
-        commandMessage: `${marker.name} 추가됨`,
       };
     }),
   clearTimeMarkers: () =>
     setWithHistory(() => ({
       timeMarkers: [],
-      commandMessage: "타임 마커 삭제됨",
     })),
   togglePerformanceMode: () =>
-    set((state) => ({
-      performanceMode: !state.performanceMode,
-      commandMessage: state.performanceMode
-        ? "퍼포먼스 모드 꺼짐"
-        : "퍼포먼스 모드 켜짐",
-    })),
+    set((state) => ({ performanceMode: !state.performanceMode })),
   togglePlaylistDetached: () =>
-    set((state) => ({
-      playlistDetached: !state.playlistDetached,
-      commandMessage: state.playlistDetached
-        ? "플레이리스트 붙음"
-        : "플레이리스트 분리됨",
-    })),
+    set((state) => ({ playlistDetached: !state.playlistDetached })),
   addTrack: () =>
     setWithHistory((state) => {
       const track = createDefaultTrack(state.tracks.length + 1);
@@ -1089,11 +1057,20 @@ export const useDawStore = create<DawStore>((set) => {
         selectedClipIds: [],
       };
     }),
-  deleteTrack: (trackId) =>
+  deleteTrack: (trackId) => {
+    let result = fail("not-found") as CommandResult<"last-track" | "recording" | "not-found", { name: string }>;
     setWithHistory((state) => {
-      if (state.tracks.length <= 1 || ["counting-in", "recording", "stopping"].includes(state.recording.status)) return {};
+      if (["counting-in", "recording", "stopping"].includes(state.recording.status)) {
+        result = fail("recording");
+        return {};
+      }
+      if (state.tracks.length <= 1) {
+        result = fail("last-track");
+        return {};
+      }
       const track = state.tracks.find((item) => item.id === trackId);
       if (!track) return {};
+      result = ok({ name: track.name });
       const removedIds = new Set(track.clips.map((clip) => clip.id));
       const tracks = state.tracks.filter((item) => item.id !== trackId);
       const selectedClipIds = state.selectedClipIds.filter((id) => !removedIds.has(id));
@@ -1103,9 +1080,10 @@ export const useDawStore = create<DawStore>((set) => {
         selectedClipId: state.selectedClipId && removedIds.has(state.selectedClipId) ? selectedClipIds[selectedClipIds.length - 1] : state.selectedClipId,
         selectedClipIds,
         recording: state.recording.armedTrackId === trackId ? { ...state.recording, armedTrackId: undefined, status: "idle" } : state.recording,
-        commandMessage: `${track.name} 트랙이 삭제되었습니다. 실행 취소로 되돌릴 수 있습니다.`,
       };
-    }),
+    });
+    return result;
+  },
   reorderTrack: (trackId, direction) =>
     setWithHistory((state) => {
       if (["counting-in", "recording", "stopping"].includes(state.recording.status)) return {};
@@ -1114,7 +1092,7 @@ export const useDawStore = create<DawStore>((set) => {
       if (index < 0 || target < 0 || target >= state.tracks.length) return {};
       const tracks = [...state.tracks];
       [tracks[index], tracks[target]] = [tracks[target], tracks[index]];
-      return { tracks, commandMessage: `${tracks[target].name} 트랙 순서를 변경했습니다.` };
+      return { tracks };
     }),
   updateTrack: (trackId, patch) =>
     setWithHistory((state) => {
@@ -1152,7 +1130,6 @@ export const useDawStore = create<DawStore>((set) => {
         ...DEFAULT_RECORDING_STATE,
         waveformPeaks: [],
       },
-      commandMessage: "프로젝트 불러옴",
     })),
   resetProject: () =>
     setWithHistory(() => ({
@@ -1174,7 +1151,6 @@ export const useDawStore = create<DawStore>((set) => {
         ...DEFAULT_RECORDING_STATE,
         waveformPeaks: [],
       },
-      commandMessage: "프로젝트 초기화됨",
     })),
   };
 });

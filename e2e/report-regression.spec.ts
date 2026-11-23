@@ -6,6 +6,8 @@
  * - 선택자는 S 한 곳에만 둔다. 화면 부품에는 data-testid를 붙여 두었으므로 CSS 이름이 바뀌어도(6단계) 깨지지 않는다.
  */
 import { expect, test, type Page } from "@playwright/test";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,6 +38,13 @@ const S = {
   countIn: 'select[aria-label="녹음 카운트인"]',
   inspectorToggle: '[data-testid="inspector-toggle"]',
   warpToggle: '[data-testid="warp-toggle"]',
+  projectInput: '[data-testid="project-input"]',
+  toast: '[data-testid="toast"]',
+  confirmDialog: '[data-testid="confirm-dialog"]',
+  confirmOk: '[data-testid="confirm-ok"]',
+  confirmCancel: '[data-testid="confirm-cancel"]',
+  layoutNotice: '[data-testid="layout-notice"]',
+  layoutNoticeDismiss: '[data-testid="layout-notice-dismiss"]',
   eqBassKnob: '[role=slider][aria-label="BASS 이퀄라이저"]',
 };
 
@@ -54,8 +63,18 @@ const PROBES = `(() => {
   };
 })();`;
 
-async function openApp(page: Page) {
+async function openApp(page: Page, options: { layoutNotice?: boolean } = {}) {
   await page.addInitScript(PROBES);
+  if (!options.layoutNotice) {
+    // P2-2: 처음 한 번 뜨는 '화면 배치가 바뀌었습니다' 카드가 다른 측정을 가리지 않도록 본 것으로 해 둔다.
+    await page.addInitScript(() => {
+      try {
+        window.localStorage.setItem("ad.ui.layoutNoticeSeen", "1");
+      } catch {
+        /* 저장소를 못 쓰는 환경 */
+      }
+    });
+  }
   await page.goto("/");
   await page.locator(S.inspector).waitFor();
   await page.waitForTimeout(1200); // 자동 저장 복구가 끝날 때까지
@@ -199,6 +218,152 @@ test.describe("P2-1 화면 틀", () => {
     await expect(toggle).toHaveAttribute("aria-expanded", "false");
     await page.reload();
     await expect(page.locator('[data-panel="clip"] .panel-section__toggle')).toHaveAttribute("aria-expanded", "false");
+  });
+});
+
+test.describe("P2-2 안내 통로", () => {
+  test("자동 저장 복구 뒤 '복구했습니다' 안내가 다른 안내에 덮이지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await page.waitForTimeout(2000); // 자동 저장 지연(1.2초) 이후
+    await page.reload();
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 5000 });
+    await expect(page.locator(S.status)).toContainText("자동 저장된 프로젝트와 음원을 복구했습니다");
+    await page.waitForTimeout(1500);
+    await expect(page.locator(S.status)).toContainText("자동 저장된 프로젝트와 음원을 복구했습니다");
+  });
+
+  test("오류 토스트는 10초가 지나도 남아 있고, 닫기 단추로 닫힌다", async ({ page }) => {
+    await openApp(page);
+    await upload(page, NOT_AUDIO);
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("not-audio.txt");
+    await page.waitForTimeout(10_500);
+    await expect(alert).toBeVisible();
+    await alert.getByRole("button", { name: "안내 닫기" }).click();
+    await expect(alert).toHaveCount(0);
+  });
+
+  test("완료 토스트는 3초쯤 뒤 사라지지만 상태 줄에는 마지막 안내가 남는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    const toast = page.locator(S.toast).filter({ hasText: "업로드 완료" });
+    await expect(toast).toBeVisible();
+    await expect(toast).toHaveCount(0, { timeout: 6000 });
+    await expect(page.locator(S.status)).toContainText("업로드 완료");
+  });
+
+  test("같은 오류가 반복되면 토스트를 늘리지 않고 ×2로 센다", async ({ page }) => {
+    await openApp(page);
+    await upload(page, NOT_AUDIO);
+    await upload(page, NOT_AUDIO);
+    await expect(page.locator(S.toast)).toHaveCount(1);
+    await expect(page.locator(S.toast)).toContainText("×2");
+  });
+
+  test("도구를 바꾸는 단축키는 안내 문구를 바꾸지 않는다(툴바가 이미 보여 줌)", async ({ page }) => {
+    await openApp(page);
+    await upload(page, NOT_AUDIO);
+    const before = await page.locator(S.status).innerText();
+    for (const key of ["KeyP", "KeyB", "KeyE", "KeyV"]) await page.keyboard.press(key);
+    await expect(page.locator(S.status)).toHaveText(before);
+  });
+
+  test("되돌릴 작업이 없을 때 Ctrl+Z는 상태 줄에만 알린다(토스트 없음)", async ({ page }) => {
+    await openApp(page);
+    await page.keyboard.press("Control+KeyZ");
+    await expect(page.locator(S.status)).toHaveText("실행 취소할 작업이 없습니다.");
+    await expect(page.locator(S.toast)).toHaveCount(0);
+  });
+
+  test("트랙 삭제는 앱 안의 확인창을 거치고, 취소하면 그대로다", async ({ page }) => {
+    const nativeDialogs: string[] = [];
+    page.on("dialog", async (dialog) => {
+      nativeDialogs.push(dialog.message());
+      await dialog.dismiss();
+    });
+    await openApp(page);
+    await page.locator('button[title="트랙 추가"]').click();
+    await expect(page.locator(S.trackHeader)).toHaveCount(2);
+    const remove = page.locator(S.trackHeader).nth(1).locator('button[title="트랙 삭제"]');
+
+    await remove.click();
+    const dialog = page.locator(S.confirmDialog);
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText("'트랙 2' 트랙과 클립 0개를 삭제할까요?");
+    await expect(page.locator(S.confirmCancel)).toBeFocused(); // 되돌리기 어려운 작업은 취소에 초점
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(page.locator(S.trackHeader)).toHaveCount(2);
+
+    await remove.click();
+    await page.locator(S.confirmOk).click();
+    await expect(page.locator(S.trackHeader)).toHaveCount(1);
+    await expect(page.locator(S.status)).toContainText("트랙 2 트랙이 삭제되었습니다");
+    expect(nativeDialogs).toEqual([]);
+  });
+
+  test("확인창이 열려 있는 동안 Delete·Space 단축키는 뒤의 화면에 작용하지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page); // 올린 클립은 선택된 상태
+    await page.locator('button[title="트랙 추가"]').click();
+    await page.locator(S.trackHeader).nth(1).locator('button[title="트랙 삭제"]').click();
+    await expect(page.locator(S.confirmDialog)).toBeVisible();
+    const base = await starts(page);
+    await page.keyboard.press("Delete");
+    await page.keyboard.press("Space"); // 초점이 '취소'에 있으므로 확인창만 닫힌다
+    await expect(page.locator(S.confirmDialog)).toBeHidden();
+    await page.waitForTimeout(300);
+    expect(await starts(page)).toBe(base); // 재생이 시작되지 않음
+    await expect(page.locator(S.clip)).toHaveCount(1); // 클립이 지워지지 않음
+    await expect(page.locator(S.trackHeader)).toHaveCount(2); // 취소했으므로 트랙도 그대로
+  });
+
+  test("프로젝트 불러오기는 확인창을 거치고, 불러오면 완료 안내가 뜬다", async ({ page }, testInfo) => {
+    const nativeDialogs: string[] = [];
+    page.on("dialog", async (dialog) => {
+      nativeDialogs.push(dialog.message());
+      await dialog.dismiss();
+    });
+    await openApp(page);
+    await upload(page);
+    await page.locator(S.fileMenuTrigger).click();
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.locator(`${S.fileMenuPanel} [role="menuitem"]`).nth(2).click(),
+    ]);
+    // 파일 이름에 한글이 섞인 경로는 브라우저가 못 읽는 경우가 있어, 영문 임시 경로에 저장한다.
+    const saved = path.join(os.tmpdir(), `ad2-saved-project-${testInfo.workerIndex}-${Date.now()}.json`);
+    await download.saveAs(saved);
+    await expect(page.locator(S.status)).toContainText("프로젝트 파일을 저장했습니다");
+
+    await page.setInputFiles(S.projectInput, saved);
+    const dialog = page.locator(S.confirmDialog);
+    await expect(dialog).toBeVisible();
+    await page.locator(S.confirmCancel).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator(S.clip)).toHaveCount(1);
+
+    await page.setInputFiles(S.projectInput, saved);
+    await page.locator(S.confirmOk).click();
+    await expect(page.locator(S.status)).toContainText("프로젝트와 음원을 불러왔습니다");
+    expect(nativeDialogs).toEqual([]);
+    fs.rmSync(saved, { force: true });
+  });
+
+  test("화면 배치 안내는 처음 한 번 뜨고, '다시 보지 않기'를 누르면 다시 뜨지 않는다", async ({ page }) => {
+    await openApp(page, { layoutNotice: true });
+    const notice = page.locator(S.layoutNotice);
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("화면 배치가 바뀌었습니다");
+    await notice.getByRole("button", { name: "닫기" }).click(); // 이번에만 숨김
+    await expect(notice).toBeHidden();
+    await page.reload();
+    await expect(page.locator(S.layoutNotice)).toBeVisible();
+    await page.locator(S.layoutNoticeDismiss).click();
+    await page.reload();
+    await page.locator(S.statusbar).waitFor();
+    await expect(page.locator(S.layoutNotice)).toHaveCount(0);
   });
 });
 
