@@ -17,7 +17,7 @@
 
 ## 저장 방식
 
-- **자동 저장**: 편집이 멈추면 잠시 뒤 브라우저(IndexedDB)에 음원까지 함께 저장하고, 새로고침하면 복구합니다. 브라우저 데이터를 지우면 함께 사라집니다.
+- **자동 저장**: 편집이 멈추면 1.2초 뒤(탭을 숨기거나 떠날 때는 바로) 브라우저(IndexedDB)에 음원까지 함께 저장하고, 새로고침하면 복구합니다. 같은 음원은 한 번만 저장하고, 최근 프로젝트 5개를 남깁니다. 상태 줄 오른쪽에 "자동 저장됨 02:41"처럼 보이고, 저장하지 못하면 [프로젝트 파일로 저장] 단추가 나옵니다. 브라우저 데이터를 지우면 함께 사라지니 중요한 작업은 프로젝트 파일로도 보관하세요.
 - **프로젝트 파일**: 상단의 저장·불러오기로 음원이 담긴 파일을 내보내고 불러옵니다. 다른 기기로 옮기거나 백업할 때 씁니다. (형식: `format: "accompany-designer-project"`, 버전 1. 새 형식 `.adproj`는 [설계서](docs/refactoring-design.md) 4단계에서 도입합니다.)
 
 ## 지원 브라우저
@@ -44,10 +44,15 @@ npm run test:e2e     # 회귀 테스트 (Playwright, 처음에는 npx playwright
 ```text
 src/
   App.tsx, main.tsx   화면 조립과 진입점
-  components/         화면 부품
+  app/                화면 틀(AppShell), 사용자 동작(actions), 앱 시작(bootstrap)
+  ui/                 화면 부품: 안내·확인창·자동 저장 표시(feedback), 상단 바, 인스펙터
+  components/         화면 부품(타임라인 등, 순차적으로 ui/로 이동 중)
+  i18n/               화면 문구(ko.ts)
+  services/           안내(notify)·오류 변환(errors)·확인창, 자동 저장(persistence/)
   audio/              소리 엔진, 녹음, 이펙트
-  store/              상태(Zustand)
-  storage/            자동 저장과 프로젝트 파일
+  store/, state/      상태(Zustand): 프로젝트 문서 / 안내·확인창·자동 저장 상태
+  storage/            프로젝트 파일 형식(읽기·쓰기·검증)
+  styles/             화면 틀·안내·글자 가독성 CSS
   utils/              계산·인코딩 함수
 tests/                단위 테스트 (node:test)
 e2e/                  회귀 테스트 (Playwright)

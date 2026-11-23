@@ -46,6 +46,7 @@ const S = {
   layoutNotice: '[data-testid="layout-notice"]',
   layoutNoticeDismiss: '[data-testid="layout-notice-dismiss"]',
   eqBassKnob: '[role=slider][aria-label="저음 이퀄라이저"]',
+  autosave: '[data-testid="autosave-status"]',
 };
 
 /** 소리 소스 시작 횟수, rAF 호출 수, 최종 출력 분석기를 잡아 두는 측정 훅 */
@@ -396,6 +397,245 @@ test.describe("A4·A5 자동 저장과 복구", () => {
     await page.click(S.play);
     await page.waitForTimeout(500);
     expect(await starts(page)).toBeGreaterThan(base);
+  });
+});
+
+test.describe("P2-4 자동 저장 서비스", () => {
+  /** 템포 칸에 값을 넣어 문서를 바꾼다(저장 대상 변경). */
+  async function setTempo(page: Page, value: string) {
+    const tempo = page.locator(S.tempo);
+    await tempo.click();
+    await tempo.press("Control+a");
+    await tempo.pressSequentially(value);
+    await tempo.press("Enter");
+  }
+
+  /** 저장소(IndexedDB)의 현재 모양을 읽는다. */
+  async function dumpDb(page: Page) {
+    return page.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open("accompany-designer");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const keys = (store: string) =>
+        new Promise<IDBValidKey[]>((resolve, reject) => {
+          const request = db.transaction(store).objectStore(store).getAllKeys();
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      const result = {
+        version: db.version,
+        stores: [...db.objectStoreNames].sort(),
+        projects: await keys("projects"),
+        assets: await keys("assets"),
+        meta: await keys("meta"),
+      };
+      db.close();
+      return result;
+    });
+  }
+
+  test("바꾼 뒤 1.2초 안에는 저장하지 않고, 저장되면 '자동 저장됨 시:분'이 보인다", async ({ page }) => {
+    await openApp(page);
+    await expect(page.locator(S.autosave)).toHaveAttribute("data-state", "idle");
+    await setTempo(page, "95");
+    await page.waitForTimeout(500);
+    await expect(page.locator(S.autosave)).toHaveAttribute("data-state", "idle"); // 아직 1.2초 전
+    await expect(page.locator(S.autosave)).toHaveText(/^자동 저장됨 \d{2}:\d{2}$/, { timeout: 3000 });
+    await expect(page.locator(S.autosave)).toHaveAttribute("data-state", "saved");
+  });
+
+  for (const how of ["pagehide", "visibilitychange"] as const) {
+    test(`${how === "pagehide" ? "페이지를 떠날 때" : "탭이 가려질 때"}는 1.2초를 기다리지 않고 바로 저장한다`, async ({ page }) => {
+      await openApp(page);
+      await setTempo(page, "95");
+      await page.evaluate((event) => {
+        if (event === "pagehide") window.dispatchEvent(new Event("pagehide"));
+        else {
+          Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+          document.dispatchEvent(new Event("visibilitychange"));
+        }
+      }, how);
+      // 평소 저장은 1.2초 뒤이므로, 0.8초 안에 저장됐다면 바로 저장한 것이다.
+      await expect(page.locator(S.autosave)).toHaveText(/^자동 저장됨 \d{2}:\d{2}$/, { timeout: 800 });
+      await page.reload();
+      await page.locator(S.statusbar).waitFor();
+      await expect(page.locator(S.tempo)).toHaveValue("95");
+    });
+  }
+
+  test("옛 자동 저장(v1)이 있으면 복구하고 새 구조(v2)로 옮긴 뒤, 새 구조에서 이어서 저장된다", async ({ page }) => {
+    // 앱을 열기 전에, 같은 출처의 빈 페이지에서 예전 버전이 만들던 데이터베이스(v1)를 그대로 만들어 둔다.
+    await page.goto("/favicon.svg");
+    await page.evaluate(async (wavBase64) => {
+      const audio = new Blob([Uint8Array.from(atob(wavBase64), (c) => c.charCodeAt(0))], { type: "audio/wav" });
+      const project = {
+        id: "legacy-project",
+        name: "옛 세션",
+        bpm: 100,
+        sampleRate: 44100,
+        tracks: [
+          {
+            id: "t1",
+            name: "트랙 1",
+            volume: 0.86,
+            pan: 0,
+            muted: false,
+            solo: false,
+            clips: [
+              { id: "c1", audioBufferId: "a1", trackId: "t1", name: "옛 음원", startTime: 0, offset: 0, duration: 8, sourceBpm: 100, stretchMode: "none", gain: 1, fadeIn: 0, fadeOut: 0 },
+            ],
+          },
+        ],
+        audioAssets: { a1: { id: "a1", fileName: "옛 음원.wav", duration: 8, sampleRate: 44100, channels: 2, waveformPeaks: [0, 0.5, 1] } },
+        timeMarkers: [],
+      };
+      await new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open("accompany-designer", 1);
+        open.onupgradeneeded = () => open.result.createObjectStore("projects");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const tx = open.result.transaction("projects", "readwrite");
+          tx.objectStore("projects").put({ format: "accompany-designer-project", version: 1, project, audio: { a1: audio } }, "autosave");
+          tx.oncomplete = () => {
+            open.result.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      });
+    }, fs.readFileSync(WAV).toString("base64"));
+
+    await openApp(page);
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 5000 });
+    await expect(page.locator(S.tempo)).toHaveValue("100");
+    await expect(page.locator(S.status)).toContainText("자동 저장된 프로젝트와 음원을 복구했습니다");
+    await expect(page.locator(S.autosave)).toHaveText(/^자동 저장됨 \d{2}:\d{2}$/); // 복구한 기록의 저장 시각
+
+    const moved = await dumpDb(page);
+    expect(moved.version).toBe(2);
+    expect(moved.stores).toEqual(["assets", "meta", "peaks", "projects"]);
+    expect(moved.projects).toEqual(["legacy-project"]); // 옛 "autosave" 칸은 사라지고 프로젝트 id 칸이 생겼다
+    expect(moved.assets).toHaveLength(1);
+    expect(moved.meta).toEqual(["lastProjectId"]);
+
+    // 옮긴 뒤에도 같은 방식으로 저장·복구된다.
+    await setTempo(page, "88");
+    await page.waitForTimeout(2000);
+    await page.reload();
+    await page.locator(S.statusbar).waitFor();
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 5000 });
+    await expect(page.locator(S.tempo)).toHaveValue("88");
+    expect((await dumpDb(page)).assets).toHaveLength(1); // 같은 음원은 다시 쌓이지 않는다
+  });
+
+  test("같은 음원을 두 번 올려도 저장소에는 한 번만 담긴다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await upload(page);
+    await expect(page.locator(S.autosave)).toHaveText(/^자동 저장됨 \d{2}:\d{2}$/, { timeout: 4000 });
+    await page.waitForTimeout(500);
+    const state = await dumpDb(page);
+    expect(state.assets).toHaveLength(1);
+    expect(state.projects).toHaveLength(1);
+  });
+
+  test("녹음 중에는 저장하지 않고 닫으려 하면 경고하며, 녹음이 끝나면 저장되어 새로고침 뒤에도 남는다", async ({ page }) => {
+    await openApp(page);
+    await page.click('button[title="보컬 녹음"]');
+    await page.waitForTimeout(2600); // 저장 지연(1.2초)을 두 번 넘긴다
+    await expect(page.locator(S.autosave)).toHaveAttribute("data-state", "idle"); // 녹음 중에는 저장하지 않았다
+
+    const dialog = page.waitForEvent("dialog");
+    await page.evaluate(() => setTimeout(() => window.location.reload(), 0));
+    const warning = await dialog;
+    expect(warning.type()).toBe("beforeunload");
+    await warning.dismiss(); // 머무르기
+
+    await page.click(S.stop);
+    await expect(page.locator(S.autosave)).toHaveText(/^자동 저장됨 \d{2}:\d{2}$/, { timeout: 5000 });
+    await page.reload(); // 저장이 끝났으니 경고 없이 새로고침된다
+    await page.locator(S.statusbar).waitFor();
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 5000 });
+  });
+
+  test("저장이 끝난 뒤에는 닫을 때 경고가 없다", async ({ page }) => {
+    const dialogs: string[] = [];
+    page.on("dialog", async (dialog) => {
+      dialogs.push(dialog.type());
+      await dialog.dismiss();
+    });
+    await openApp(page);
+    await setTempo(page, "95");
+    await expect(page.locator(S.autosave)).toHaveText(/^자동 저장됨 \d{2}:\d{2}$/, { timeout: 4000 });
+    await page.reload();
+    await page.locator(S.statusbar).waitFor();
+    expect(dialogs).toEqual([]);
+  });
+
+  test("저장 공간이 가득 차면 오류 안내와 [프로젝트 파일로 저장] 단추가 뜨고, 공간이 생기면 다시 저장된다", async ({ page }) => {
+    // 프로젝트 기록을 쓸 때 브라우저가 '저장 공간 부족'을 돌려주는 상황을 흉내 낸다.
+    await page.addInitScript(() => {
+      const put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore["put"]>) {
+        if ((window as any).__quotaFull && this.name === "projects") throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+        return put.apply(this, args);
+      };
+    });
+    await openApp(page);
+    await page.evaluate(() => ((window as any).__quotaFull = true));
+    await setTempo(page, "95");
+
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("브라우저 저장 공간이 부족해 자동 저장하지 못했습니다", { timeout: 4000 });
+    await expect(page.locator(S.autosave)).toHaveText("자동 저장 실패");
+    await expect(page.locator(S.autosave)).toHaveAttribute("data-state", "failed");
+
+    // 저장 못 한 변경이 남아 있으니 닫을 때 경고한다.
+    const dialog = page.waitForEvent("dialog");
+    await page.evaluate(() => setTimeout(() => window.location.reload(), 0));
+    const warning = await dialog;
+    expect(warning.type()).toBe("beforeunload");
+    await warning.dismiss();
+
+    // 단추로 프로젝트 파일을 내려받을 수 있다.
+    const download = page.waitForEvent("download");
+    await alert.getByRole("button", { name: "프로젝트 파일로 저장" }).click();
+    const saved = path.join(os.tmpdir(), `ad2-quota-${Date.now()}.json`);
+    await (await download).saveAs(saved); // 파일 이름은 운영체제 글자 처리에 따라 달라지므로 내용으로 확인한다
+    const file = JSON.parse(fs.readFileSync(saved, "utf8"));
+    expect(file.format).toBe("accompany-designer-project");
+    expect(file.project.bpm).toBe(95); // 저장하지 못한 변경도 파일에는 들어 있다
+    fs.rmSync(saved, { force: true });
+
+    // 공간이 생기면 다음 변경부터 다시 저장된다.
+    await page.evaluate(() => ((window as any).__quotaFull = false));
+    await setTempo(page, "96");
+    await expect(page.locator(S.autosave)).toHaveText(/^자동 저장됨 \d{2}:\d{2}$/, { timeout: 4000 });
+  });
+
+  test("음원을 처음 저장한 뒤에 보존을 요청하고, 저장 공간을 80% 넘게 쓰면 한 번만 경고한다", async ({ page }) => {
+    await page.addInitScript(() => {
+      const w = window as any;
+      w.__persist = 0;
+      w.__estimate = 0;
+      Object.defineProperty(navigator.storage, "persist", { configurable: true, value: async () => (w.__persist += 1, true) });
+      Object.defineProperty(navigator.storage, "estimate", { configurable: true, value: async () => (w.__estimate += 1, { usage: 85, quota: 100 }) });
+    });
+    await openApp(page);
+    await setTempo(page, "95"); // 음원이 없는 저장
+    await expect(page.locator(S.autosave)).toHaveText(/^자동 저장됨/, { timeout: 4000 });
+    await expect(page.locator(S.toast).filter({ hasText: "브라우저 저장 공간을 85% 사용 중입니다" })).toHaveCount(1);
+    expect(await page.evaluate(() => (window as any).__persist)).toBe(0);
+
+    await upload(page);
+    await page.waitForTimeout(2200);
+    expect(await page.evaluate(() => (window as any).__persist)).toBe(1);
+    await setTempo(page, "96");
+    await page.waitForTimeout(2200);
+    expect(await page.evaluate(() => (window as any).__persist)).toBe(1); // 한 번만
+    expect(await page.evaluate(() => (window as any).__estimate)).toBe(1); // 경고한 뒤에는 더 묻지 않는다
   });
 });
 

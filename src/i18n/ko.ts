@@ -149,6 +149,17 @@ export const ko = {
     autosaveRestoredMissing: (missing: number) => `자동 저장된 프로젝트를 복구했습니다. 음원 ${missing}개를 다시 연결해 주세요.`,
   },
 
+  // ───── 자동 저장 ─────
+
+  autosave: {
+    regionLabel: "자동 저장 상태",
+    saving: "저장 중…",
+    saved: (time: string) => `자동 저장됨 ${time}`,
+    failed: "자동 저장 실패",
+    storageNearlyFull: (percent: number) =>
+      `브라우저 저장 공간을 ${percent}% 사용 중입니다. 곧 자동 저장이 안 될 수 있으니 프로젝트 파일로 저장해 두세요.`,
+  },
+
   // ───── 확인창 ─────
 
   confirm: {

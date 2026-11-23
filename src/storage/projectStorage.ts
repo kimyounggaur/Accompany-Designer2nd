@@ -1,16 +1,20 @@
+import { sha256Hex } from "../services/persistence/assetHash";
 import type { AudioAsset, DawProject } from "../types";
 
-const DB_NAME = "accompany-designer";
-const DB_STORE = "projects";
-const DB_KEY = "autosave";
-const FORMAT = "accompany-designer-project";
-const VERSION = 1;
+/** 프로젝트 파일(.json)과 옛 자동 저장(v1)이 쓰던 형식 표시. 자동 저장은 이제 services/persistence가 맡는다. */
+export const FORMAT = "accompany-designer-project";
+export const VERSION = 1;
 const audioBlobs = new Map<string, Blob>();
 
-export function rememberAudio(id: string, blob: Blob) { audioBlobs.set(id, blob); }
+export function rememberAudio(id: string, blob: Blob) {
+  audioBlobs.set(id, blob);
+  // 자동 저장이 해시를 기다리지 않도록 미리 계산해 둔다(탭을 닫는 순간의 저장이 빨라진다). 실패해도 저장 때 다시 시도한다.
+  sha256Hex(blob).catch(() => undefined);
+}
 export function hasRememberedAudio(id: string) { return audioBlobs.has(id); }
+export function recallAudio(id: string): Blob | undefined { return audioBlobs.get(id); }
 
-function projectCopy(project: DawProject): DawProject {
+export function projectCopy(project: DawProject): DawProject {
   return {
     ...project,
     audioAssets: Object.fromEntries(Object.entries(project.audioAssets).map(([id, asset]) => {
@@ -20,7 +24,7 @@ function projectCopy(project: DawProject): DawProject {
   };
 }
 
-function validateProject(input: unknown): DawProject {
+export function validateProject(input: unknown): DawProject {
   const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
   const finite = (value: unknown) => typeof value === "number" && Number.isFinite(value);
   const validId = (id: unknown) => typeof id === "string" && id.length > 0 && id.length < 500 && !["__proto__", "prototype", "constructor"].includes(id);
@@ -49,7 +53,7 @@ function validateProject(input: unknown): DawProject {
   return projectCopy(p);
 }
 
-type Stored = { format: string; version: number; project: DawProject; audio: Record<string, Blob> };
+export type Stored = { format: string; version: number; project: DawProject; audio: Record<string, Blob> };
 function snapshot(project: DawProject): Stored {
   const audio: Record<string, Blob> = {};
   for (const id of Object.keys(project.audioAssets)) {
@@ -57,41 +61,6 @@ function snapshot(project: DawProject): Stored {
     if (blob) audio[id] = blob;
   }
   return { format: FORMAT, version: VERSION, project: projectCopy(project), audio };
-}
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore(DB_STORE);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("자동 저장 공간을 열 수 없습니다."));
-    request.onblocked = () => reject(new Error("자동 저장 공간이 다른 탭에서 사용 중입니다."));
-  });
-}
-export async function saveAutosave(project: DawProject): Promise<void> {
-  const db = await openDb();
-  const data = snapshot(project);
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(DB_STORE, "readwrite");
-      tx.objectStore(DB_STORE).put(data, DB_KEY);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error ?? new Error("자동 저장에 실패했습니다."));
-      tx.onabort = () => reject(tx.error ?? new Error("자동 저장이 취소되었습니다."));
-    });
-  } finally { db.close(); }
-}
-export async function loadAutosave(): Promise<Stored | undefined> {
-  const db = await openDb();
-  try {
-    const value = await new Promise<Stored | undefined>((resolve, reject) => {
-      const request = db.transaction(DB_STORE, "readonly").objectStore(DB_STORE).get(DB_KEY);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    if (!value) return undefined;
-    if (value.format !== FORMAT || value.version !== VERSION) throw new Error("지원하지 않는 자동 저장 형식입니다.");
-    return { ...value, project: validateProject(value.project) };
-  } finally { db.close(); }
 }
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
