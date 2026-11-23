@@ -5,19 +5,17 @@ import { Timeline } from "./components/Timeline";
 import { AppShell } from "./app/AppShell";
 import { quantizeSelectedClips, redo, undo, zoomToSelectedClips, deleteSelectedClips } from "./app/actions";
 import { startApp } from "./app/bootstrap";
-import { decodeStoredAudio, saveProjectFile } from "./app/projectFile";
+import { importAudioFiles } from "./app/importing";
+import { loadProjectFile, saveProjectFile } from "./app/projectFile";
 import { getProjectSnapshot } from "./app/projectSnapshot";
 import { openExportDialog, resetExport } from "./app/exporting";
-import { cancelRecording, disposeRecording, stopRecording, toggleRecording } from "./app/recording";
-import { countFixed } from "./domain/project/issues";
+import { disposeRecording, stopRecording, toggleRecording } from "./app/recording";
+import { openRelinkDialog } from "./app/relinking";
 import { ko } from "./i18n/ko";
-import { confirmAction } from "./services/confirm";
-import { notify, notifyError } from "./services/notify";
-import { setPeaks } from "./services/peaksCache";
-import { hasRememberedAudio, rememberAudio } from "./services/persistence/audioBlobs";
-import { readProjectFile, restoreAudio } from "./services/persistence/projectFile";
+import { notify } from "./services/notify";
 import { useDialogStore } from "./state/dialogStore";
 import { isExportOpen } from "./state/exportStore";
+import { isRelinkOpen } from "./state/relinkStore";
 import { isRecordingBusy, useRecordingStore } from "./state/recordingStore";
 import { TopBar } from "./ui/transport/TopBar";
 import type { Clip } from "./domain/types";
@@ -28,12 +26,7 @@ export default function App() {
   const isPlaying = useDawStore((state) => state.isPlaying);
   const setIsPlaying = useDawStore((state) => state.setIsPlaying);
   const setPlayhead = useDawStore((state) => state.setPlayhead);
-  const addAudioAsset = useDawStore((state) => state.addAudioAsset);
-  const updateAudioAsset = useDawStore((state) => state.updateAudioAsset);
-  const addClip = useDawStore((state) => state.addClip);
   const updateClip = useDawStore((state) => state.updateClip);
-  const addTrack = useDawStore((state) => state.addTrack);
-  const importProject = useDawStore((state) => state.importProject);
   const selectedClipIds = useDawStore((state) => state.selectedClipIds);
   const setPlaylistTool = useDawStore((state) => state.setPlaylistTool);
   const setZoom = useDawStore((state) => state.setZoom);
@@ -88,8 +81,8 @@ export default function App() {
         return;
       }
 
-      // 확인창·내보내기 대화상자가 열려 있는 동안에는 뒤의 화면을 건드리는 단축키(삭제·재생 등)를 막는다.
-      if (useDialogStore.getState().confirm || isExportOpen()) {
+      // 확인창·내보내기·재연결 대화상자가 열려 있는 동안에는 뒤의 화면을 건드리는 단축키(삭제·재생 등)를 막는다.
+      if (useDialogStore.getState().confirm || isExportOpen() || isRelinkOpen()) {
         return;
       }
 
@@ -283,115 +276,18 @@ export default function App() {
     void toggleRecording();
   }
 
-  async function handleFiles(files: FileList | File[]) {
-    const fileArray = Array.from(files);
-    if (!fileArray.length) return;
-
-    notify("info", ko.notice.decoding(fileArray.length));
-    let uploaded = 0;
-
-    for (let i = 0; i < fileArray.length; i++) {
-      const file = fileArray[i];
-      try {
-        const { asset, peaks } = await audioEngine.decodeFile(file);
-
-        const state = useDawStore.getState();
-        const missingAsset = Object.values(state.assets).find((existing) =>
-          !hasRememberedAudio(existing.id) && existing.fileName === file.name && Math.abs(existing.duration - asset.duration) < 0.25,
-        );
-        if (missingAsset) {
-          const buffer = audioEngine.getBuffer(asset.id);
-          if (buffer) audioEngine.registerBuffer(missingAsset.id, buffer);
-          rememberAudio(missingAsset.id, file);
-          setPeaks(missingAsset.id, peaks);
-          updateAudioAsset(missingAsset.id, { ...asset, id: missingAsset.id }, { history: false });
-          notify("success", ko.notice.relinked(file.name));
-          uploaded += 1;
-          continue;
-        }
-        const startTime = state.playhead;
-        const selected = state.tracks.find((track) => track.id === state.selectedTrackId);
-        let targetTrack = selected ?? state.tracks[0];
-        const overlaps = (track: typeof targetTrack) => track.clips.some((clip) =>
-          clip.startTime < startTime + asset.duration && clip.startTime + clip.duration > startTime,
-        );
-        if (!targetTrack || overlaps(targetTrack)) {
-          addTrack();
-          const allTracks = useDawStore.getState().tracks;
-          targetTrack = allTracks[allTracks.length - 1];
-        }
-
-        const clip: Clip = {
-          id: createId("clip"),
-          audioBufferId: asset.id,
-          name: asset.fileName,
-          trackId: targetTrack.id,
-          startTime,
-          offset: 0,
-          duration: asset.duration,
-          sourceBpm: state.bpm,
-          stretchMode: "none",
-          gain: 1,
-          fadeIn: 0,
-          fadeOut: 0,
-          fadeCurve: "equalPower",
-          muted: false,
-        };
-
-        rememberAudio(asset.id, file);
-        setPeaks(asset.id, peaks);
-        addAudioAsset(asset);
-        addClip(targetTrack.id, clip);
-        uploaded += 1;
-        if (fileArray.length > 1) notify("info", ko.notice.uploadProgress(i + 1, fileArray.length, asset.fileName));
-        else notify("success", ko.notice.uploadDone(asset.fileName));
-      } catch (error) {
-        notifyError(error, { kind: "decode", title: ko.failed.decode(file.name), fileName: file.name });
-      }
-    }
-
-    if (fileArray.length > 1) {
-      if (uploaded === fileArray.length) notify("success", ko.notice.uploadAllDone(fileArray.length));
-      else if (uploaded > 0) notify("warning", ko.notice.uploadPartial(fileArray.length, uploaded));
-    }
-  }
-
-  async function handleLoadProject(file: File) {
-    try {
-      const loaded = await readProjectFile(file);
-      const confirmed = await confirmAction({
-        title: ko.confirm.loadProject.title,
-        message: ko.confirm.loadProject.message,
-        confirmLabel: ko.confirm.loadProject.confirmLabel,
-        tone: "danger",
-      });
-      if (!confirmed) return;
-      const restored = await restoreAudio(loaded, decodeStoredAudio);
-      cancelRecording();
-      audioEngine.stop();
-      audioEngine.clearBuffers();
-      restored.commit();
-      importProject(restored.doc);
-      if (restored.missing) notify("warning", ko.notice.projectLoadedMissing(restored.missing));
-      else notify("success", ko.notice.projectLoaded);
-      const fixed = countFixed(loaded.issues);
-      if (fixed) notify("info", ko.notice.valuesFixed(fixed));
-    } catch (error) {
-      notifyError(error, { kind: "projectFile", title: ko.failed.projectLoad });
-    }
-  }
-
   return (
     <AppShell
       topBar={
         <TopBar
           isRecording={isRecording}
-          onFiles={handleFiles}
-          onLoadProject={handleLoadProject}
+          onFiles={importAudioFiles}
+          onLoadProject={loadProjectFile}
           onPlayPause={handlePlayPause}
           onRecordToggle={handleRecordToggle}
           onSaveProject={saveProjectFile}
           onExportMix={openExportDialog}
+          onRelink={openRelinkDialog}
           onStop={handleStop}
         />
       }

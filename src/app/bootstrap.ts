@@ -10,10 +10,12 @@ import { readLatencyOffsetMs, writeLatencyOffsetMs } from "../services/recording
 import { useAutosaveStore } from "../state/autosaveStore";
 import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
 import { useDawStore } from "../store/useDawStore";
+import { registerAutosave } from "./autosaveControl";
 import { connectEngineSync } from "./engineSync";
 import { decodeStoredAudio, saveProjectFile } from "./projectFile";
 import { getProjectSnapshot } from "./projectSnapshot";
 import { consumeSkipRecover } from "./recoverFlag";
+import { openRelinkDialog } from "./relinking";
 
 /**
  * 앱이 켜질 때 한 번 하는 일: 자동 저장을 시작하고, 저장해 둔 프로젝트가 있으면 복구한다.
@@ -51,6 +53,7 @@ export function startApp(): () => void {
       }),
     exportToFile: () => void saveProjectFile(),
   });
+  registerAutosave(autosave);
 
   const untouched = () => {
     const now = getProjectSnapshot();
@@ -78,8 +81,12 @@ export function startApp(): () => void {
           restored.commit();
           useDawStore.getState().importProject(restored.doc);
           useAutosaveStore.getState().setStatus({ state: "saved", savedAt: loaded.updatedAt });
-          if (restored.missing) notify("warning", ko.notice.autosaveRestoredMissing(restored.missing));
-          else notify("success", ko.notice.autosaveRestored);
+          if (restored.missing) {
+            // 시작하자마자 대화상자를 띄우지 않는다. 안내의 [다시 연결]이나 파일 메뉴에서 연다.
+            notify("warning", ko.notice.autosaveRestoredMissing(restored.missing), {
+              action: { label: ko.action.relink, run: openRelinkDialog },
+            });
+          } else notify("success", ko.notice.autosaveRestored);
           const fixed = countFixed(loaded.loaded.issues);
           if (fixed) notify("info", ko.notice.valuesFixed(fixed));
           return;
@@ -97,6 +104,7 @@ export function startApp(): () => void {
 
   return () => {
     cancelled = true;
+    registerAutosave(undefined);
     offLatencySync();
     offEngineSync();
     autosave.dispose();

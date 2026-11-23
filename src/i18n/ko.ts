@@ -160,7 +160,12 @@ export const ko = {
     playLockedWhileRecording: "녹음 중에는 재생 위치를 옮길 수 없습니다.",
 
     decoding: (count: number) => `${count}개 파일 디코딩 중...`,
-    relinked: (fileName: string) => `${fileName} 음원을 기존 클립에 다시 연결했습니다.`,
+    /** 같은 파일(해시가 같은 음원)을 다시 올렸을 때(설계서 §P4-2): 새 클립을 만들지 않고 빠졌던 음원에 이어 준다. */
+    relinkedClips: (fileName: string, clipCount: number) =>
+      clipCount > 0 ? `${fileName}: 기존 클립 ${clipCount}개에 다시 연결했습니다.` : `${fileName}: 음원을 다시 연결했습니다.`,
+    /** 재연결 대화상자를 닫을 때 */
+    relinkDone: (linked: number, remaining: number) =>
+      remaining > 0 ? `음원 ${linked}개를 다시 연결했습니다. ${remaining}개는 아직 연결되지 않았습니다.` : `음원 ${linked}개를 모두 다시 연결했습니다.`,
     uploadProgress: (index: number, total: number, fileName: string) => `(${index}/${total}) ${fileName} 완료`,
     uploadDone: (fileName: string) => `${fileName} 업로드 완료`,
     uploadAllDone: (count: number) => `${count}개 파일 업로드 완료`,
@@ -208,6 +213,30 @@ export const ko = {
       message: "현재 프로젝트를 불러온 내용으로 바꾸시겠습니까? 현재 작업은 먼저 파일로 저장할 수 있습니다.",
       confirmLabel: "불러오기",
     },
+  },
+
+  // ───── 음원 다시 연결 대화상자 (설계서 §P4-2) ─────
+
+  relink: {
+    title: "음원 다시 연결",
+    intro: (count: number) =>
+      `프로젝트 파일에 들어 있지 않은 음원이 ${count}개 있습니다. 원래 쓰던 음원 파일을 찾아 주면 같은 클립에 다시 연결합니다.`,
+    none: "다시 연결할 음원이 없습니다. 모든 음원이 연결되어 있습니다.",
+    length: (duration: string) => `길이 ${duration}`,
+    clips: (count: number) => `클립 ${count}개`,
+    find: "파일 찾기",
+    checking: "확인하는 중…",
+    linkedSame: "같은 파일입니다. 연결했습니다.",
+    linked: "연결했습니다.",
+    ask: (fileName: string, duration: string) => `이 파일로 연결할까요? ${fileName} (길이 ${duration})`,
+    askYes: "연결",
+    askNo: "취소",
+    differentLength: (expected: string, actual: string) => `다른 파일로 보입니다(길이 ${expected} / ${actual})`,
+    differentName: "다른 파일로 보입니다(파일 이름이 다릅니다)",
+    failed: (fileName: string) => `'${fileName}'을(를) 읽을 수 없습니다. 다른 파일을 골라 주세요.`,
+    close: "닫기",
+    menuItem: "음원 다시 연결",
+    rowLabel: (fileName: string) => `${fileName} 음원`,
   },
 
   // ───── 믹스 내보내기 대화상자 ─────
@@ -266,7 +295,8 @@ export const ko = {
     micDenied: "마이크 사용이 허용되지 않았습니다. 주소창 왼쪽의 사이트 설정에서 마이크를 허용해 주세요.",
     micNotFound: "선택한 마이크를 찾지 못했습니다. 입력 장치를 다시 골라 주세요.",
     micBusy: "다른 프로그램이 마이크를 쓰고 있습니다. 그 프로그램을 닫고 다시 시도해 주세요.",
-    projectInvalid: "프로젝트 파일을 읽을 수 없습니다. 이 앱에서 저장한 .json 파일인지 확인해 주세요.",
+    projectInvalid: "프로젝트 파일을 읽을 수 없습니다. 이 앱에서 저장한 프로젝트 파일인지 확인해 주세요.",
+    projectFileTooBig: "프로젝트 파일이 너무 커서 열 수 없습니다.",
     projectAudio: "프로젝트에 포함된 음원을 읽을 수 없습니다. 파일이 손상되었을 수 있습니다.",
     projectUnsupported: "지원하지 않는 프로젝트 파일 형식입니다.",
     projectTooBig: "트랙·클립·마커가 너무 많아 열 수 없습니다.",
@@ -280,5 +310,6 @@ export const ko = {
 
   action: {
     saveProjectFile: "프로젝트 파일로 저장",
+    relink: "다시 연결",
   },
 } as const;
