@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { audioEngine } from "../audio/audioEngine";
+import { ko } from "../i18n/ko";
 import { useDawStore } from "../store/useDawStore";
 
 const MIN_DB = -60;
@@ -101,7 +102,7 @@ export function LevelMeter({
         <span>-18</span>
         <span>-60</span>
       </div>
-      <div className="level-meter-bar" title={`${label} peak ${reading.peakDb.toFixed(1)} dB`}>
+      <div className="level-meter-bar" title={ko.meter.peakTitle(label, reading.peakDb.toFixed(1))}>
         <span className="level-meter-zone hot" />
         <span className="level-meter-zone warm" />
         <span className="level-meter-rms" style={{ height: `${rmsHeight}%` }} />
@@ -182,11 +183,11 @@ export function LevelMeterRack() {
   return (
     <div className="meter-rack">
       <div className="meter-rack-heading">
-        <span>Peak / RMS</span>
+        <span>{ko.meter.heading}</span>
       </div>
       <div className="meter-list">
         <LevelMeter
-          label="MASTER"
+          label={ko.meter.master}
           reading={readings.master}
           tone="master"
         />

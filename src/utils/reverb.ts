@@ -1,3 +1,4 @@
+import { ko } from "../i18n/ko";
 import type { ReverbMode, ReverbSettings } from "../types";
 import { clamp } from "./audioMath";
 
@@ -7,9 +8,9 @@ export const REVERB_MODE_OPTIONS: Array<{
   value: ReverbMode;
   label: string;
 }> = [
-  { value: "plate", label: "Plate" },
-  { value: "room", label: "Room" },
-  { value: "hall", label: "Hall" },
+  { value: "plate", label: ko.reverb.modes.plate },
+  { value: "room", label: ko.reverb.modes.room },
+  { value: "hall", label: ko.reverb.modes.hall },
 ];
 
 export const DEFAULT_REVERB_SETTINGS: ReverbSettings = {

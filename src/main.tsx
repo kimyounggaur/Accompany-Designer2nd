@@ -4,6 +4,7 @@ import App from "./App";
 import "./styles.css";
 import "./styles/layout.css";
 import "./styles/feedback.css";
+import "./styles/legibility.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

@@ -1,3 +1,4 @@
+import { ko } from "../i18n/ko";
 import type { DelaySettings, DelaySyncDivision } from "../types";
 import { clamp } from "./audioMath";
 
@@ -10,8 +11,8 @@ export const DELAY_SYNC_OPTIONS: Array<{
   { value: "1/4", label: "1/4" },
   { value: "1/8", label: "1/8" },
   { value: "1/16", label: "1/16" },
-  { value: "1/8d", label: "Dotted 1/8" },
-  { value: "1/8t", label: "Triplet 1/8" },
+  { value: "1/8d", label: ko.delay.dotted8 },
+  { value: "1/8t", label: ko.delay.triplet8 },
 ];
 
 export const DEFAULT_DELAY_SETTINGS: DelaySettings = {

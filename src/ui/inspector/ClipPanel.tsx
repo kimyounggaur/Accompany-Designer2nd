@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { audioEngine } from "../../audio/audioEngine";
 import { estimateBpm } from "../../audio/bpmDetector";
 import { CommittedNumberInput } from "../../components/CommittedNumberInput";
+import { ko } from "../../i18n/ko";
 import { useDawStore } from "../../store/useDawStore";
 import { deleteClip } from "../../app/actions";
 import { findClip, getClipPlaybackRate, getClipTimelineDuration } from "../../utils/audioMath";
@@ -195,7 +196,7 @@ export function ClipPanel() {
                 className="text-button full"
                 disabled={!asset.blobUrl}
                 onClick={downloadRecordingWav}
-                title={asset.blobUrl ? "녹음 WAV 저장" : "이 세션에 WAV Blob이 없습니다"}
+                title={asset.blobUrl ? "녹음 WAV 저장" : ko.clip.noWavData}
                 type="button"
               >
                 <Download size={16} />

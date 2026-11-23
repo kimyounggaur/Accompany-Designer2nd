@@ -22,6 +22,13 @@ export interface Notice {
   /** 같은 안내가 다시 올 때마다 오른다. 자동으로 닫히는 시간을 다시 재는 신호로 쓴다. */
   stamp: number;
   action?: NoticeAction;
+  /** 브라우저가 준 원문 오류. 토스트에서 접힌 "자세히 보기"로만 보인다(상태 줄에는 나가지 않는다). */
+  detail?: string;
+}
+
+export interface PushOptions {
+  action?: NoticeAction;
+  detail?: string;
 }
 
 /** 토스트가 자동으로 닫히는 시간(ms). null이면 사용자가 닫을 때까지 남는다. */
@@ -37,7 +44,7 @@ const MAX_TOASTS = 5;
 interface NoticeStore {
   notices: Notice[];
   statusMessage: string;
-  push: (level: NoticeLevel, message: string, options?: { action?: NoticeAction }) => void;
+  push: (level: NoticeLevel, message: string, options?: PushOptions) => void;
   dismiss: (id: number) => void;
   reset: () => void;
 }
@@ -54,11 +61,19 @@ export const useNoticeStore = create<NoticeStore>((set) => ({
 
       const last = state.notices[state.notices.length - 1];
       if (last && last.level === level && last.message === message) {
-        const merged = { ...last, count: last.count + 1, stamp: nextStamp++ };
+        const merged = { ...last, count: last.count + 1, stamp: nextStamp++, detail: options?.detail ?? last.detail };
         return { notices: [...state.notices.slice(0, -1), merged], statusMessage: message };
       }
 
-      const notice: Notice = { id: nextId++, level, message, count: 1, stamp: nextStamp++, action: options?.action };
+      const notice: Notice = {
+        id: nextId++,
+        level,
+        message,
+        count: 1,
+        stamp: nextStamp++,
+        action: options?.action,
+        detail: options?.detail,
+      };
       return { notices: [...state.notices, notice].slice(-MAX_TOASTS), statusMessage: message };
     }),
   dismiss: (id) => set((state) => ({ notices: state.notices.filter((notice) => notice.id !== id) })),

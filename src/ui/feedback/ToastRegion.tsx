@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { useEffect } from "react";
+import { ko } from "../../i18n/ko";
 import { NOTICE_DURATION_MS, useNoticeStore, type Notice } from "../../state/noticeStore";
 import { LayoutNotice } from "./LayoutNotice";
 
@@ -21,7 +22,15 @@ function Toast({ notice }: { notice: Notice }) {
       data-testid="toast"
       data-level={notice.level}
     >
-      <span className="toast__message">{notice.message}</span>
+      <div className="toast__body">
+        <span className="toast__message">{notice.message}</span>
+        {notice.detail && (
+          <details className="toast__details" data-testid="toast-details">
+            <summary>{ko.error.detailSummary}</summary>
+            <pre>{notice.detail}</pre>
+          </details>
+        )}
+      </div>
       {notice.count > 1 && (
         <span className="toast__count" aria-label={`${notice.count}번 반복`}>
           ×{notice.count}

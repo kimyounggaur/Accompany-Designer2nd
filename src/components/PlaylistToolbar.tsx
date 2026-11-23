@@ -1,5 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ko } from "../i18n/ko";
 import { useDawStore } from "../store/useDawStore";
 import {
   clearSelection,
@@ -90,7 +91,7 @@ export function PlaylistToolbar() {
 
   const selectedSnapLabel = useMemo(() => {
     const localLabel =
-      snapOptions.find((option) => option.value === playlistSnap)?.label ?? "Line";
+      snapOptions.find((option) => option.value === playlistSnap)?.label ?? ko.playlist.snapFallback;
     const globalLabel =
       globalSnapOptions.find((option) => option.value === globalSnap)?.label ??
       "라인";
