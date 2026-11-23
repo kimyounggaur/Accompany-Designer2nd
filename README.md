@@ -39,6 +39,11 @@ npm run test:e2e     # 회귀 테스트 (Playwright, 처음에는 npx playwright
 
 `npm run test:e2e`는 설치된 크롬을 쓰려면 `CHROME_PATH=<크롬 경로>`를 붙입니다. 상태 줄 오른쪽 끝의 `빌드 xxxxxxx`는 이 화면이 어느 커밋에서 만들어졌는지 보여 줍니다.
 
+### 개발용 주소 (화면에 보이는 단추는 없음)
+
+- `?probe=1` — 스피커로 나가는 신호를 직접 재서 `window.__probe`(`jumps` 튐·`gaps` 끊김·`peak`·`longestGapMs`, 0.1초마다 갱신)에 둡니다. 재생 직전에 `window.__probeReset()`으로 0으로 되돌립니다. 회귀 시험이 이 값을 읽습니다.
+- `?crash=1` — 그리는 즉시 오류를 내서 "문제가 생겼습니다" 안내 화면을 확인합니다.
+
 ## 폴더 구조
 
 ```text
