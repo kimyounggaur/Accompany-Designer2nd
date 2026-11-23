@@ -1,4 +1,4 @@
-import type { EqSettings } from "../../types";
+import type { EqSettings } from "../../domain/types";
 import { smooth, type EffectNode } from "./EffectNode";
 
 /** 5밴드 이퀄라이저: 낮은음 선반 → 중저음 → 중고음 → 높은음 선반 → 프레즌스. 주파수는 고정이고 게인만 바뀐다. */

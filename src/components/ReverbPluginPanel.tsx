@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { ko } from "../i18n/ko";
-import type { ReverbSettings } from "../types";
+import type { ReverbSettings } from "../domain/types";
 import { REVERB_MODE_OPTIONS } from "../utils/reverb";
 
 interface ReverbPluginPanelProps {

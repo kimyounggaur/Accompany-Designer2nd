@@ -1,4 +1,4 @@
-import type { PlaylistSnap } from "../types";
+import type { PlaylistSnap } from "../domain/types";
 
 /** "기본(main)"이면 전체 스냅 설정을 따른다. */
 export function resolveSnap(snap: PlaylistSnap, globalSnap: Exclude<PlaylistSnap, "main">) {

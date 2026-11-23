@@ -1,4 +1,4 @@
-import type { Clip, DawProject, Track } from "../types";
+import type { Clip, ProjectDoc, Track } from "../domain/types";
 
 export const MIN_CLIP_SOURCE_DURATION = 0.05;
 
@@ -52,7 +52,7 @@ export function getClipTimelineDuration(projectBpm: number, clip: Clip) {
 }
 
 /** 마지막 클립이 끝나는 타임라인 위치(초). 클립이 없으면 0. */
-export function getLastClipEnd(project: Pick<DawProject, "bpm" | "tracks">) {
+export function getLastClipEnd(project: Pick<ProjectDoc, "bpm" | "tracks">) {
   return project.tracks.reduce((maxEnd, track) => {
     const trackEnd = track.clips.reduce((clipMax, clip) => {
       const end = clip.startTime + getClipTimelineDuration(project.bpm, clip);
@@ -63,7 +63,7 @@ export function getLastClipEnd(project: Pick<DawProject, "bpm" | "tracks">) {
   }, 0);
 }
 
-export function getProjectDuration(project: Pick<DawProject, "bpm" | "tracks">) {
+export function getProjectDuration(project: Pick<ProjectDoc, "bpm" | "tracks">) {
   return Math.max(8, getLastClipEnd(project) + getBeatSeconds(project.bpm) * 8);
 }
 

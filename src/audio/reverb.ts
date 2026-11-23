@@ -1,4 +1,4 @@
-import type { ReverbSettings } from "../types";
+import type { ReverbSettings } from "../domain/types";
 import { clamp } from "../utils/audioMath";
 import { normalizeReverbSettings } from "../utils/reverb";
 import { createImpulseBuffer, impulseKey } from "./effects/impulse";

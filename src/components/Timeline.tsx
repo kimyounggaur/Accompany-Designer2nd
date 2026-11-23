@@ -6,7 +6,7 @@ import { notify } from "../services/notify";
 import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
 import { useDawStore } from "../store/useDawStore";
 import { addClipFromSource, deleteTrackWithConfirm, setSelectedClips, toggleRecordingArm } from "../app/actions";
-import type { PlaylistTool } from "../types";
+import type { PlaylistTool } from "../domain/types";
 import {
   clamp,
   getBeatSeconds,
@@ -73,8 +73,8 @@ export function Timeline() {
   // 룰러 드래그 줌용
   const rulerDragRef = useRef<{ startX: number; startZoom: number } | null>(null);
   const tracks = useDawStore((state) => state.tracks);
-  const audioAssets = useDawStore((state) => state.audioAssets);
-  const timeMarkers = useDawStore((state) => state.timeMarkers);
+  const assets = useDawStore((state) => state.assets);
+  const markers = useDawStore((state) => state.markers);
   const bpm = useDawStore((state) => state.bpm);
   const playhead = useDawStore((state) => state.playhead);
   const zoomPxPerSecond = useDawStore((state) => state.zoomPxPerSecond);
@@ -543,7 +543,7 @@ export function Timeline() {
               {tick.label && <span>{tick.label}</span>}
             </div>
           ))}
-          {timeMarkers.map((marker) => (
+          {markers.map((marker) => (
             <div
               className="ruler-marker"
               key={marker.id}
@@ -568,7 +568,7 @@ export function Timeline() {
           onPointerCancel={endLanePointer}
           onPointerLeave={() => setCursorAccent(undefined)}
         >
-          {timeMarkers.map((marker) => (
+          {markers.map((marker) => (
             <div
               className="time-marker"
               key={marker.id}
@@ -597,7 +597,7 @@ export function Timeline() {
           ))}
           {timelineClips.map(({ clip, trackIndex }) => (
             <ClipView
-              asset={audioAssets[clip.audioBufferId]}
+              asset={assets[clip.audioBufferId]}
               clip={clip}
               key={clip.id}
               lanesRef={lanesRef}

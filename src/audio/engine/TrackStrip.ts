@@ -1,4 +1,4 @@
-import type { EffectSlotType, Track } from "../../types";
+import type { EffectSlotType, Track } from "../../domain/types";
 import { effectOrder, isEffectActive } from "../effects/chain";
 import { fadeTo, realTimers, smooth, type EffectTimers } from "../effects/EffectNode";
 import { EFFECT_KINDS, type EffectEnv, type SlotEffect } from "../effects/registry";

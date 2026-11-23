@@ -1,4 +1,4 @@
-import type { Clip } from "../../types";
+import type { Clip } from "../../domain/types";
 import { getClipPlaybackRate } from "../../utils/audioMath";
 
 /** 클립의 소리에 영향을 주는 값만 모은 표시. 이름·그룹처럼 소리와 무관한 값이 바뀌어도 같다. */

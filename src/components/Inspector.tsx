@@ -16,7 +16,7 @@ import type {
   EffectSlotType,
   EqSettings,
   ReverbSettings,
-} from "../types";
+} from "../domain/types";
 import { findClip } from "../utils/audioMath";
 
 export function Inspector() {

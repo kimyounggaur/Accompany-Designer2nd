@@ -1,4 +1,4 @@
-import type { PlaylistTool } from "../types";
+import type { PlaylistTool } from "../domain/types";
 
 // Lightweight, original line icons shared by the toolbar and timeline cursor.
 function icon(paths: string): string {

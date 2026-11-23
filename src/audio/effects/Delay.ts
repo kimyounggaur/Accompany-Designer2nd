@@ -1,4 +1,4 @@
-import type { DelaySettings } from "../../types";
+import type { DelaySettings } from "../../domain/types";
 import { clamp } from "../../utils/audioMath";
 import { getDelayTimeMs, normalizeDelaySettings } from "../../utils/delay";
 import { smooth, type EffectNode } from "./EffectNode";

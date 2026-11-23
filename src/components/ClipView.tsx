@@ -1,8 +1,9 @@
 import type { RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
-import type { AudioAsset, Clip } from "../types";
+import type { AssetMeta, Clip } from "../domain/types";
 import { useDawStore } from "../store/useDawStore";
 import { deleteClip, sliceClipAt } from "../app/actions";
+import { useWaveformPeaks } from "./useWaveformPeaks";
 import {
   clamp,
   getClipPlaybackRate,
@@ -14,7 +15,7 @@ import {
 type DragMode = "move" | "trim-left" | "trim-right" | "slip" | "fade-in" | "fade-out";
 
 interface ClipViewProps {
-  asset?: AudioAsset;
+  asset?: AssetMeta;
   clip: Clip;
   lanesRef: RefObject<HTMLDivElement | null>;
   trackHeight: number;
@@ -38,6 +39,7 @@ export function ClipView({
   trackIndex,
 }: ClipViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const peaks = useWaveformPeaks(asset?.id);
   const [showMenu, setShowMenu] = useState(false);
   const sessionRef = useRef<PointerSession | undefined>(undefined);
   const selectedClipIds = useDawStore((state) => state.selectedClipIds);
@@ -63,7 +65,7 @@ export function ClipView({
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !asset) {
+    if (!canvas || !asset || !peaks) {
       return;
     }
 
@@ -96,10 +98,10 @@ export function ClipView({
       for (let x = 0; x < cssWidth; x += 1) {
         const sourceStart = clip.offset + ((start + x) / Math.max(1, width)) * clip.duration;
         const sourceEnd = clip.offset + ((start + x + 1) / Math.max(1, width)) * clip.duration;
-        const peakStart = Math.max(0, Math.floor(sourceStart / asset.duration * asset.waveformPeaks.length));
-        const peakEnd = Math.min(asset.waveformPeaks.length, Math.max(peakStart + 1, Math.ceil(sourceEnd / asset.duration * asset.waveformPeaks.length)));
+        const peakStart = Math.max(0, Math.floor(sourceStart / asset.duration * peaks.length));
+        const peakEnd = Math.min(peaks.length, Math.max(peakStart + 1, Math.ceil(sourceEnd / asset.duration * peaks.length)));
         let peak = 0;
-        for (let i = peakStart; i < peakEnd; i += 1) peak = Math.max(peak, asset.waveformPeaks[i] || 0);
+        for (let i = peakStart; i < peakEnd; i += 1) peak = Math.max(peak, peaks[i] || 0);
         const barHeight = Math.max(1, peak * canvas.height * 0.43);
         context.fillRect(
           Math.floor(x * dpr),
@@ -115,7 +117,7 @@ export function ClipView({
     resizeObserver.observe(scroll);
     scroll.addEventListener("scroll", draw, { passive: true });
     return () => { resizeObserver.disconnect(); scroll.removeEventListener("scroll", draw); };
-  }, [asset, clip.muted, clip.offset, clip.duration, width, left]);
+  }, [asset, peaks, clip.muted, clip.offset, clip.duration, width, left]);
 
   function getPointerTime(event: React.PointerEvent<HTMLElement>) {
     const lanesRect = lanesRef.current?.getBoundingClientRect();

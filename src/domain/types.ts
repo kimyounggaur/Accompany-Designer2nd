@@ -116,18 +116,26 @@ export interface Track {
   clips: Clip[];
 }
 
-export interface AudioAsset {
-  id: string;
+/** 음원 id. 문서 안의 클립이 `audioBufferId`로 이 값을 가리킨다. */
+export type AssetId = string;
+
+/**
+ * 문서에 남는 음원 정보(문서 형식 v2). 파형·재생 주소 같은 "다시 만들 수 있는 값"은 문서에 없다.
+ *  - 파형: 음원을 풀 때마다 만든다(지금은 services/peaksCache의 메모리 보관, 4단계 P4-3에서 저장소 캐시로).
+ *  - 원본 데이터: services/persistence/audioBlobs가 id로 기억하고, 자동 저장·프로젝트 파일이 해시로 담는다.
+ */
+export interface AssetMeta {
+  id: AssetId;
   fileName: string;
   duration: number;
   sampleRate: number;
   channels: number;
-  waveformPeaks: number[];
-  detectedBpm?: number;
-  sourceType?: "upload" | "recording";
-  blobUrl?: string;
+  source: "upload" | "recording";
+  /** SHA-256(소문자 16진수 64자). 같은 파일 판별·재연결에 쓴다(P4-2). */
+  hash?: string;
   mimeType?: string;
   byteSize?: number;
+  detectedBpm?: number;
   recordedAt?: string;
 }
 
@@ -136,27 +144,44 @@ export interface MasterSettings {
   volumeDb: number;
 }
 
-export interface DawProject {
-  id: string;
-  name: string;
-  bpm: number;
-  sampleRate: number;
-  /** 마스터 볼륨. 옛 프로젝트에는 없을 수 있어 없으면 0 dB로 본다(문서 형식 v2에서 필수가 된다). */
-  master?: MasterSettings;
-  tracks: Track[];
-  audioAssets: Record<string, AudioAsset>;
-  timeMarkers: TimeMarker[];
+/** 박자표(C13). 지금은 문서에 담기만 하고 화면·소리는 4/4로 동작한다. */
+export interface TimeSignature {
+  beats: number;
+  unit: 4 | 8;
 }
-
-/**
- * 실행 취소·자동 저장·엔진 동기화의 대상이 되는 프로젝트 문서.
- * 지금은 DawProject와 같은 모양이다. 문서 형식 v2(필드 이름 변경, 파형 분리)는 P4-1에서 바꾼다.
- * 문서는 바꾸지 않고 새로 만든다(immer). 그래서 "무엇이 바뀌었나"를 === 로 알 수 있다.
- */
-export type ProjectDoc = DawProject;
 
 export interface TimeMarker {
   id: string;
   time: number;
   name: string;
+}
+
+/**
+ * 프로젝트 문서(형식 v2). 실행 취소·자동 저장·엔진 동기화·프로젝트 파일의 대상이다.
+ * 문서는 바꾸지 않고 새로 만든다(immer). 그래서 "무엇이 바뀌었나"를 === 로 알 수 있다.
+ * 옛 이름(`DawProject`, `audioAssets`, `timeMarkers`)은 domain/project/migrations가 읽을 때만 쓴다.
+ */
+export interface ProjectDoc {
+  schemaVersion: 2;
+  id: string;
+  name: string;
+  bpm: number;
+  timeSignature: TimeSignature;
+  sampleRate: number;
+  master: MasterSettings;
+  tracks: Track[];
+  assets: Record<AssetId, AssetMeta>;
+  markers: TimeMarker[];
+}
+
+/** 이펙트 랙 프리셋(저장소·파일로 주고받는 모양). `domain/project/parsePreset`이 읽는다. */
+export interface EffectRackPreset {
+  name: string;
+  /** 만든 시각(ISO 8601 문자열) */
+  createdAt: string;
+  effectChain: EffectSlot[];
+  eq: EqSettings;
+  compressor: CompressorSettings;
+  delay: DelaySettings;
+  reverb: ReverbSettings;
 }

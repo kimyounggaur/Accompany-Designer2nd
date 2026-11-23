@@ -1,4 +1,4 @@
-import type { CompressorSettings } from "../../types";
+import type { CompressorSettings } from "../../domain/types";
 import { smooth, type EffectNode } from "./EffectNode";
 
 export function createCompressor(context: BaseAudioContext, settings: CompressorSettings): EffectNode<CompressorSettings> {

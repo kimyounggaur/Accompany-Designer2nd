@@ -1,5 +1,6 @@
+import { DEFAULT_DELAY_SETTINGS } from "../domain/project/defaults";
+import type { DelaySettings, DelaySyncDivision } from "../domain/types";
 import { ko } from "../i18n/ko";
-import type { DelaySettings, DelaySyncDivision } from "../types";
 import { clamp } from "./audioMath";
 
 export const DELAY_SYNC_OPTIONS: Array<{
@@ -14,18 +15,6 @@ export const DELAY_SYNC_OPTIONS: Array<{
   { value: "1/8d", label: ko.delay.dotted8 },
   { value: "1/8t", label: ko.delay.triplet8 },
 ];
-
-export const DEFAULT_DELAY_SETTINGS: DelaySettings = {
-  enabled: false,
-  delayTimeMs: 375,
-  feedback: 0.35,
-  dry: 1,
-  wet: 0.35,
-  highCutHz: 8000,
-  syncEnabled: false,
-  syncDivision: "1/4",
-  pingPong: false,
-};
 
 const SYNC_BEAT_MULTIPLIERS: Record<DelaySyncDivision, number> = {
   "1/1": 4,

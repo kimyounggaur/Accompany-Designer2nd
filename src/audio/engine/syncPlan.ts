@@ -4,7 +4,7 @@
  * 비교는 전부 참조(===)로 한다. 문서는 immer로 바뀐 부분만 새 객체가 되므로
  * 트랙이 같은 참조면 그 트랙은 믹서·이펙트 값도 클립도 그대로라는 뜻이다. JSON 직렬화는 하지 않는다.
  */
-import type { Track } from "../../types";
+import type { Track } from "../../domain/types";
 
 /** 동기화에 필요한 문서 부분 */
 export interface SyncDoc {

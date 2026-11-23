@@ -1,4 +1,4 @@
-import type { Clip } from "../../types";
+import type { Clip } from "../../domain/types";
 import { planVoice } from "../../domain/timeline/clipMath";
 import { ClipVoice } from "./ClipVoice";
 import { clipSignature } from "./clipSignature";

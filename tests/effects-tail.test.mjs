@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { produce } from "immer";
 
-const { createDefaultTrack } = await import("../src/state/docDefaults.ts");
+const { createDefaultTrack } = await import("../src/domain/project/defaults.ts");
 const { effectOrder, isEffectActive, DEFAULT_EFFECT_ORDER } = await import("../src/audio/effects/chain.ts");
 const {
   delayTailSeconds, reverbTailSeconds, effectTailSeconds, trackTailSeconds, projectTailSeconds, MAX_TAIL_SECONDS,

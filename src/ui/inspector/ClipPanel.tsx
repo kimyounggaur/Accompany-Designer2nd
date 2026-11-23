@@ -4,6 +4,7 @@ import { audioEngine } from "../../audio/currentEngine";
 import { estimateBpm } from "../../audio/bpmDetector";
 import { CommittedNumberInput } from "../../components/CommittedNumberInput";
 import { ko } from "../../i18n/ko";
+import { hasRememberedAudio, recallAudio } from "../../services/persistence/audioBlobs";
 import { useDawStore } from "../../store/useDawStore";
 import { deleteClip } from "../../app/actions";
 import { findClip, getClipPlaybackRate, getClipTimelineDuration } from "../../utils/audioMath";
@@ -15,7 +16,7 @@ import { PanelSection } from "./PanelSection";
  */
 export function ClipPanel() {
   const tracks = useDawStore((state) => state.tracks);
-  const audioAssets = useDawStore((state) => state.audioAssets);
+  const assets = useDawStore((state) => state.assets);
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const bpm = useDawStore((state) => state.bpm);
   const setBpm = useDawStore((state) => state.setBpm);
@@ -27,7 +28,7 @@ export function ClipPanel() {
   const [bpmSuggestion, setBpmSuggestion] = useState<{ clipId: string; value: number }>();
 
   const selectedClip = useMemo(() => findClip(tracks, selectedClipId)?.clip, [tracks, selectedClipId]);
-  const asset = selectedClip ? audioAssets[selectedClip.audioBufferId] : undefined;
+  const asset = selectedClip ? assets[selectedClip.audioBufferId] : undefined;
   const warpOn = selectedClip?.stretchMode === "resample";
   const playbackRate = selectedClip ? getClipPlaybackRate(bpm, selectedClip) : 1;
 
@@ -54,13 +55,20 @@ export function ClipPanel() {
     }, 30);
   }
 
-  function downloadRecordingWav() {
-    if (!asset?.blobUrl) return;
+  // 문서에는 음원의 정보만 있고 데이터는 따로 기억해 둔다(서비스 audioBlobs). 저장할 때 그 데이터로 주소를 만든다.
+  const wavBlob = asset ? hasRememberedAudio(asset.id) : false;
 
+  function downloadRecordingWav() {
+    if (!asset) return;
+    const blob = recallAudio(asset.id);
+    if (!blob) return;
+
+    const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
-    anchor.href = asset.blobUrl;
+    anchor.href = url;
     anchor.download = asset.fileName.toLowerCase().endsWith(".wav") ? asset.fileName : `${asset.fileName}.wav`;
     anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   return (
@@ -186,7 +194,7 @@ export function ClipPanel() {
               {asset.fileName} · {asset.duration.toFixed(2)}초 · {asset.sampleRate}Hz
             </p>
           )}
-          {asset?.sourceType === "recording" && (
+          {asset?.source === "recording" && (
             <div className="recording-save-box">
               <p className="asset-meta">
                 WAV {asset.byteSize ? `${(asset.byteSize / 1024).toFixed(1)}KB` : ""}
@@ -194,9 +202,9 @@ export function ClipPanel() {
               </p>
               <button
                 className="text-button full"
-                disabled={!asset.blobUrl}
+                disabled={!wavBlob}
                 onClick={downloadRecordingWav}
-                title={asset.blobUrl ? "녹음 WAV 저장" : ko.clip.noWavData}
+                title={wavBlob ? "녹음 WAV 저장" : ko.clip.noWavData}
                 type="button"
               >
                 <Download size={16} />

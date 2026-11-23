@@ -9,7 +9,7 @@ globalThis.window = { AudioContext: FakeContext };
 const { projectStore, getDoc } = await import(src + "state/projectStore.ts");
 const { history } = await import(src + "state/history.ts");
 const commands = await import(src + "state/commands/index.ts");
-const { createDefaultTrack } = await import(src + "state/docDefaults.ts");
+const { createDefaultTrack } = await import(src + "domain/project/defaults.ts");
 const { planSync } = await import(src + "audio/engine/syncPlan.ts");
 const { audioEngine } = await import(src + "audio/audioEngine.ts");
 
@@ -23,7 +23,7 @@ function bigDoc(trackCount = 20, clipCount = 50) {
     }));
     return track;
   });
-  return { id: "big", name: "큰 프로젝트", bpm: 120, sampleRate: 44100, tracks, audioAssets: {}, timeMarkers: [] };
+  return { schemaVersion: 2, id: "big", name: "큰 프로젝트", bpm: 120, timeSignature: { beats: 4, unit: 4 }, sampleRate: 44100, master: { volumeDb: 0 }, tracks, assets: {}, markers: [] };
 }
 
 const time = (fn, n) => { const s = performance.now(); for (let i = 0; i < n; i++) fn(i); return (performance.now() - s) / n; };
@@ -36,7 +36,7 @@ console.log(`문서 JSON 크기: ${(json.length / 1024).toFixed(0)} KB (트랙 2
 
 // ── 이전 방식 ──
 const oldSignature = time(() => JSON.stringify({ bpm: doc.bpm, tracks: doc.tracks }), 300);
-const snapshot = () => ({ name: doc.name, bpm: doc.bpm, tracks: doc.tracks, audioAssets: doc.audioAssets, timeMarkers: doc.timeMarkers });
+const snapshot = () => ({ name: doc.name, bpm: doc.bpm, tracks: doc.tracks, assets: doc.assets, markers: doc.markers });
 const oldClone = time(() => JSON.parse(JSON.stringify(snapshot())), 300);
 console.log(`이전: 재생 중 변경 감지용 JSON 서명 1회  ${fmt(oldSignature)}`);
 console.log(`이전: 이력 한 단계 저장(JSON 복제) 1회   ${fmt(oldClone)}`);

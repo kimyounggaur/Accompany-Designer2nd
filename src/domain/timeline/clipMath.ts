@@ -1,4 +1,4 @@
-import type { Clip } from "../../types";
+import type { Clip } from "../types";
 import { getClipPlaybackRate, getClipTimelineDuration } from "../../utils/audioMath";
 
 /** 클립 하나를 지금 위치에서 어떻게 재생할지 정한 계획. 소리 노드를 만들지 않는 순수한 값이다. */

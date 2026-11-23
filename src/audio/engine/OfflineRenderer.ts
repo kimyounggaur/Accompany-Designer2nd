@@ -1,4 +1,4 @@
-import type { DawProject } from "../../types";
+import type { ProjectDoc } from "../../domain/types";
 import { MASTER_VOLUME_DEFAULT_DB } from "../../domain/master/volume";
 import { planVoice } from "../../domain/timeline/clipMath";
 import type { EffectTimers } from "../effects/EffectNode";
@@ -30,7 +30,7 @@ export type OfflineContext = BaseAudioContext & {
 };
 
 export interface MixRenderRequest {
-  project: Pick<DawProject, "bpm" | "tracks" | "master">;
+  project: Pick<ProjectDoc, "bpm" | "tracks" | "master">;
   /** `planMixRender`가 만든 계획. 샘플레이트와 길이는 여기서 온다. */
   plan: MixPlan;
   /** 음원 id → 디코딩된 버퍼 */

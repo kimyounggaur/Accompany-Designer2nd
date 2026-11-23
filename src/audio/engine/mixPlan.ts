@@ -1,4 +1,4 @@
-import type { Clip, DawProject, Track } from "../../types";
+import type { Clip, ProjectDoc, Track } from "../../domain/types";
 import { MAX_EXPORT_SECONDS, type ExportOptions } from "../../domain/export/exportOptions";
 import { getClipTimelineDuration } from "../../utils/audioMath";
 import { wavByteLength } from "../../utils/wavEncoder";
@@ -22,7 +22,7 @@ export interface MixClip {
   clip: Clip;
 }
 
-export function mixClips(project: Pick<DawProject, "tracks">): MixClip[] {
+export function mixClips(project: Pick<ProjectDoc, "tracks">): MixClip[] {
   return project.tracks.flatMap((track) =>
     track.clips.filter((clip) => !clip.muted && !clip.isRecording).map((clip) => ({ track, clip })),
   );
@@ -58,7 +58,7 @@ export type MixPlanResult =
  * @param hasAudio 음원 id → 소리 엔진이 그 음원의 버퍼를 가지고 있는가
  */
 export function planMixRender(
-  project: Pick<DawProject, "bpm" | "tracks">,
+  project: Pick<ProjectDoc, "bpm" | "tracks">,
   hasAudio: (assetId: string) => boolean,
   options: ExportOptions,
 ): MixPlanResult {

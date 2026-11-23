@@ -8,7 +8,7 @@ const { projectStore, getDoc } = await import("../src/state/projectStore.ts");
 const { createHistory, COALESCE_MS, HISTORY_LIMIT } = await import("../src/state/history.ts");
 const { history } = await import("../src/state/history.ts");
 const commands = await import("../src/state/commands/index.ts");
-const { createDefaultTrack, createEmptyDoc } = await import("../src/state/docDefaults.ts");
+const { createDefaultTrack, createEmptyDoc } = await import("../src/domain/project/defaults.ts");
 const { planSync } = await import("../src/audio/engine/syncPlan.ts");
 const { audioEngine } = await import("../src/audio/audioEngine.ts");
 const { connectEngineSync } = await import("../src/app/engineSync.ts");
@@ -27,7 +27,7 @@ function bigDoc(trackCount = 20, clipCount = 50) {
     }));
     return track;
   });
-  return { id: "big", name: "큰 프로젝트", bpm: 120, sampleRate: 44100, tracks, audioAssets: {}, timeMarkers: [] };
+  return { schemaVersion: 2, id: "big", name: "큰 프로젝트", bpm: 120, timeSignature: { beats: 4, unit: 4 }, sampleRate: 44100, master: { volumeDb: 0 }, tracks, assets: {}, markers: [] };
 }
 
 function resetStore(doc = createEmptyDoc()) {
@@ -59,8 +59,8 @@ test("트랙 1개의 볼륨을 바꾸면 그 트랙만 새 참조이고 나머�
   after.tracks.forEach((track, index) => {
     if (index !== 7) assert.equal(track, before.tracks[index], `트랙 ${index}는 그대로`);
   });
-  assert.equal(after.audioAssets, before.audioAssets);
-  assert.equal(after.timeMarkers, before.timeMarkers);
+  assert.equal(after.assets, before.assets);
+  assert.equal(after.markers, before.markers);
 });
 
 test("클립 1개를 고치면 그 클립·그 트랙·트랙 목록만 새 참조다", () => {
@@ -354,7 +354,7 @@ test("useDawStore의 문서 필드는 projectStore.doc과 같은 참조다(같�
 
   store().setBpm(88);
   assert.equal(store().bpm, 88);
-  assert.equal(store().audioAssets, getDoc().audioAssets);
+  assert.equal(store().assets, getDoc().assets);
 
   const trackId = store().tracks[0].id;
   store().addClip(trackId, { id: "c1", audioBufferId: "a", name: "c", trackId, startTime: 0, offset: 0, duration: 1, sourceBpm: 88, stretchMode: "none", gain: 1, fadeIn: 0, fadeOut: 0 });
@@ -437,12 +437,12 @@ test("프로젝트 불러오기·새 프로젝트는 문서를 통째로 바꾸�
   const initialId = getDoc().id;
   const imported = bigDoc(2, 2);
   store().setPlayhead(9);
-  store().importProject({ ...imported, bpm: 999 });
+  store().importProject({ ...imported, bpm: 96 }); // 받는 문서는 이미 검사기를 거친 것이다(보정·기본값 채우기는 project-parse.test.mjs)
   assert.equal(getDoc().id, "big");
-  assert.equal(store().bpm, 300, "범위를 벗어난 템포는 보정");
+  assert.equal(store().bpm, 96);
   assert.equal(store().playhead, 0);
   assert.equal(store().tracks.length, 2);
-  assert.equal(store().tracks[0].effectChain.length, 4, "빠진 값은 기본값으로 채움");
+  assert.equal(store().assets, getDoc().assets);
 
   store().resetProject();
   assert.equal(store().tracks.length, 1);

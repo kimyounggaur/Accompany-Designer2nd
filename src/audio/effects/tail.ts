@@ -1,4 +1,4 @@
-import type { DelaySettings, EffectSlotType, ReverbSettings, Track } from "../../types";
+import type { DelaySettings, EffectSlotType, ReverbSettings, Track } from "../../domain/types";
 import { getDelayTimeMs, normalizeDelaySettings } from "../../utils/delay";
 import { normalizeReverbSettings } from "../../utils/reverb";
 import { isEffectActive } from "./chain";

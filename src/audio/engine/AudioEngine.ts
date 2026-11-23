@@ -1,4 +1,4 @@
-import type { DawProject } from "../../types";
+import type { ProjectDoc } from "../../domain/types";
 import { getLastClipEnd, getProjectDuration } from "../../utils/audioMath";
 import { projectTailSeconds } from "../effects/tail";
 import { BrowserAudioEngine } from "../audioEngine";
@@ -127,7 +127,7 @@ export class AudioEngineV2 extends BrowserAudioEngine {
     this.holdOpenCheck = check;
   }
 
-  override async play(project: DawProject, playhead: number, options: { atContextTime?: number } = {}): Promise<void> {
+  override async play(project: ProjectDoc, playhead: number, options: { atContextTime?: number } = {}): Promise<void> {
     // 이 호출 뒤에, 시작을 기다리는 사이 들어온 문서만 "나중 문서"로 본다(await 앞에서 비워야 그 문서를 놓치지 않는다).
     this.pendingDoc = undefined;
     await this.ensureContext();

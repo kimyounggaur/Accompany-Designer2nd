@@ -1,8 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeWav } from '../src/utils/wavEncoder.ts';
-import { DEFAULT_DELAY_SETTINGS } from '../src/utils/delay.ts';
-import { DEFAULT_REVERB_SETTINGS } from '../src/utils/reverb.ts';
+import { DEFAULT_DELAY_SETTINGS, DEFAULT_REVERB_SETTINGS } from '../src/domain/project/defaults.ts';
 import { produce } from 'immer';
 import { FakeContext, Source } from './helpers/fake-audio.mjs';
 
@@ -15,7 +14,7 @@ function projectWithClip() {
     eq: { enabled: false, bassGain: 0, middleLowGain: 0, middleHighGain: 0, highGain: 0, presenceGain: 0 },
     compressor: { enabled: false, threshold: -24, ratio: 2, attack: .01, release: .2 },
     delay: {...DEFAULT_DELAY_SETTINGS}, reverb: {...DEFAULT_REVERB_SETTINGS}, effectChain: [], clips: [clip] };
-  return { id: 'project', name: 'Project', bpm: 120, sampleRate: 44100, tracks: [track], audioAssets: {}, timeMarkers: [] };
+  return { schemaVersion: 2, id: 'project', name: 'Project', bpm: 120, timeSignature: { beats: 4, unit: 4 }, sampleRate: 44100, master: { volumeDb: 0 }, tracks: [track], assets: {}, markers: [] };
 }
 
 test('WAV encoder writes stereo PCM header and clips samples correctly', async () => {

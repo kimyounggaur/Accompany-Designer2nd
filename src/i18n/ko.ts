@@ -175,6 +175,8 @@ export const ko = {
     exportMissingAudio: (missing: number) => `음원 ${missing}개를 찾을 수 없습니다. 음원을 다시 연결해 주세요.`,
     exportTooLong: "1시간을 넘는 프로젝트는 WAV로 내보낼 수 없습니다.",
     projectLoaded: "프로젝트와 음원을 불러왔습니다.",
+    /** 불러온 프로젝트에서 범위를 벗어난 값을 고쳤을 때(설계서 §P4-1) */
+    valuesFixed: (count: number) => `값 ${count}개를 허용 범위로 고쳤습니다.`,
     projectLoadedMissing: (missing: number) => `프로젝트를 불러왔습니다. 음원 ${missing}개가 파일에 포함되지 않았습니다.`,
 
     autosaveRestored: "자동 저장된 프로젝트와 음원을 복구했습니다.",
@@ -266,6 +268,11 @@ export const ko = {
     micBusy: "다른 프로그램이 마이크를 쓰고 있습니다. 그 프로그램을 닫고 다시 시도해 주세요.",
     projectInvalid: "프로젝트 파일을 읽을 수 없습니다. 이 앱에서 저장한 .json 파일인지 확인해 주세요.",
     projectAudio: "프로젝트에 포함된 음원을 읽을 수 없습니다. 파일이 손상되었을 수 있습니다.",
+    projectUnsupported: "지원하지 않는 프로젝트 파일 형식입니다.",
+    projectTooBig: "트랙·클립·마커가 너무 많아 열 수 없습니다.",
+    projectBroken: (path: string) => `프로젝트 파일의 내용이 올바르지 않습니다(${path || "전체"}).`,
+    projectAudioData: "음원 데이터가 올바르지 않습니다.",
+    autosaveBroken: "자동 저장 기록을 읽을 수 없습니다.",
     quota: "브라우저 저장 공간이 부족합니다. 안 쓰는 프로젝트를 정리해 주세요.",
     quotaAutosave: "브라우저 저장 공간이 부족해 자동 저장하지 못했습니다.",
     detailSummary: "자세히 보기",

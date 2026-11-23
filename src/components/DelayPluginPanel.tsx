@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { ko } from "../i18n/ko";
-import type { DelaySettings } from "../types";
+import type { DelaySettings } from "../domain/types";
 import { DELAY_SYNC_OPTIONS, getDelayTimeMs } from "../utils/delay";
 
 interface DelayPluginPanelProps {

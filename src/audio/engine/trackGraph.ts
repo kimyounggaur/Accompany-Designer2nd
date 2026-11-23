@@ -1,4 +1,4 @@
-import type { Track } from "../../types";
+import type { Track } from "../../domain/types";
 import { createDelayInsert } from "../delay";
 import { createReverbInsert } from "../reverb";
 
