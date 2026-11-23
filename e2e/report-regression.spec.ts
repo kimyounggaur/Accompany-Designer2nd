@@ -5,7 +5,8 @@
  *   실패하므로, 그때 test.fail 줄을 지우면 된다(=해결 확인).
  * - 선택자는 S 한 곳에만 둔다. 화면 부품에는 data-testid를 붙여 두었으므로 CSS 이름이 바뀌어도(6단계) 깨지지 않는다.
  */
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Download, type Page, type TestInfo } from "@playwright/test";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -58,6 +59,13 @@ const S = {
   eqBassKnob: '[role=slider][aria-label="저음 이퀄라이저"]',
   autosave: '[data-testid="autosave-status"]',
   crashScreen: '[data-testid="crash-screen"]',
+  exportDialog: '[data-testid="export-dialog"]',
+  exportSummary: '[data-testid="export-summary"]',
+  exportStart: '[data-testid="export-start"]',
+  exportCancel: '[data-testid="export-cancel"]',
+  exportProgress: '[data-testid="export-progress"]',
+  exportSampleRate: '[data-testid="export-sample-rate"]',
+  exportBitDepth: '[data-testid="export-bit-depth"]',
 };
 
 /** 소리 소스 시작 횟수, rAF 호출 수, 최종 출력 분석기를 잡아 두는 측정 훅 */
@@ -1431,6 +1439,273 @@ test.describe("P3-5 녹음 흐름", () => {
     await page.click(S.play);
     await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 8000 });
     await expect(page.locator(S.record)).not.toHaveClass(/recording/);
+  });
+});
+
+// ───────────────────────── P3-6 믹스 내보내기 ─────────────────────────
+
+const LONG = path.join(here, "fixtures", "steady-220hz-180s.wav"); // 3분 내내 같은 크기(0.4)의 220Hz — 긴 곡 내보내기 측정용
+
+/** 같은 규칙으로 한 줄 측정을 남긴다(병합 기록의 이전/이후 표용). */
+const measured36 = (name: string, value: unknown) => console.log(`P3-6 측정 [${ENGINE ?? "기본"}] ${name}: ${JSON.stringify(value)}`);
+
+/** 리버브를 켠 트랙의 꼬리: 잔향 2.4초 + 프리딜레이 0.02초 */
+const REVERB_TAIL_SECONDS = 2.42;
+
+/** 파일 메뉴 → "믹스 WAV 내보내기" */
+async function chooseExport(page: Page) {
+  await page.locator(S.fileMenuTrigger).click();
+  await page.getByRole("menuitem", { name: /믹스 WAV 내보내기/ }).click();
+}
+
+/**
+ * 인스펙터의 이펙트 사슬에서 리버브(넷째 칸)를 켠다. 곡 끝 뒤로 잔향 꼬리가 생긴다.
+ * 방금 올린 클립의 트랙이 이미 선택되어 있으므로 트랙 머리를 누를 필요가 없다 — 머리 한가운데를 누르면 음소거 단추가 눌린다.
+ */
+async function turnOnReverb(page: Page) {
+  await page.locator(".effect-slot").nth(3).locator(".effect-power").click();
+}
+
+/** 파일 이름은 운영체제·브라우저 글자 처리에 따라 달라지므로, 영문 임시 경로에 저장해 내용으로 확인한다. */
+async function saveDownload(download: Download, testInfo: TestInfo, label: string) {
+  const saved = path.join(os.tmpdir(), `ad2-mix-${testInfo.workerIndex}-${Date.now()}-${label}.wav`);
+  await download.saveAs(saved);
+  return saved;
+}
+
+/** 16·24비트 PCM WAV를 읽어 머리 정보·길이·최고점·구간별 실효값·해시를 돌려준다(머리가 파일과 맞는지도 확인한다). */
+function readWav(file: string) {
+  const data = fs.readFileSync(file);
+  expect(data.toString("ascii", 0, 4)).toBe("RIFF");
+  expect(data.toString("ascii", 8, 12)).toBe("WAVE");
+  expect(data.toString("ascii", 36, 40)).toBe("data");
+  expect(data.readUInt16LE(20)).toBe(1); // 정수 PCM
+  const channels = data.readUInt16LE(22);
+  const sampleRate = data.readUInt32LE(24);
+  const bitDepth = data.readUInt16LE(34);
+  const dataBytes = data.readUInt32LE(40);
+  expect(data.readUInt32LE(4)).toBe(data.length - 8);
+  expect(data.length).toBe(44 + dataBytes);
+  const bytesPerSample = bitDepth / 8;
+  const frames = dataBytes / (bytesPerSample * channels);
+  const sampleAt = (index: number) => {
+    const offset = 44 + index * bytesPerSample;
+    return bitDepth === 16 ? data.readInt16LE(offset) / 32768 : data.readIntLE(offset, 3) / 8388608;
+  };
+  let peak = 0;
+  for (let index = 0; index < frames * channels; index += 1) peak = Math.max(peak, Math.abs(sampleAt(index)));
+  /** 왼쪽 채널의 `from`~`to`초 구간 실효값 */
+  const rms = (from: number, to: number) => {
+    const first = Math.floor(from * sampleRate);
+    const last = Math.min(frames, Math.floor(to * sampleRate));
+    let sum = 0;
+    for (let frame = first; frame < last; frame += 1) sum += sampleAt(frame * channels) ** 2;
+    return Math.sqrt(sum / Math.max(1, last - first));
+  };
+  return { channels, sampleRate, bitDepth, frames, seconds: frames / sampleRate, bytes: data.length, peak, rms, sha: createHash("sha256").update(data).digest("hex") };
+}
+
+const CEILING = 10 ** (-1 / 20); // 마스터 리미터의 천장(−1 dBFS)
+
+test.describe("P3-6 믹스 내보내기", () => {
+  test("파일 메뉴의 내보내기는 옵션 대화상자를 열고, 길이·예상 크기·기본 옵션이 보이며 Esc로 닫힌다", async ({ page }) => {
+    await openApp(page);
+    await upload(page); // 8초 클립
+    await chooseExport(page);
+    const dialog = page.locator(S.exportDialog);
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "믹스 WAV 내보내기" })).toBeVisible();
+    await expect(page.locator(S.exportSummary)).toHaveText("길이 0:08 · 예상 크기 1.3 MB");
+    await expect(page.locator(`${S.exportSampleRate} input:checked`)).toHaveValue("44100");
+    await expect(page.locator(`${S.exportBitDepth} input:checked`)).toHaveValue("16");
+    await expect(page.locator(S.exportStart)).toBeFocused();
+    // 옵션을 바꾸면 예상 크기가 따라 바뀐다(24비트는 1.5배).
+    await page.getByRole("radio", { name: "24비트" }).check();
+    await expect(page.locator(S.exportSummary)).toHaveText("길이 0:08 · 예상 크기 2.0 MB");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(page.locator(S.clip)).toHaveCount(1);
+  });
+
+  test("기본 옵션으로 내보내면 16비트 44.1 kHz 스테레오 WAV가 내려오고, 길이는 클립 끝(±10 ms), 최고점은 −1 dBFS 이하다", async ({ page }, testInfo) => {
+    await openApp(page);
+    await upload(page); // 앞 4초 작게(0.05), 뒤 4초 크게(0.8)
+    await chooseExport(page);
+    const [download] = await Promise.all([page.waitForEvent("download"), page.locator(S.exportStart).click()]);
+    const saved = await saveDownload(download, testInfo, "default");
+    const wav = readWav(saved);
+    const quiet = wav.rms(0.5, 3.5);
+    const loud = wav.rms(4.5, 7.5);
+    measured36("기본 내보내기(8초 클립)", { 길이_초: wav.seconds, 최고점_dBFS: 20 * Math.log10(wav.peak), 앞4초_실효값: quiet, 뒤4초_실효값: loud, 바이트: wav.bytes });
+    expect(wav).toMatchObject({ channels: 2, sampleRate: 44100, bitDepth: 16 });
+    expect(Math.abs(wav.seconds - 8)).toBeLessThanOrEqual(0.01);
+    expect(wav.peak).toBeLessThanOrEqual(CEILING + 1 / 32768);
+    expect(loud).toBeGreaterThan(0.1);
+    expect(quiet).toBeLessThan(loud * 0.3); // 앞 4초는 작고 뒤 4초는 크다 = 클립이 제자리에 놓였다
+    await expect(page.locator(S.exportDialog)).toBeHidden();
+    await expect(page.locator(S.status)).toContainText("믹스 WAV 파일을 저장했습니다");
+    fs.rmSync(saved, { force: true });
+  });
+
+  test("같은 문서를 두 번 내보내면 파일이 바이트까지 같고, 리버브를 켜면 길이는 클립 끝 + 잔향 꼬리(±10 ms)다", async ({ page }, testInfo) => {
+    await openApp(page);
+    await upload(page);
+    await turnOnReverb(page);
+    const files: string[] = [];
+    for (const label of ["a", "b"]) {
+      await chooseExport(page);
+      const [download] = await Promise.all([page.waitForEvent("download"), page.locator(S.exportStart).click()]);
+      files.push(await saveDownload(download, testInfo, label));
+      await expect(page.locator(S.exportDialog)).toBeHidden();
+    }
+    const [first, second] = [readWav(files[0]), readWav(files[1])];
+    measured36("두 번 내보내기(리버브 켬)", { 해시_앞16자: [first.sha.slice(0, 16), second.sha.slice(0, 16)], 길이_초: first.seconds, 꼬리_구간_실효값: first.rms(8.1, 9) });
+    expect(second.sha).toBe(first.sha);
+    expect(Math.abs(first.seconds - (8 + REVERB_TAIL_SECONDS))).toBeLessThanOrEqual(0.01);
+    expect(first.rms(4.5, 7.5)).toBeGreaterThan(0.05); // 리버브를 켜도 소리가 나온다
+    expect(first.rms(8.1, 9)).toBeGreaterThan(0.0005); // 클립이 끝난 뒤에도 잔향이 실제로 담겼다
+    files.forEach((file) => fs.rmSync(file, { force: true }));
+  });
+
+  test("24비트·48 kHz를 고르면 파일 머리가 그대로 나오고, 고른 값은 새로고침 뒤에도 남는다", async ({ page }, testInfo) => {
+    await openApp(page);
+    await upload(page);
+    await chooseExport(page);
+    await page.getByRole("radio", { name: "48 kHz" }).check();
+    await page.getByRole("radio", { name: "24비트" }).check();
+    const [download] = await Promise.all([page.waitForEvent("download"), page.locator(S.exportStart).click()]);
+    const saved = await saveDownload(download, testInfo, "24-48");
+    const wav = readWav(saved);
+    measured36("24비트 48 kHz", { 길이_초: wav.seconds, 바이트: wav.bytes, 최고점_dBFS: 20 * Math.log10(wav.peak) });
+    expect(wav).toMatchObject({ channels: 2, sampleRate: 48000, bitDepth: 24 });
+    expect(Math.abs(wav.seconds - 8)).toBeLessThanOrEqual(0.01);
+    expect(wav.bytes).toBe(44 + wav.frames * 2 * 3);
+    expect(wav.peak).toBeLessThanOrEqual(CEILING + 1 / 8388608);
+    fs.rmSync(saved, { force: true });
+
+    await page.reload();
+    await page.locator(S.inspector).waitFor();
+    await page.waitForTimeout(1200);
+    await upload(page);
+    await chooseExport(page);
+    await expect(page.getByRole("radio", { name: "48 kHz" })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "24비트" })).toBeChecked();
+    await page.keyboard.press("Escape");
+  });
+
+  test("3분 곡을 내보내는 동안 진행률이 0에서 100까지 거꾸로 가지 않고, 화면이 200 ms 넘게 멈추지 않으며, 길이는 끝 + 꼬리(±10 ms)다", async ({ page }, testInfo) => {
+    test.setTimeout(180_000);
+    await page.addInitScript(() => {
+      const w = window as any;
+      w.__longtasks = [];
+      w.__exportProgress = [];
+      try {
+        new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) w.__longtasks.push(Math.round(entry.duration));
+        }).observe({ entryTypes: ["longtask"] });
+      } catch {
+        /* 긴 작업을 관측하지 못하는 브라우저 */
+      }
+      // 진행률 막대에 보이는 값을 바뀔 때마다 기록한다.
+      window.addEventListener("DOMContentLoaded", () => {
+        new MutationObserver(() => {
+          const bar = document.querySelector('[data-testid="export-progress"]');
+          if (bar) w.__exportProgress.push(Number(bar.getAttribute("aria-valuenow")));
+        }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-valuenow"] });
+      });
+    });
+    await openApp(page);
+    await upload(page, LONG); // 180초
+    await turnOnReverb(page);
+    await page.waitForTimeout(2500); // 올린 직후의 자동 저장·화면 정리가 끝나도록
+    await page.evaluate(() => ((window as any).__longtasks.length = 0));
+    await chooseExport(page);
+    const started = Date.now();
+    const [download] = await Promise.all([page.waitForEvent("download", { timeout: 150_000 }), page.locator(S.exportStart).click()]);
+    const wallMs = Date.now() - started;
+    const saved = await saveDownload(download, testInfo, "long");
+    await page.waitForTimeout(300); // 긴 작업 관측값이 도착하도록
+    const progress: number[] = await page.evaluate(() => (window as any).__exportProgress);
+    const longtasks: number[] = await page.evaluate(() => (window as any).__longtasks);
+    const wav = readWav(saved);
+    const longest = Math.max(0, ...longtasks);
+    measured36("3분 곡 내보내기", {
+      걸린_ms: wallMs,
+      진행률_표본: progress.length,
+      진행률_처음: progress[0],
+      진행률_끝: progress[progress.length - 1],
+      가장_긴_멈춤_ms: longest,
+      긴_작업_수: longtasks.length,
+      길이_초: wav.seconds,
+      최고점_dBFS: 20 * Math.log10(wav.peak),
+    });
+    expect(progress.length).toBeGreaterThan(20);
+    expect(progress[0]).toBeLessThanOrEqual(5);
+    expect(progress[progress.length - 1]).toBe(100);
+    expect(progress.every((value, index) => index === 0 || value >= progress[index - 1])).toBe(true);
+    expect(longest).toBeLessThan(200);
+    expect(wav).toMatchObject({ channels: 2, sampleRate: 44100, bitDepth: 16 });
+    expect(Math.abs(wav.seconds - (180 + REVERB_TAIL_SECONDS))).toBeLessThanOrEqual(0.01);
+    expect(wav.peak).toBeLessThanOrEqual(CEILING + 1 / 32768);
+    expect(wav.rms(60, 120)).toBeGreaterThan(0.05); // 소리가 나온다(무음 파일이 아니다)
+    fs.rmSync(saved, { force: true });
+  });
+
+  test("렌더 도중 취소하면 파일이 내려오지 않고, 대화상자가 닫히며 '취소했습니다'가 알려지고, 앱은 그대로 쓸 수 있다", async ({ page }) => {
+    test.setTimeout(120_000);
+    let downloads = 0;
+    page.on("download", () => (downloads += 1));
+    await openApp(page);
+    await upload(page, LONG);
+    await turnOnReverb(page);
+    await chooseExport(page);
+    await page.locator(S.exportStart).click();
+    // 진행률이 처음 오를 때까지 기다렸다가 취소한다.
+    await page.waitForFunction(() => Number(document.querySelector('[data-testid="export-progress"]')?.getAttribute("aria-valuenow")) > 0, undefined, { timeout: 30_000 });
+    await page.locator(S.exportCancel).click();
+    await expect(page.locator(S.exportDialog)).toBeHidden({ timeout: 10_000 });
+    await expect(page.locator(S.status)).toContainText("취소했습니다");
+    await page.waitForTimeout(3000); // 뒤에서 렌더가 이어져도 파일이 만들어지는 일은 없다
+    expect(downloads).toBe(0);
+    // 다시 열 수 있다.
+    await chooseExport(page);
+    await expect(page.locator(S.exportDialog)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(S.exportDialog)).toBeHidden();
+    await expect(page.locator(S.clip)).toHaveCount(1);
+  });
+
+  test("내보낼 클립이 없으면 대화상자 없이 이유만 알려 준다", async ({ page }) => {
+    await openApp(page);
+    await chooseExport(page);
+    await expect(page.locator(S.toast).filter({ hasText: "내보낼 클립이 없습니다" })).toBeVisible();
+    await expect(page.locator(S.exportDialog)).toBeHidden();
+  });
+
+  test("대화상자가 열려 있는 동안에는 뒤의 문서를 고치는 단축키(Delete)가 듣지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await page.locator(S.clip).first().click({ position: { x: 60, y: 40 } });
+    await chooseExport(page);
+    await expect(page.locator(S.exportStart)).toBeFocused();
+    await page.keyboard.press("Delete");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(S.exportDialog)).toBeHidden();
+    await expect(page.locator(S.clip)).toHaveCount(1); // 지워지지 않았다
+    await page.keyboard.press("Delete"); // 대화상자가 닫히면 같은 키가 다시 듣는다(시험 전제 확인)
+    await expect(page.locator(S.clip)).toHaveCount(0);
+  });
+
+  test("녹음하는 동안에는 내보내기가 열리지 않고 이유가 안내된다", async ({ page }) => {
+    await openApp(page, { query: P32_QUERY });
+    await upload(page, STEADY);
+    await page.click(S.record);
+    await expect(page.locator(S.record)).toHaveClass(/recording/, { timeout: 8000 });
+    await chooseExport(page);
+    await expect(page.locator(S.status)).toContainText("녹음 중에는 믹스를 내보낼 수 없습니다");
+    await expect(page.locator(S.exportDialog)).toBeHidden();
+    await page.click(S.stop);
+    await expect(page.locator(S.clip)).toHaveCount(2, { timeout: 8000 });
   });
 });
 

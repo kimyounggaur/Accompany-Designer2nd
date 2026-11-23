@@ -168,8 +168,12 @@ export const ko = {
       `${total}개 중 ${uploaded}개만 업로드했습니다. 실패한 파일은 위 안내를 확인해 주세요.`,
 
     projectSaved: "음원을 포함한 프로젝트 파일을 저장했습니다.",
-    mixRendering: "믹스 WAV를 만드는 중입니다...",
     mixSaved: "믹스 WAV 파일을 저장했습니다.",
+    mixCancelled: "믹스 내보내기를 취소했습니다. 파일은 만들지 않았습니다.",
+    exportLockedWhileRecording: "녹음 중에는 믹스를 내보낼 수 없습니다.",
+    exportNoClips: "내보낼 클립이 없습니다. 음소거하지 않은 클립을 하나 이상 놓아 주세요.",
+    exportMissingAudio: (missing: number) => `음원 ${missing}개를 찾을 수 없습니다. 음원을 다시 연결해 주세요.`,
+    exportTooLong: "1시간을 넘는 프로젝트는 WAV로 내보낼 수 없습니다.",
     projectLoaded: "프로젝트와 음원을 불러왔습니다.",
     projectLoadedMissing: (missing: number) => `프로젝트를 불러왔습니다. 음원 ${missing}개가 파일에 포함되지 않았습니다.`,
 
@@ -202,6 +206,25 @@ export const ko = {
       message: "현재 프로젝트를 불러온 내용으로 바꾸시겠습니까? 현재 작업은 먼저 파일로 저장할 수 있습니다.",
       confirmLabel: "불러오기",
     },
+  },
+
+  // ───── 믹스 내보내기 대화상자 ─────
+
+  exportDialog: {
+    title: "믹스 WAV 내보내기",
+    summary: (duration: string, size: string) => `길이 ${duration} · 예상 크기 ${size}`,
+    sampleRate: "샘플레이트",
+    bitDepth: "비트 수",
+    sampleRateOption: (hertz: number) => `${hertz / 1000} kHz`,
+    bitDepthOption: (bits: number) => `${bits}비트`,
+    bitDepthHint: "16비트는 어디서나 열립니다. 24비트는 다시 믹싱·마스터링할 때 좋고 파일이 1.5배 큽니다.",
+    start: "내보내기",
+    cancel: "취소",
+    rendering: "믹스를 만드는 중입니다…",
+    encoding: "파일을 만드는 중입니다…",
+    cancelling: "취소하는 중입니다…",
+    progress: (percent: number) => `${percent}%`,
+    progressLabel: "내보내기 진행률",
   },
 
   // ───── 실패 안내 ─────

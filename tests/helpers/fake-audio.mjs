@@ -136,3 +136,56 @@ export function createManualTimer() {
   };
   return timer;
 }
+
+/**
+ * 가짜 OfflineAudioContext. 실제처럼 `startRendering()`은 예약된 `suspend(t)` 시각마다 멈추고 `resume()`을 기다린다
+ * (재개하지 않으면 영원히 끝나지 않는다). 결과 버퍼는 채널마다 "프레임 번호"로 채워 두어, 어디서부터 잘랐는지 값으로 알 수 있다.
+ */
+export class FakeOfflineContext extends FakeContext {
+  constructor(channels, length, sampleRate) {
+    super();
+    this.state = 'suspended';
+    this.numberOfChannels = channels;
+    this.length = length;
+    this.sampleRate = sampleRate;
+    this.audioWorklet = { addModule: async () => {} };
+    /** 예약된 멈춤: { time, resolve } */
+    this.marks = [];
+    /** 렌더가 닿은 멈춤 시각들(순서대로) */
+    this.reached = [];
+    this.resumes = 0;
+    this.completed = false;
+    this.copies = [];
+    this.pendingResume = undefined;
+  }
+  suspend(time) {
+    return new Promise((resolve) => { this.marks.push({ time, resolve }); });
+  }
+  resume() {
+    this.resumes += 1;
+    const resume = this.pendingResume;
+    this.pendingResume = undefined;
+    resume?.();
+    return Promise.resolve();
+  }
+  async startRendering() {
+    const marks = [...this.marks].sort((a, b) => a.time - b.time);
+    for (const mark of marks) {
+      this.currentTime = mark.time;
+      this.reached.push(mark.time);
+      await new Promise((resume) => { this.pendingResume = resume; mark.resolve(); });
+    }
+    this.currentTime = this.length / this.sampleRate;
+    this.completed = true;
+    const { length, numberOfChannels, sampleRate } = this;
+    const data = Array.from({ length: numberOfChannels }, () => Float32Array.from({ length }, (_, frame) => frame));
+    return {
+      length, numberOfChannels, sampleRate, duration: length / sampleRate,
+      getChannelData: (channel) => data[channel],
+      copyFromChannel: (destination, channel, offset = 0) => {
+        this.copies.push({ channel, offset, frames: destination.length });
+        destination.set(data[channel].subarray(offset, offset + destination.length));
+      },
+    };
+  }
+}

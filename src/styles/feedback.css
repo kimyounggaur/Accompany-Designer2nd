@@ -177,6 +177,123 @@
   color: #ffffff;
 }
 
+/* 믹스 내보내기 대화상자(P3-6) */
+.export-dialog {
+  width: min(440px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--line);
+  background: var(--mistral-ivory);
+  color: var(--mistral-black);
+  box-shadow: var(--mistral-shadow);
+}
+
+.export-dialog::backdrop {
+  background: rgba(31, 31, 31, 0.42);
+}
+
+.export-dialog__body {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+}
+
+.export-dialog__body h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.export-dialog__summary,
+.export-dialog__status,
+.export-dialog__hint,
+.export-dialog__percent {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.export-dialog__hint {
+  font-size: 12px;
+  color: #5a5a5a;
+}
+
+.export-dialog__group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 8px 12px 10px;
+  border: 1px solid var(--line);
+}
+
+.export-dialog__group legend {
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.export-dialog__choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.export-dialog__choice input {
+  accent-color: var(--mistral-orange);
+}
+
+.export-dialog__progress {
+  height: 12px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.export-dialog__bar {
+  height: 100%;
+  background: var(--mistral-orange);
+  transition: width 120ms linear;
+}
+
+.export-dialog__percent {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.export-dialog__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.export-dialog__buttons .text-button {
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--mistral-black);
+}
+
+.export-dialog__buttons .text-button.primary {
+  border-color: var(--mistral-orange);
+  background: var(--mistral-orange);
+  color: #ffffff;
+}
+
+.export-dialog__buttons .text-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .export-dialog__bar {
+    transition: none;
+  }
+}
+
 /* ───────── 화면 오류 안내(app/ErrorBoundary.tsx) ───────── */
 
 .crash-screen {

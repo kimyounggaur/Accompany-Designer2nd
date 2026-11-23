@@ -20,7 +20,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const srcDir = path.join(root, "src");
 
 /** 업계에서 그대로 쓰는 약어(설계 P2-3). WARP는 P4-4에서 "템포 맞춤"으로 이름을 바꿀 때까지 임시로 둔다. */
-const ALLOWED = new Set(["eq", "bpm", "wav", "mp3", "rms", "warp"]);
+const ALLOWED = new Set(["eq", "bpm", "wav", "mp3", "rms", "warp", "khz"]);
 
 /** 글자가 들어가는 JSX 속성 */
 const TEXT_ATTRIBUTES = new Set(["aria-label", "aria-description", "aria-valuetext", "title", "placeholder", "alt", "label"]);

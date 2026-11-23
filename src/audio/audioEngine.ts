@@ -5,8 +5,6 @@ import { clipSignature } from "./engine/clipSignature";
 import { scheduleClipGainEnvelope } from "./engine/clipEnvelope";
 import { createTrackGraph, disposeGraph, graphSignature, updateTrackGraph, type TrackGraph } from "./engine/trackGraph";
 import { getProjectDuration } from "../utils/audioMath";
-import { encodeWav } from "../utils/wavEncoder";
-import { projectTailSeconds } from "./effects/tail";
 import { smooth } from "./effects/EffectNode";
 import { clampMasterVolumeDb, dbToGain, MASTER_VOLUME_DEFAULT_DB } from "./engine/MasterBus";
 import { MONITOR_VOLUME_DEFAULT, MonitorBus, clampMonitorVolume } from "./engine/MonitorBus";
@@ -359,42 +357,6 @@ export class BrowserAudioEngine {
   }
 
   isPlaying() { return this.playing; }
-
-  /** Render the same track/effect graph used for playback to 16-bit stereo WAV. */
-  async renderMix(project: DawProject): Promise<Blob> {
-    const clips = project.tracks.flatMap((track) => track.clips.filter((clip) => !clip.muted && !clip.isRecording));
-    if (!clips.length) throw new Error("내보낼 클립이 없습니다.");
-    const missing = clips.filter((clip) => !this.buffers.has(clip.audioBufferId));
-    if (missing.length) throw new Error(`음원 ${missing.length}개를 찾을 수 없습니다. 음원을 다시 연결해 주세요.`);
-    const end = Math.max(...clips.map((clip) => clip.startTime + getClipTimelineDuration(project.bpm, clip)));
-    const tail = projectTailSeconds(project);
-    const sampleRate = Math.min(48000, Math.max(22050, project.sampleRate || 44100));
-    const duration = end + tail;
-    if (duration > 3600) throw new Error("1시간 이하의 프로젝트만 WAV로 내보낼 수 있습니다.");
-    const context = new OfflineAudioContext(2, Math.max(1, Math.ceil(duration * sampleRate)), sampleRate);
-    const master = context.createGain();
-    master.gain.value = LEGACY_MASTER_GAIN * dbToGain(clampMasterVolumeDb(project.master?.volumeDb ?? MASTER_VOLUME_DEFAULT_DB));
-    const limiter = context.createDynamicsCompressor();
-    limiter.threshold.value = -1; limiter.knee.value = 0; limiter.ratio.value = 20;
-    limiter.attack.value = 0.003; limiter.release.value = 0.1;
-    const ceiling = createSafetyCeiling(context);
-    master.connect(limiter); limiter.connect(ceiling); ceiling.connect(context.destination);
-    const solo = project.tracks.some((track) => track.solo);
-    for (const track of project.tracks) {
-      const graph = createTrackGraph(context, master, track, project.bpm);
-      updateTrackGraph(graph, track, solo, 0, project.bpm);
-      graph.output.gain.setValueAtTime(track.muted || (solo && !track.solo) ? 0 : track.volume, 0);
-      for (const clip of track.clips) {
-        const buffer = this.buffers.get(clip.audioBufferId);
-        if (buffer && !clip.muted && !clip.isRecording) scheduleClip(context, graph.input, buffer, clip, project.bpm, 0);
-      }
-    }
-    const result = await context.startRendering();
-    const interleaved = new Float32Array(result.length * 2);
-    const left = result.getChannelData(0), right = result.getChannelData(1);
-    for (let i = 0; i < result.length; i++) { interleaved[i * 2] = left[i]; interleaved[i * 2 + 1] = right[i]; }
-    return encodeWav([interleaved], sampleRate, 2);
-  }
 
 }
 

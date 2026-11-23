@@ -22,6 +22,14 @@ export const LIMITER_LOOKAHEAD_SECONDS = 0.005;
 /** 이득이 1로 돌아가는 곡선의 시상수(초) */
 export const LIMITER_RELEASE_SECONDS = 0.08;
 
+/**
+ * 선읽기 길이를 샘플 수로 바꾼다 = 리미터가 소리를 늦추는 샘플 수(44.1 kHz에서 221, 48 kHz에서 240).
+ * 내보낼 때 파일 앞에서 이만큼을 잘라 내야 소리가 곡 위치와 어긋나지 않는다.
+ */
+export function limiterLookaheadFrames(sampleRate: number, lookaheadSeconds: number = LIMITER_LOOKAHEAD_SECONDS): number {
+  return Math.max(1, Math.round(lookaheadSeconds * sampleRate));
+}
+
 export interface LimiterOptions {
   ceiling?: number;
   lookaheadSeconds?: number;
@@ -57,7 +65,7 @@ export class LookaheadLimiter {
   constructor(sampleRate: number, channels = 2, options: LimiterOptions = {}) {
     this.channels = channels;
     this.ceiling = options.ceiling ?? LIMITER_CEILING;
-    this.lookahead = Math.max(1, Math.round((options.lookaheadSeconds ?? LIMITER_LOOKAHEAD_SECONDS) * sampleRate));
+    this.lookahead = limiterLookaheadFrames(sampleRate, options.lookaheadSeconds);
     this.windowLength = this.lookahead + 1;
     this.delayLines = Array.from({ length: channels }, () => new Float32Array(this.lookahead));
     this.dequeValues = new Float64Array(this.windowLength + 1);
