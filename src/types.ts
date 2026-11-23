@@ -18,12 +18,6 @@ export type PlaylistSnap =
   | "halfBeat"
   | "quarterBeat"
   | "none";
-export type RecordingStatus =
-  | "idle"
-  | "armed"
-  | "counting-in"
-  | "recording"
-  | "stopping";
 export type DelaySyncDivision =
   | "1/1"
   | "1/2"
@@ -135,21 +129,6 @@ export interface AudioAsset {
   mimeType?: string;
   byteSize?: number;
   recordedAt?: string;
-}
-
-export interface RecordingState {
-  status: RecordingStatus;
-  armedTrackId?: string;
-  trackId?: string;
-  clipId?: string;
-  startedAtProjectTime: number;
-  elapsed: number;
-  inputDeviceId?: string;
-  monitoringEnabled: boolean;
-  metronomeEnabled: boolean;
-  countInBeats: number;
-  countInRemaining: number;
-  waveformPeaks: number[];
 }
 
 /** 마스터 설정. 지금은 볼륨(−60 ~ +6 dB)뿐이다. */

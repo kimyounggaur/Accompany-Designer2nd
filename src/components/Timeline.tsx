@@ -2,6 +2,8 @@ import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ko } from "../i18n/ko";
+import { notify } from "../services/notify";
+import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
 import { useDawStore } from "../store/useDawStore";
 import { addClipFromSource, deleteTrackWithConfirm, setSelectedClips, toggleRecordingArm } from "../app/actions";
 import type { PlaylistTool } from "../types";
@@ -14,6 +16,7 @@ import {
 } from "../utils/audioMath";
 import { playlistToolIcons } from "../utils/playlistToolIcons";
 import { ClipView } from "./ClipView";
+import { RecordingPreview } from "./RecordingPreview";
 import { PlaylistToolbar } from "./PlaylistToolbar";
 
 const TRACK_HEIGHT = 116;
@@ -81,7 +84,9 @@ export function Timeline() {
   const selectedTrackId = useDawStore((state) => state.selectedTrackId);
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const performanceMode = useDawStore((state) => state.performanceMode);
-  const recording = useDawStore((state) => state.recording);
+  const armedTrackId = useRecordingStore((state) => state.armedTrackId);
+  const recordingStatus = useRecordingStore((state) => state.status);
+  const recordingTrackId = useRecordingStore((state) => state.trackId);
   const isPlaying = useDawStore((state) => state.isPlaying);
   const captureHistory = useDawStore((state) => state.captureHistory);
   const setPlayhead = useDawStore((state) => state.setPlayhead);
@@ -91,7 +96,8 @@ export function Timeline() {
   const reorderTrack = useDawStore((state) => state.reorderTrack);
   const beginHistoryGroup = useDawStore((state) => state.beginHistoryGroup);
   const endHistoryGroup = useDawStore((state) => state.endHistoryGroup);
-  const isRecording = ["counting-in", "recording", "stopping"].includes(recording.status);
+  const isRecording = recordingStatus !== "idle";
+  const recordingTrackIndex = recordingStatus === "recording" ? tracks.findIndex((track) => track.id === recordingTrackId) : -1;
   useEffect(() => {
     document.addEventListener("pointerup", endHistoryGroup);
     document.addEventListener("pointercancel", endHistoryGroup);
@@ -224,6 +230,11 @@ export function Timeline() {
   }
 
   function seekTo(time: number) {
+    // 녹음하는 동안에는 재생 위치를 옮기지 않는다(녹음이 놓일 자리가 흐트러진다).
+    if (isRecordingBusy()) {
+      notify("info", ko.notice.playLockedWhileRecording);
+      return;
+    }
     if (useDawStore.getState().isPlaying) {
       window.dispatchEvent(new CustomEvent("playlist-play-from", { detail: time }));
     } else {
@@ -463,19 +474,15 @@ export function Timeline() {
             <div className="track-toggles">
               <button
                 className={
-                  recording.armedTrackId === track.id
+                  armedTrackId === track.id
                     ? "toggle arm-toggle active"
                     : "toggle arm-toggle"
                 }
-                disabled={
-                  recording.status === "counting-in" ||
-                  recording.status === "recording" ||
-                  recording.status === "stopping"
-                }
+                disabled={isRecording}
                 onClick={() => toggleRecordingArm(track.id)}
                 title={ko.trackHeader.armHint}
                 aria-label={`${track.name} ${ko.trackHeader.arm}`}
-                aria-pressed={recording.armedTrackId === track.id}
+                aria-pressed={armedTrackId === track.id}
                 type="button"
               >
                 {ko.trackHeader.arm}
@@ -599,6 +606,7 @@ export function Timeline() {
               trackIds={trackIds}
             />
           ))}
+          {recordingTrackIndex >= 0 && <RecordingPreview trackIndex={recordingTrackIndex} trackHeight={TRACK_HEIGHT} />}
           {dragBox && (
             <div
               className={`selection-box ${playlistTool === "zoom" ? "zoom-box" : ""}`}

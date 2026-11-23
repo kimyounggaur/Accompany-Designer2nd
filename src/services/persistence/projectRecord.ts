@@ -81,7 +81,6 @@ export interface AutosaveSlice {
   timeMarkers: unknown;
   /** 마스터 설정(볼륨). 옛 시험 자료에는 없을 수 있다 */
   master?: unknown;
-  recording: { status: string };
 }
 
 /** 저장해야 할 문서(이름·템포·마스터·트랙·음원·마커)가 바뀌었는가. 선택·재생 위치·확대 같은 화면 상태는 저장 대상이 아니다. */
@@ -96,15 +95,23 @@ export function documentChanged(state: AutosaveSlice, previous: AutosaveSlice): 
   );
 }
 
+/** 변경 감시기. 문서 조각이 바뀔 때마다 부르고, 녹음 흐름이 끝나 쉬게 되면 `idle()`을 부른다. */
+export interface ChangeWatcher {
+  (state: AutosaveSlice, previous: AutosaveSlice): void;
+  /** 녹음 흐름이 끝났다. 진행 중에 문서가 바뀌었다면 이제 저장을 예약한다. */
+  idle(): void;
+}
+
 /**
- * 변경 감시기. 녹음·카운트인 중에는 저장을 예약하지 않고 "녹음 중에 바뀜"만 기억해 두었다가,
- * 상태가 다시 idle이 되면 한 번 예약한다. 녹음을 시작만 하고 취소해 문서가 그대로면 저장하지 않는다.
+ * 변경 감시기. 녹음하는 동안(`isBusy`)에는 저장을 예약하지 않고 "녹음 중에 바뀜"만 기억해 두었다가,
+ * 녹음이 끝나 `idle()`이 불리면 한 번 예약한다. 녹음을 시작만 하고 취소해 문서가 그대로면 저장하지 않는다.
+ * (녹음 중에는 문서가 바뀌지 않으므로 보통은 마지막에 "녹음 추가"가 들어올 때 한 번만 예약된다.)
  */
-export function createChangeWatcher(onChange: () => void): (state: AutosaveSlice, previous: AutosaveSlice) => void {
+export function createChangeWatcher(onChange: () => void, isBusy: () => boolean): ChangeWatcher {
   let dirtyWhileBusy = false;
-  return (state, previous) => {
+  const watcher = ((state: AutosaveSlice, previous: AutosaveSlice) => {
     const changed = documentChanged(state, previous);
-    if (state.recording.status !== "idle") {
+    if (isBusy()) {
       if (changed) dirtyWhileBusy = true;
       return;
     }
@@ -112,5 +119,11 @@ export function createChangeWatcher(onChange: () => void): (state: AutosaveSlice
       dirtyWhileBusy = false;
       onChange();
     }
+  }) as ChangeWatcher;
+  watcher.idle = () => {
+    if (!dirtyWhileBusy) return;
+    dirtyWhileBusy = false;
+    onChange();
   };
+  return watcher;
 }

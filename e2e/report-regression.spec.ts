@@ -1244,6 +1244,196 @@ test.describe("P3-4 마스터 경로와 리미터", () => {
   });
 });
 
+// ───────────────────────── P3-5 녹음 흐름 ─────────────────────────
+
+/** 같은 규칙으로 한 줄 측정을 남긴다(병합 기록의 이전/이후 표용). */
+const measured35 = (name: string, value: unknown) => console.log(`P3-5 측정 [${P32_ENGINE}] ${name}: ${JSON.stringify(value)}`);
+
+const latencyInput = '[data-testid="latency-offset"]';
+const recordingPreview = '[data-testid="recording-preview"]';
+
+/** 녹음기에 보낸 시작 프레임과 ScriptProcessorNode 생성 횟수를 잡아 두는 훅 */
+const RECORD_PROBES = `(() => {
+  window.__recStarts = [];
+  window.__scriptProcessors = 0;
+  const post = MessagePort.prototype.postMessage;
+  MessagePort.prototype.postMessage = function (message, ...rest) {
+    if (message && typeof message === "object" && message.type === "start" && typeof message.startFrame === "number") window.__recStarts.push(message.startFrame);
+    return post.call(this, message, ...rest);
+  };
+  const create = BaseAudioContext.prototype.createScriptProcessor;
+  BaseAudioContext.prototype.createScriptProcessor = function (...args) { window.__scriptProcessors++; return create.apply(this, args); };
+})();`;
+
+async function setLatency(page: Page, value: number) {
+  const input = page.locator(latencyInput);
+  await input.click();
+  await input.press("Control+a");
+  await input.pressSequentially(String(value));
+  await input.press("Enter");
+}
+
+/** 녹음을 `ms` 동안 하고 멈춘다. 클립이 하나 더 생길 때까지 기다린다. */
+async function recordFor(page: Page, ms: number) {
+  const before = await page.locator(S.clip).count();
+  await page.click(S.record);
+  await expect(page.locator(S.record)).toHaveClass(/recording/, { timeout: 8000 });
+  await page.waitForTimeout(ms);
+  await page.click(S.stop);
+  await expect(page.locator(S.clip)).toHaveCount(before + 1, { timeout: 8000 });
+}
+
+const clipLefts = (page: Page) =>
+  page.locator(S.clip).evaluateAll((els) => els.map((el) => parseFloat((el as HTMLElement).style.left)));
+
+test.describe("P3-5 녹음 흐름", () => {
+  test("녹음하는 동안 ScriptProcessorNode를 만들지 않고, 콘솔에 폐기 예정 경고가 한 건도 없다", async ({ page }) => {
+    const logs: string[] = [];
+    page.on("console", (message) => logs.push(`${message.type()}: ${message.text()}`));
+    await page.addInitScript(RECORD_PROBES);
+    await openApp(page, { query: P32_QUERY });
+    await recordFor(page, 1200);
+    const created = await page.evaluate(() => (window as any).__scriptProcessors as number);
+    const deprecations = logs.filter((line) => /ScriptProcessor|deprecat/i.test(line));
+    measured35("ScriptProcessorNode", { 만든_수: created, 폐기_경고: deprecations.length });
+    expect(created).toBe(0);
+    expect(deprecations).toEqual([]);
+  });
+
+  test("카운트인 4박: 반주가 시작하는 시각과 녹음기가 담기 시작하는 프레임의 차이가 1샘플 이하다", async ({ page }) => {
+    await page.addInitScript(RECORD_PROBES);
+    await openApp(page, { query: P32_QUERY });
+    await upload(page, STEADY); // 트랙 1에 12초 반주
+    await page.selectOption(S.countIn, "4"); // 1마디 = 120 bpm에서 2초
+    await page.click(S.record);
+    await page.waitForFunction(() => (window as any).__recStarts.length >= 1 && (window as any).__startLog.length >= 1, undefined, { timeout: 8000 });
+    // 카운트인이 끝나 녹음 단계로 넘어가는 것까지 본다.
+    await expect(page.locator(S.record)).toHaveClass(/recording/);
+    await page.waitForTimeout(2600);
+    const { sampleRate, startFrame, whens } = await page.evaluate(() => {
+      const w = window as any;
+      return {
+        sampleRate: (w.__out as AnalyserNode).context.sampleRate as number,
+        startFrame: w.__recStarts[0] as number,
+        whens: (w.__startLog as number[][]).map((row) => row[1]),
+      };
+    });
+    await page.click(S.stop);
+    // 반주(오디오 버퍼 소리)의 시작 시각 중 녹음 시작과 가장 가까운 것
+    const nearest = whens.reduce((best, when) => (Math.abs(when * sampleRate - startFrame) < Math.abs(best * sampleRate - startFrame) ? when : best), whens[0]);
+    const errorSamples = Math.abs(nearest * sampleRate - startFrame);
+    measured35("카운트인 4박 시작 오차", { 샘플레이트: sampleRate, 녹음_시작_프레임: startFrame, 반주_시작_시각: nearest, 오차_샘플: errorSamples });
+    expect(errorSamples).toBeLessThanOrEqual(1);
+  });
+
+  test("카운트인 동안에는 재생 위치가 가만히 있고, 끝나면 흐르기 시작한다", async ({ page }) => {
+    await openApp(page, { query: P32_QUERY });
+    await upload(page, STEADY);
+    await page.selectOption(S.countIn, "2"); // 2박 = 1초
+    await page.click(S.record);
+    await expect(page.locator(S.record)).toHaveClass(/recording/, { timeout: 8000 });
+    expect(await timeSeconds(page)).toBeLessThan(0.05); // 카운트인 중
+    await page.waitForTimeout(2200);
+    expect(await timeSeconds(page)).toBeGreaterThan(0.5); // 카운트인이 끝나고 흘렀다
+    await page.click(S.stop);
+    await expect(page.locator(S.clip)).toHaveCount(2, { timeout: 8000 });
+  });
+
+  test("카운트인 중에 정지하면 녹음하지 않고 처음으로 돌아가며, 클립도 새 트랙도 남지 않는다", async ({ page }) => {
+    await openApp(page, { query: P32_QUERY });
+    await upload(page, STEADY);
+    await page.selectOption(S.countIn, "8"); // 2마디 = 4초
+    await page.click(S.record);
+    await expect(page.locator(S.record)).toHaveClass(/recording/, { timeout: 8000 });
+    await page.waitForTimeout(600);
+    await page.click(S.stop);
+    await expect(page.locator(S.record)).not.toHaveClass(/recording/);
+    await page.waitForTimeout(1200);
+    await expect(page.locator(S.clip)).toHaveCount(1); // 반주뿐
+    await expect(page.locator(S.trackHeader)).toHaveCount(1);
+    expect(await timeSeconds(page)).toBeLessThan(0.05);
+    await expect(page.locator(recordingPreview)).toHaveCount(0);
+  });
+
+  test("녹음하는 동안 클립은 임시 파형뿐이고, 끝나면 클립 1개가 한 번에 생기며 Ctrl+Z 한 번에 사라진다", async ({ page }) => {
+    await openApp(page, { query: P32_QUERY });
+    await page.click(S.record);
+    await expect(page.locator(S.record)).toHaveClass(/recording/, { timeout: 8000 });
+    await expect(page.locator(recordingPreview)).toBeVisible();
+    await page.waitForTimeout(1500);
+    const narrow = (await page.locator(recordingPreview).boundingBox())!.width;
+    await page.waitForTimeout(1000);
+    const wide = (await page.locator(recordingPreview).boundingBox())!.width;
+    expect(wide - narrow).toBeGreaterThan(60); // 초당 96px로 자란다
+    await expect(page.locator(S.clip)).toHaveCount(0); // 문서에는 아직 클립이 없다
+
+    await page.keyboard.press("Control+z"); // 녹음 중에는 막힌다
+    await expect(page.locator(S.status)).toContainText("녹음 중에는 실행 취소와 다시 실행을 할 수 없습니다");
+    await clickRuler(page, 5, 96); // 위치 이동도 막힌다
+    await expect(page.locator(S.status)).toContainText("녹음 중에는 재생 위치를 옮길 수 없습니다");
+    await page.waitForTimeout(200);
+    await expect(page.locator(S.record)).toHaveClass(/recording/);
+
+    await page.click(S.stop);
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 8000 });
+    await expect(page.locator(recordingPreview)).toHaveCount(0);
+    await page.keyboard.press("Control+z");
+    await expect(page.locator(S.clip)).toHaveCount(0); // 음원과 클립이 한 번에 사라진다
+    await page.keyboard.press("Control+y");
+    await expect(page.locator(S.clip)).toHaveCount(1);
+  });
+
+  test("지연 보정 +100 ms는 같은 조건의 녹음 클립을 0.1초 앞으로 당긴다", async ({ page }) => {
+    await openApp(page, { query: P32_QUERY });
+    const pxPerSecond = 96;
+    await clickRuler(page, 3, pxPerSecond);
+    await recordFor(page, 1200); // 보정 0
+    await clickRuler(page, 3, pxPerSecond);
+    await setLatency(page, 100);
+    await recordFor(page, 1200); // 보정 +100 ms
+    const [plain, shifted] = await clipLefts(page);
+    const shiftMs = ((plain - shifted) / pxPerSecond) * 1000;
+    measured35("지연 보정 +100 ms", { 보정_0_왼쪽_px: plain, 보정_100_왼쪽_px: shifted, 앞으로_당겨진_ms: shiftMs });
+    expect(Math.abs(shiftMs - 100)).toBeLessThanOrEqual(15);
+  });
+
+  test("지연 보정값은 이 브라우저에 기억되고 문서에는 들어가지 않는다", async ({ page }) => {
+    await openApp(page);
+    await setLatency(page, 35);
+    await expect(page.locator(latencyInput)).toHaveValue("35");
+    await expect(page.locator(S.autosave)).toHaveAttribute("data-state", "idle"); // 문서가 바뀌지 않았으니 저장할 것도 없다
+    await page.reload();
+    await page.locator(S.statusbar).waitFor();
+    await expect(page.locator(latencyInput)).toHaveValue("35");
+    await setLatency(page, 999); // 범위(−200~200) 밖은 잘린다
+    await expect(page.locator(latencyInput)).toHaveValue("200");
+  });
+
+  test("지연 보정 칸이 있어도 상단 바는 가로로 넘치지 않고, 1100px에서는 설정 팝오버 안에 있다", async ({ page }) => {
+    await openApp(page);
+    for (const width of [1280, 1440, 1600, 1920]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(page.locator(latencyInput)).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow, `${width}px 가로 넘침`).toBeLessThanOrEqual(0);
+    }
+    await page.setViewportSize({ width: 1100, height: 900 });
+    await expect(page.locator(latencyInput)).toHaveCount(0);
+    await page.locator(S.recordOptionsToggle).click();
+    await expect(page.locator(latencyInput)).toBeVisible();
+  });
+
+  test("녹음 중 재생 버튼(스페이스)을 누르면 녹음이 끝나고 저장된다", async ({ page }) => {
+    await openApp(page, { query: P32_QUERY });
+    await page.click(S.record);
+    await expect(page.locator(S.record)).toHaveClass(/recording/, { timeout: 8000 });
+    await page.waitForTimeout(1200);
+    await page.click(S.play);
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 8000 });
+    await expect(page.locator(S.record)).not.toHaveClass(/recording/);
+  });
+});
+
 test.describe("A6·C6 안내 문구", () => {
   test("도구를 바꾼 뒤에도 업로드 실패가 화면에 보인다", async ({ page }) => {
     await openApp(page);

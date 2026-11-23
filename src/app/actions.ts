@@ -14,6 +14,7 @@
  */
 import { ko } from "../i18n/ko";
 import { useDawStore } from "../store/useDawStore";
+import { useRecordingStore } from "../state/recordingStore";
 import { confirmAction } from "../services/confirm";
 import { notify } from "../services/notify";
 
@@ -24,18 +25,20 @@ const text = ko.notice;
 
 export function undo() {
   const result = store().undo();
-  notify("info", result.ok ? text.undone : text.nothingToUndo);
+  if (result.ok) notify("info", text.undone);
+  else notify("info", result.reason === "recording" ? text.undoLockedWhileRecording : text.nothingToUndo);
 }
 
 export function redo() {
   const result = store().redo();
-  notify("info", result.ok ? text.redone : text.nothingToRedo);
+  if (result.ok) notify("info", text.redone);
+  else notify("info", result.reason === "recording" ? text.undoLockedWhileRecording : text.nothingToRedo);
 }
 
 // ───── 녹음 대기 ─────
 
 export function toggleRecordingArm(trackId: string) {
-  const result = store().toggleRecordingArm(trackId);
+  const result = useRecordingStore.getState().toggleArm(trackId);
   if (!result.ok) {
     notify("warning", text.armLockedWhileRecording);
     return;

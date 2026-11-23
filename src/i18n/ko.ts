@@ -80,6 +80,13 @@ export const ko = {
     peakTitle: (label: string, db: string) => `${label} 피크 ${db} dB`,
   },
 
+  record: {
+    latencyLabel: "지연",
+    latencyUnit: "ms",
+    latencyAria: "녹음 지연 보정(ms)",
+    latencyTitle: "녹음 지연 보정(ms). 녹음한 소리가 반주보다 늦게 들리면 양수로 올리세요. 블루투스 이어폰처럼 지연이 큰 장치는 −200 ~ +200 안에서 맞춥니다.",
+  },
+
   monitor: {
     volumeLabel: "모니터 볼륨",
     volumeTitle: "입력 모니터링과 메트로놈 소리의 크기입니다. 믹스와 내보내기에는 섞이지 않습니다.",
@@ -148,6 +155,9 @@ export const ko = {
     recordingNow: (fileName: string) => `${fileName} 녹음 중...`,
     recordingSaving: (fileName: string) => `${fileName} 저장 중...`,
     recordingDone: (fileName: string) => `${fileName} 녹음 완료`,
+    recordingEmpty: "녹음된 소리가 없어 클립을 만들지 않았습니다.",
+    undoLockedWhileRecording: "녹음 중에는 실행 취소와 다시 실행을 할 수 없습니다.",
+    playLockedWhileRecording: "녹음 중에는 재생 위치를 옮길 수 없습니다.",
 
     decoding: (count: number) => `${count}개 파일 디코딩 중...`,
     relinked: (fileName: string) => `${fileName} 음원을 기존 클립에 다시 연결했습니다.`,

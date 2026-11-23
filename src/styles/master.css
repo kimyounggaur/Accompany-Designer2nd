@@ -99,3 +99,55 @@
   min-width: 0;
   accent-color: var(--mistral-orange);
 }
+
+/* 녹음 지연 보정(ms) — 상단 바 녹음 옵션 */
+.latency-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: var(--surface-2);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.topbar .latency-control {
+  height: 32px;
+}
+
+.latency-control input {
+  width: 52px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 4px;
+  color: #f3f5ee;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  background: #101311;
+  font-size: 11px;
+  font-weight: 750;
+  text-align: right;
+  outline: none;
+}
+
+.latency-control input:focus {
+  border-color: var(--mint);
+}
+
+.latency-control:has(input:disabled) {
+  opacity: 0.6;
+}
+
+/* 녹음을 준비하는 동안(마이크 허락·워크렛 준비): 아직 녹음 중은 아니다 */
+.record-button.preparing {
+  opacity: 0.75;
+}
+
+/* 녹음하는 동안 보이는 임시 클립: 클릭·끌기를 받지 않는다 */
+.recording-preview {
+  pointer-events: none;
+}

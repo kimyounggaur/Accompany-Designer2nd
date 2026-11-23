@@ -3,7 +3,9 @@ import { AudioEngineV2 } from "../audio/engine/AudioEngine";
 import { ko } from "../i18n/ko";
 import { notify, notifyError } from "../services/notify";
 import { loadAutosave, startAutosave } from "../services/persistence/autosave";
+import { readLatencyOffsetMs, writeLatencyOffsetMs } from "../services/recordingSettings";
 import { useAutosaveStore } from "../state/autosaveStore";
+import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
 import { recallAudio, restoreAudio } from "../storage/projectStorage";
 import { useDawStore } from "../store/useDawStore";
 import { connectEngineSync } from "./engineSync";
@@ -23,18 +25,28 @@ export function startApp(): () => void {
   let cancelled = false;
   const initial = getProjectSnapshot();
 
+  // 녹음 지연 보정값은 이 브라우저에 기억해 두었다가 다음에 열 때 되살린다(장치마다 다른 개인 설정이라 문서에는 넣지 않는다).
+  useRecordingStore.getState().setLatencyOffsetMs(readLatencyOffsetMs());
+  const offLatencySync = useRecordingStore.subscribe((state, previous) => {
+    if (state.latencyOffsetMs !== previous.latencyOffsetMs) writeLatencyOffsetMs(state.latencyOffsetMs);
+  });
+
   // 문서가 바뀌면 재생 중인 소리 경로를 바뀐 부분만 맞춘다(예전 App.tsx의 schedulingSignature 효과를 대체).
   const offEngineSync = connectEngineSync(audioEngine);
-  // 새 엔진(?engine=v2)은 곡 끝에 닿으면 멈추는데, 녹음 중에는 멈추면 안 된다.
+  // 새 엔진(?engine=v2)은 곡 끝에 닿으면 멈추는데, 녹음하는 동안에는 멈추면 안 된다.
   if (audioEngine instanceof AudioEngineV2) {
-    audioEngine.setHoldOpen(() => useDawStore.getState().recording.status === "recording");
+    audioEngine.setHoldOpen(() => isRecordingBusy());
   }
 
   const autosave = startAutosave({
     getProject: getProjectSnapshot,
     recallAudio,
     subscribe: (listener) => useDawStore.subscribe(listener),
-    isRecording: () => useDawStore.getState().recording.status !== "idle",
+    isRecording: () => isRecordingBusy(),
+    onRecordingIdle: (listener) =>
+      useRecordingStore.subscribe((state, previous) => {
+        if (previous.status !== "idle" && state.status === "idle") listener();
+      }),
     exportToFile: () => void saveProjectFile(),
   });
 
@@ -81,6 +93,7 @@ export function startApp(): () => void {
 
   return () => {
     cancelled = true;
+    offLatencySync();
     offEngineSync();
     autosave.dispose();
   };

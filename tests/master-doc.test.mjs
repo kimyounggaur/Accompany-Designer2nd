@@ -108,7 +108,7 @@ test("저장용 스냅샷과 화면 저장소에 마스터가 비친다", () => 
 });
 
 test("자동 저장은 마스터만 바뀌어도 저장 대상으로 본다", () => {
-  const base = { name: "a", bpm: 120, tracks: [], audioAssets: {}, timeMarkers: [], recording: { status: "idle" } };
+  const base = { name: "a", bpm: 120, tracks: [], audioAssets: {}, timeMarkers: [] };
   const master = { volumeDb: 0 };
   assert.equal(documentChanged({ ...base, master }, { ...base, master }), false);
   assert.equal(documentChanged({ ...base, master: { volumeDb: -3 } }, { ...base, master }), true);

@@ -84,7 +84,7 @@ test("저장 시각은 24시간제 HH:MM", () => {
 
 // 문서 조각(트랙·음원·마커)은 참조로 비교하므로, 바뀌지 않은 상태끼리는 같은 객체를 공유한다.
 const shared = { tracks: [], audioAssets: {}, timeMarkers: [] };
-const slice = (patch = {}) => ({ name: "곡", bpm: 120, ...shared, recording: { status: "idle" }, ...patch });
+const slice = (patch = {}) => ({ name: "곡", bpm: 120, ...shared, ...patch });
 
 test("문서가 바뀌었을 때만 변경으로 본다(재생 위치 같은 화면 상태는 아니다)", () => {
   const base = slice();
@@ -96,22 +96,37 @@ test("문서가 바뀌었을 때만 변경으로 본다(재생 위치 같은 화
 
 test("녹음·카운트인 중에는 예약하지 않고, 끝나면 문서가 바뀐 경우에만 한 번 예약한다", () => {
   let calls = 0;
-  const watch = createChangeWatcher(() => (calls += 1));
+  let busy = false;
+  const watch = createChangeWatcher(() => (calls += 1), () => busy);
   const idle = slice();
-  const recording = slice({ recording: { status: "recording" } });
   watch(slice({ bpm: 100 }), idle); // 평소 변경
   assert.equal(calls, 1);
-  watch(recording, idle); // 녹음 시작(문서는 그대로)
-  watch(slice({ recording: { status: "recording" }, audioAssets: {} }), recording); // 녹음 중 문서 변경(새 audioAssets 객체)
+
+  busy = true; // 녹음 시작(문서는 그대로)
+  watch(idle, idle);
+  watch(slice({ audioAssets: {} }), idle); // 녹음 중 문서 변경(새 audioAssets 객체)
   assert.equal(calls, 1);
-  watch(slice(), recording); // 녹음 끝
+  busy = false; // 녹음 끝
+  watch.idle();
+  assert.equal(calls, 2);
+  watch.idle(); // 한 번만
   assert.equal(calls, 2);
 
-  // 카운트인만 하고 취소했다면 저장하지 않는다.
-  const countIn = slice({ recording: { status: "counting-in" } });
-  watch(countIn, slice());
-  watch(slice(), countIn);
+  // 카운트인만 하고 취소했다면(문서 그대로) 저장하지 않는다.
+  busy = true;
+  watch(slice(), slice());
+  busy = false;
+  watch.idle();
   assert.equal(calls, 2);
+
+  // 녹음이 끝난 뒤 첫 변경이 오면 그 변경이 예약되고, 이어서 idle()이 와도 두 번 예약하지 않는다.
+  busy = true;
+  watch(slice({ tracks: [] }), idle);
+  busy = false;
+  watch(slice({ tracks: [], bpm: 99 }), slice({ tracks: [] }));
+  assert.equal(calls, 3);
+  watch.idle();
+  assert.equal(calls, 3);
 });
 
 // ───────── 저장 예약기 ─────────

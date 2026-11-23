@@ -6,6 +6,7 @@ import { confirmAction } from "../src/services/confirm.ts";
 import { useDialogStore } from "../src/state/dialogStore.ts";
 import { fail, ok } from "../src/state/commandResult.ts";
 import { useDawStore } from "../src/store/useDawStore.ts";
+import { useRecordingStore } from "../src/state/recordingStore.ts";
 import { history } from "../src/state/history.ts";
 import * as actions from "../src/app/actions.ts";
 
@@ -182,8 +183,8 @@ test("도구·스냅·녹음 옵션을 바꿔도 안내하지 않는다(화면�
   store.setPlaylistTool("slice");
   store.setPlaylistSnap("beat");
   store.setGlobalSnap("beat");
-  store.setRecordingMetronome(true);
-  store.setRecordingCountIn(2);
+  useRecordingStore.getState().setMetronome(true);
+  useRecordingStore.getState().setCountIn(2);
   store.togglePerformanceMode();
   assert.equal(status(), "이전 안내");
   assert.equal(notices().length, 0);
@@ -199,7 +200,7 @@ test("녹음 대기를 켜고 끄면 정보 안내가 나온다", () => {
 
 test("녹음 중에는 녹음 대기 트랙을 바꿀 수 없다는 경고 토스트가 나온다", () => {
   const trackId = useDawStore.getState().tracks[0].id;
-  useDawStore.getState().setRecordingState({ status: "recording" });
+  useRecordingStore.getState().setProgress({ status: "recording" });
   actions.toggleRecordingArm(trackId);
   assert.equal(notices()[0].level, "warning");
   assert.equal(notices()[0].message, "녹음 중에는 녹음 대기 트랙을 바꿀 수 없습니다.");

@@ -227,14 +227,41 @@ export class BrowserAudioEngine {
     return getProjectDuration(project);
   }
 
-  async play(project: DawProject, playhead: number) {
+  /**
+   * 재생을 시작한다. `atContextTime`을 주면 그 오디오 시각에 정확히 시작한다(녹음 카운트인 뒤에 반주를 맞출 때).
+   * 아직 오지 않은 시각이면 그때까지는 곡 위치가 시작점에 머문다.
+   */
+  async play(project: DawProject, playhead: number, options: { atContextTime?: number } = {}) {
     const context = await this.ensureContext();
     this.stop();
-    this.startedAt = context.currentTime;
+    this.startedAt = options.atContextTime ?? context.currentTime;
     this.playheadAtStart = playhead;
     this.applyMaster(project, context.currentTime, false);
     this.playing = true;
     this.sync(project);
+  }
+
+  /** 오디오 시각에 곡 시계가 가리키는 위치(초). 재생 중일 때만 뜻이 있다. */
+  positionAt(contextTime: number): number {
+    return this.playheadAtStart + (contextTime - this.startedAt);
+  }
+
+  /** 곡 위치가 오디오 시각의 언제인지 */
+  contextTimeAt(position: number): number {
+    return this.startedAt + (position - this.playheadAtStart);
+  }
+
+  /** 소리가 스피커까지 가는 데 걸리는 시간(초): 브라우저가 알려 주는 출력 지연 + 마스터 길의 지연. 알 수 없으면 0. */
+  getOutputLatency(): number {
+    const context = this.context as (AudioContext & { outputLatency?: number }) | undefined;
+    const reported = context?.outputLatency;
+    return (typeof reported === "number" && reported > 0 ? reported : 0) + this.getMasterLatency();
+  }
+
+  /** 오디오 처리 경로의 기본 지연(초). 알 수 없으면 0. */
+  getBaseLatency(): number {
+    const base = this.context?.baseLatency;
+    return typeof base === "number" && base > 0 ? base : 0;
   }
 
   /**
@@ -300,7 +327,7 @@ export class BrowserAudioEngine {
           continue;
         }
         if (previous) stopSource(previous.source);
-        const source = scheduleClip(context, graph.input, buffer, clip, project.bpm, this.getCurrentPlayhead());
+        const source = scheduleClip(context, graph.input, buffer, clip, project.bpm, this.getCurrentPlayhead(), Math.max(context.currentTime, this.startedAt));
         if (source) this.sources.set(clip.id, { source, signature, trackId: track.id, clip });
         else this.sources.delete(clip.id);
       }
@@ -328,7 +355,7 @@ export class BrowserAudioEngine {
 
   getCurrentPlayhead() {
     if (!this.context || !this.playing) return this.playheadAtStart;
-    return this.playheadAtStart + (this.context.currentTime - this.startedAt);
+    return this.playheadAtStart + Math.max(0, this.context.currentTime - this.startedAt);
   }
 
   isPlaying() { return this.playing; }
@@ -388,7 +415,8 @@ function stopSource(source: AudioBufferSourceNode) {
   try { source.disconnect(); } catch { /* already disconnected */ }
 }
 
-function scheduleClip(context: BaseAudioContext, input: AudioNode, buffer: AudioBuffer, clip: Clip, bpm: number, playhead: number) {
+/** `baseTime`: `playhead`가 가리키는 곡 위치가 소리로 나오는 오디오 시각(기본은 지금) */
+function scheduleClip(context: BaseAudioContext, input: AudioNode, buffer: AudioBuffer, clip: Clip, bpm: number, playhead: number, baseTime = context.currentTime) {
   const rate = getClipPlaybackRate(bpm, clip);
   const timelineDuration = getClipTimelineDuration(bpm, clip);
   if (clip.startTime + timelineDuration <= playhead) return undefined;
@@ -398,7 +426,7 @@ function scheduleClip(context: BaseAudioContext, input: AudioNode, buffer: Audio
   if (duration <= 0 || offset >= buffer.duration) return undefined;
   const source = context.createBufferSource(); const gain = context.createGain();
   source.buffer = buffer; source.playbackRate.value = rate; source.connect(gain); gain.connect(input);
-  const when = context.currentTime + Math.max(0, clip.startTime - playhead);
+  const when = baseTime + Math.max(0, clip.startTime - playhead);
   scheduleClipGainEnvelope(gain.gain, clip, when, elapsed, duration / rate, timelineDuration);
   source.start(when, offset, duration);
   return source;

@@ -1,9 +1,11 @@
 import { Headphones, Mic, Music2, Timer, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { audioEngine } from "../../audio/currentEngine";
+import { CommittedNumberInput } from "../../components/CommittedNumberInput";
+import { LATENCY_OFFSET_MAX_MS, LATENCY_OFFSET_MIN_MS } from "../../domain/recording/latency";
 import { ko } from "../../i18n/ko";
 import { readMonitorVolume, writeMonitorVolume } from "../../services/monitorVolume";
-import { useDawStore } from "../../store/useDawStore";
+import { useRecordingStore } from "../../state/recordingStore";
 import { useDismiss } from "../useDismiss";
 
 interface RecordOptionsProps {
@@ -14,11 +16,16 @@ interface RecordOptionsProps {
 
 /** 입력 모니터링 · 녹음 메트로놈 · 카운트인 · 입력 장치 */
 export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
-  const recording = useDawStore((state) => state.recording);
-  const setRecordingInputDevice = useDawStore((state) => state.setRecordingInputDevice);
-  const setRecordingMonitoring = useDawStore((state) => state.setRecordingMonitoring);
-  const setRecordingMetronome = useDawStore((state) => state.setRecordingMetronome);
-  const setRecordingCountIn = useDawStore((state) => state.setRecordingCountIn);
+  const monitoringEnabled = useRecordingStore((state) => state.monitoringEnabled);
+  const metronomeEnabled = useRecordingStore((state) => state.metronomeEnabled);
+  const countInBeats = useRecordingStore((state) => state.countInBeats);
+  const inputDeviceId = useRecordingStore((state) => state.inputDeviceId);
+  const latencyOffsetMs = useRecordingStore((state) => state.latencyOffsetMs);
+  const setRecordingInputDevice = useRecordingStore((state) => state.setInputDevice);
+  const setRecordingMonitoring = useRecordingStore((state) => state.setMonitoring);
+  const setRecordingMetronome = useRecordingStore((state) => state.setMetronome);
+  const setRecordingCountIn = useRecordingStore((state) => state.setCountIn);
+  const setLatencyOffsetMs = useRecordingStore((state) => state.setLatencyOffsetMs);
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
   const [open, setOpen] = useState(false);
   const [monitorVolume, setMonitorVolume] = useState(readMonitorVolume);
@@ -54,21 +61,21 @@ export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
   const controls = (
     <>
       <button
-        className={`icon-button monitor-button ${recording.monitoringEnabled ? "active" : ""}`}
+        className={`icon-button monitor-button ${monitoringEnabled ? "active" : ""}`}
         disabled={isRecording}
-        onClick={() => setRecordingMonitoring(!recording.monitoringEnabled)}
+        onClick={() => setRecordingMonitoring(!monitoringEnabled)}
         title="입력 모니터링"
-        aria-pressed={recording.monitoringEnabled}
+        aria-pressed={monitoringEnabled}
         type="button"
       >
         <Headphones size={16} />
       </button>
       <button
-        className={`icon-button metronome-button ${recording.metronomeEnabled ? "active" : ""}`}
+        className={`icon-button metronome-button ${metronomeEnabled ? "active" : ""}`}
         disabled={isRecording}
-        onClick={() => setRecordingMetronome(!recording.metronomeEnabled)}
+        onClick={() => setRecordingMetronome(!metronomeEnabled)}
         title="녹음 메트로놈"
-        aria-pressed={recording.metronomeEnabled}
+        aria-pressed={metronomeEnabled}
         type="button"
       >
         <Music2 size={16} />
@@ -97,7 +104,7 @@ export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
           aria-label="녹음 카운트인"
           disabled={isRecording}
           onChange={(event) => setRecordingCountIn(Number(event.target.value))}
-          value={recording.countInBeats}
+          value={countInBeats}
         >
           <option value={0}>카운트 없음</option>
           <option value={1}>1박</option>
@@ -106,13 +113,27 @@ export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
           <option value={8}>2마디</option>
         </select>
       </label>
+      <label className="latency-control" title={ko.record.latencyTitle}>
+        <span>{ko.record.latencyLabel}</span>
+        <CommittedNumberInput
+          label={ko.record.latencyAria}
+          testId="latency-offset"
+          value={latencyOffsetMs}
+          min={LATENCY_OFFSET_MIN_MS}
+          max={LATENCY_OFFSET_MAX_MS}
+          step={5}
+          disabled={isRecording}
+          onCommit={(value) => setLatencyOffsetMs(value)}
+        />
+        <span aria-hidden="true">{ko.record.latencyUnit}</span>
+      </label>
       <label className="input-select-control">
         <span>입력</span>
         <select
           aria-label="녹음 입력 장치"
           disabled={isRecording}
           onChange={(event) => setRecordingInputDevice(event.target.value || undefined)}
-          value={recording.inputDeviceId ?? ""}
+          value={inputDeviceId ?? ""}
         >
           <option value="">기본 마이크</option>
           {inputDevices.map((device, index) => (

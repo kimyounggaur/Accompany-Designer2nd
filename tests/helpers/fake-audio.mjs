@@ -17,6 +17,7 @@ export class Param {
   cancelScheduledValues(time) { this.events.push({ type: 'cancel', time }); }
   cancelAndHoldAtTime(time) { this.events.push({ type: 'hold', time }); }
   linearRampToValueAtTime(value, time) { this.#value = value; this.events.push({ type: 'ramp', value, time }); }
+  exponentialRampToValueAtTime(value, time) { this.#value = value; this.events.push({ type: 'expramp', value, time }); }
   setValueCurveAtTime(values, time, duration) { this.#value = values.at(-1); this.events.push({ type: 'curve', time, duration }); }
 }
 
@@ -78,6 +79,8 @@ export class FakeContext {
   createChannelSplitter() { return this.make('splitter'); }
   createChannelMerger() { return this.make('merger'); }
   createBufferSource() { const source = new Source('source'); this.nodes.push(source); return source; }
+  /** 메트로놈 클릭용. `start()`는 부르지만 `Source.starts`에는 남기지 않아도 되는 단순한 소리 원천이다. */
+  createOscillator() { const source = new Source('oscillator'); source.type = 'sine'; this.nodes.push(source); return source; }
   createBuffer(channels, length, sampleRate) {
     this.buffersCreated.push({ channels, length, sampleRate });
     const data = Array.from({ length: channels }, () => new Float32Array(length));

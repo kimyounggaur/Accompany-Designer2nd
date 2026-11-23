@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { audioEngine } from "../audio/currentEngine";
 import { ko } from "../i18n/ko";
+import { useRecordingStore } from "../state/recordingStore";
 import { useDawStore } from "../store/useDawStore";
 
 const MIN_DB = -60;
@@ -119,7 +120,8 @@ export function LevelMeter({
 
 export function LevelMeterRack() {
   const tracks = useDawStore((state) => state.tracks);
-  const active = useDawStore((state) => state.isPlaying || state.recording.status === "recording");
+  const capturing = useRecordingStore((state) => state.status === "recording");
+  const active = useDawStore((state) => state.isPlaying) || capturing;
   const [readings, setReadings] = useState<Record<string, MeterReading>>({});
   const readingsRef = useRef<Record<string, MeterReading>>({});
   const buffersRef = useRef(new Map<string, Float32Array<ArrayBuffer>>());
