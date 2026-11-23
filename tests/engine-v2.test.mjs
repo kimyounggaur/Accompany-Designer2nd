@@ -80,13 +80,13 @@ test("볼륨·이름처럼 소리 경로 값만 바꾸면 새 소리를 만들�
   const rig = await makeEngine();
   const doc = makeDoc([0, 1]);
   await rig.engine.play(doc, 0);
-  const graph = rig.engine.trackGraphs.get(doc.tracks[0].id);
+  const strip = rig.engine.strips.get(doc.tracks[0].id);
   const next = produce(doc, (draft) => { draft.tracks[0].name = "새 이름"; draft.tracks[0].volume = 0.5; });
   rig.engine.sync(next, doc);
   assert.equal(Source.starts.length, 2);
   assert.ok(Source.starts.every((source) => source.stopped === undefined));
-  assert.equal(rig.engine.trackGraphs.get(doc.tracks[0].id), graph, "소리 경로는 그대로");
-  assert.equal(graph.output.gain.value, 0.5);
+  assert.equal(rig.engine.strips.get(doc.tracks[0].id), strip, "소리 경로는 그대로");
+  assert.equal(strip.output.gain.value, 0.5);
   assert.equal(rig.retired.length, 0);
 });
 
@@ -94,10 +94,10 @@ test("같은 문서를 다시 sync해도 아무 일도 하지 않는다", async 
   const rig = await makeEngine();
   const doc = makeDoc([0, 1]);
   await rig.engine.play(doc, 0);
-  const graph = rig.engine.trackGraphs.get(doc.tracks[0].id);
-  const eventsBefore = graph.output.gain.events.length;
+  const strip = rig.engine.strips.get(doc.tracks[0].id);
+  const eventsBefore = strip.output.gain.events.length;
   rig.engine.sync(doc, doc);
-  assert.equal(graph.output.gain.events.length, eventsBefore);
+  assert.equal(strip.output.gain.events.length, eventsBefore);
   assert.equal(Source.starts.length, 2);
 });
 
@@ -170,7 +170,7 @@ test("stop()은 일시정지다: 위치를 붙잡고, 소리를 내리고, 타�
   const doc = makeDoc([0, 1]);
   await rig.engine.play(doc, 0);
   rig.advance(0.8);
-  const graph = rig.engine.trackGraphs.get(doc.tracks[0].id);
+  const strip = rig.engine.strips.get(doc.tracks[0].id);
 
   rig.engine.stop();
   assert.equal(rig.engine.isPlaying(), false);
@@ -178,19 +178,19 @@ test("stop()은 일시정지다: 위치를 붙잡고, 소리를 내리고, 타�
   near(rig.engine.getCurrentPlayhead(), 0.8);
   assert.ok(Source.starts.every((source) => source.stopped === true));
   assert.equal(rig.timer.running, false);
-  assert.equal(rig.engine.trackGraphs.size, 0);
+  assert.equal(rig.engine.strips.size, 0);
   assert.equal(rig.retired.length, 1, "소리 경로 끊기는 60ms 뒤로 미뤄 둔다");
-  assert.deepEqual(graph.output.gain.events.at(-1), { type: "target", value: 0, time: 0.8, constant: 0.004 }, "끊기 전에 트랙 출력을 0으로 내린다");
-  assert.equal(graph.input.disconnected, undefined, "아직 끊지 않았다");
+  assert.deepEqual(strip.output.gain.events.at(-1), { type: "target", value: 0, time: 0.8, constant: 0.004 }, "끊기 전에 트랙 출력을 0으로 내린다");
+  assert.equal(strip.input.disconnected, undefined, "아직 끊지 않았다");
 
   rig.ctx.currentTime += 5;
   near(rig.engine.getCurrentPlayhead(), 0.8, "멈춘 동안 위치는 그대로");
   rig.retired.forEach((run) => run());
-  assert.equal(graph.input.disconnected, true);
+  assert.equal(strip.input.disconnected, true);
 
   await rig.engine.play(doc, rig.engine.getCurrentPlayhead());
   assert.equal(rig.engine.isPlaying(), true);
-  assert.equal(rig.engine.trackGraphs.size, 1);
+  assert.equal(rig.engine.strips.size, 1);
   near(rig.engine.getCurrentPlayhead(), 0.8);
   assert.equal(Source.starts.length, 4);
   nearAll(Source.starts[2].started, [5.8, 0.8, 0.2], "이어 재생: 첫 클립의 남은 부분");
@@ -203,11 +203,11 @@ test("소리 경로 끊기는 기본값으로 60ms 뒤에 일어난다", async (
   engine.registerBuffer("asset", ctx.createBuffer(1, 44100, 44100));
   const doc = makeDoc([0]);
   await engine.play(doc, 0);
-  const graph = engine.trackGraphs.get(doc.tracks[0].id);
+  const strip = engine.strips.get(doc.tracks[0].id);
   engine.stop();
-  assert.equal(graph.input.disconnected, undefined);
+  assert.equal(strip.input.disconnected, undefined);
   await new Promise((resolve) => setTimeout(resolve, RETIRE_MS + 40));
-  assert.equal(graph.input.disconnected, true);
+  assert.equal(strip.input.disconnected, true);
 });
 
 test("멈춘 상태에서 pause()·stop()을 불러도 아무 일도 없다", async () => {
@@ -252,6 +252,104 @@ test("녹음 중(holdOpen)에는 곡 끝에 닿아도 멈추지 않는다", asyn
   assert.equal(rig.ended.length, 1);
 });
 
+/** 이펙트 켜기 버튼이 하는 일: 이펙트 자신의 켜기와 사슬 슬롯의 켜기를 함께 바꾼다 */
+function withEffect(doc, type, enabled, change = () => {}) {
+  return produce(doc, (draft) => {
+    const track = draft.tracks[0];
+    track[{ eq: "eq", comp: "compressor", delay: "delay", reverb: "reverb" }[type]].enabled = enabled;
+    for (const slot of track.effectChain) if (slot.type === type) slot.enabled = enabled;
+    change(track);
+  });
+}
+
+test("재생 중 딜레이·리버브를 5번씩 켜고 꺼도 소리 소스는 시작도 정지도 하지 않고, 스트립도 그대로다 (S4)", async () => {
+  const rig = await makeEngine();
+  let current = makeDoc([0, 1]);
+  await rig.engine.play(current, 0);
+  const strip = rig.engine.strips.get(current.tracks[0].id);
+  const sources = Source.starts.length;
+  assert.equal(sources, 2);
+
+  let nodesAfterFirstRound = 0;
+  for (let round = 0; round < 5; round += 1) {
+    for (const enabled of [true, false]) {
+      for (const type of ["delay", "reverb"]) {
+        const next = withEffect(current, type, enabled);
+        rig.engine.sync(next, current);
+        current = next;
+        rig.advance(0.05);
+      }
+    }
+    if (round === 0) nodesAfterFirstRound = rig.ctx.nodes.length;
+  }
+  assert.equal(Source.starts.length, sources, "소스 시작 횟수 증가 0");
+  assert.ok(Source.starts.every((source) => source.stopped === undefined), "멈춘 소스도 0");
+  assert.equal(rig.engine.strips.get(current.tracks[0].id), strip, "같은 스트립");
+  assert.equal(rig.retired.length, 0, "끊은 소리 경로도 0");
+  assert.equal(rig.ctx.nodes.length, nodesAfterFirstRound, "처음 켠 뒤로는 노드를 새로 만들지 않는다(딜레이·리버브 모두 한 번만 만든다)");
+  assert.equal(rig.ctx.all("convolver").length, 1, "리버브의 잔향 컨볼버는 하나");
+});
+
+test("컴프레서 압축량: 엔진이 트랙의 지금 압축량(dB)을 돌려주고, 컴프레서가 꺼져 있거나 트랙이 없으면 0이다", async () => {
+  const rig = await makeEngine();
+  const base = makeDoc([0, 1]);
+  const id = base.tracks[0].id;
+  assert.equal(rig.engine.getCompressorReduction(id), 0, "재생 전에는 소리 경로가 없다");
+  await rig.engine.play(base, 0);
+  assert.equal(rig.engine.getCompressorReduction(id), 0, "컴프레서가 꺼져 있다");
+
+  const masterCompressors = rig.ctx.all("compressor").length; // 마스터 리미터도 브라우저 압축기를 쓴다
+  const on = withEffect(base, "comp", true);
+  rig.engine.sync(on, base);
+  rig.advance(0.05);
+  const compressor = rig.ctx.all("compressor")[masterCompressors];
+  assert.ok(compressor, "트랙의 컴프레서가 새로 만들어졌다");
+  compressor.reduction = -9;
+  assert.equal(rig.engine.getCompressorReduction(id), -9);
+  assert.equal(rig.engine.getCompressorReduction("없는-트랙"), 0);
+});
+
+test("값을 맞추는 시각은 지금이 아니라 안전한 시각(지금 + lead)이다: 볼륨과 이펙트 교차 모두", async () => {
+  const rig = await makeEngine({ lead: () => 0.03 });
+  const base = makeDoc([0], { durations: 6 });
+  await rig.engine.play(base, 0);
+  rig.advance(1);
+  const strip = rig.engine.strips.get(base.tracks[0].id);
+  const louder = produce(base, (draft) => { draft.tracks[0].volume = 0.3; });
+  rig.engine.sync(louder, base);
+  assert.deepEqual(strip.output.gain.events.at(-1), { type: "target", value: 0.3, time: 1.03, constant: 0.01 });
+
+  rig.engine.sync(withEffect(louder, "delay", true), louder);
+  const slot = strip.slots.get("delay");
+  assert.deepEqual(slot.dry.gain.events, [{ type: "target", value: 0, time: 1.03, constant: 0.002 }], "교차도 안전한 시각에서 시작한다");
+});
+
+test("곡 끝에 이펙트 꼬리를 더한다: 딜레이가 길게 울리는 곡은 꼬리가 다 울린 뒤에 멈춘다", async () => {
+  const rig = await makeEngine();
+  const base = makeDoc([0]); // 마지막 클립 끝 1초 → 곡 길이는 8초(최소)
+  const doc = withEffect(base, "delay", true, (track) => { track.delay.delayTimeMs = 1000; track.delay.feedback = 0.5; });
+  near(rig.engine.getPlaybackEnd(base), 8, "이펙트가 없으면 곡 길이 그대로");
+  near(rig.engine.getPlaybackEnd(doc), 11, "마지막 클립 끝 1초 + 딜레이 꼬리 10초");
+  near(new BrowserAudioEngine().getPlaybackEnd(doc), 8, "옛 엔진은 곡 길이에서 멈춘다(바뀌지 않음)");
+
+  await rig.engine.play(doc, 0);
+  rig.advance(8.5);
+  assert.equal(rig.engine.isPlaying(), true, "곡 길이를 지나도 꼬리가 남았다");
+  rig.advance(2.4);
+  assert.equal(rig.engine.isPlaying(), true);
+  assert.equal(rig.ended.length, 0);
+  rig.advance(0.2);
+  assert.equal(rig.ended.length, 1);
+  assert.equal(rig.engine.isPlaying(), false);
+  near(rig.engine.getCurrentPlayhead(), 11);
+});
+
+test("꼬리가 아무리 길어도 곡 끝은 마지막 클립 끝 + 30초까지다", async () => {
+  const rig = await makeEngine();
+  const doc = withEffect(makeDoc([0]), "delay", true, (track) => { track.delay.delayTimeMs = 2000; track.delay.feedback = 0.95; });
+  near(rig.engine.getPlaybackEnd(doc), 31);
+});
+
 test("템포가 바뀌면 템포에 맞춰 늘이는(WARP) 클립의 소리만 바뀐다", async () => {
   const rig = await makeEngine();
   const base = makeDoc([0, 1], { durations: [1, 2.4] });
@@ -276,34 +374,36 @@ test("트랙을 지우면 그 트랙의 소리와 경로만 사라진다", async
   rig.engine.sync(next, doc);
   assert.equal(Source.starts[0].stopped, undefined);
   assert.equal(Source.starts[1].stopped, true);
-  assert.ok(rig.engine.trackGraphs.has(keep));
-  assert.equal(rig.engine.trackGraphs.has(removed), false);
+  assert.ok(rig.engine.strips.has(keep));
+  assert.equal(rig.engine.strips.has(removed), false);
   assert.equal(rig.engine.trackAnalysers.has(removed), false);
   assert.equal(rig.retired.length, 1);
 });
 
-test("이펙트 연결 모양(EQ 켜기·끄기)이 바뀌면 그 트랙만 새 소리 경로로 옮기고, 옛 경로는 나중에 끊는다", async () => {
+test("이펙트(EQ) 켜기·끄기는 소리 경로도 소리 소스도 건드리지 않는다: 같은 스트립, 소스 시작·정지 0, 끊기 0", async () => {
   const rig = await makeEngine();
   const doc = makeMultiDoc([[0, 1], [0.5]]);
   await rig.engine.play(doc, 0);
   assert.equal(Source.starts.length, 3);
   const [first, second] = doc.tracks.map((track) => track.id);
-  const oldGraph = rig.engine.trackGraphs.get(first);
-  const otherGraph = rig.engine.trackGraphs.get(second);
+  const strip = rig.engine.strips.get(first);
+  const other = rig.engine.strips.get(second);
 
-  const next = produce(doc, (draft) => { draft.tracks[0].eq.enabled = false; });
-  rig.engine.sync(next, doc);
-  assert.notEqual(rig.engine.trackGraphs.get(first), oldGraph);
-  assert.equal(rig.engine.trackGraphs.get(second), otherGraph, "다른 트랙은 그대로");
-  assert.equal(rig.retired.length, 1);
-  assert.equal(Source.starts.length, 5, "바뀐 트랙의 클립 2개만 새 경로로 다시 만든다");
-  assert.deepEqual(Source.starts.map((source) => source.stopped), [true, true, undefined, undefined, undefined]);
+  const off = produce(doc, (draft) => { draft.tracks[0].eq.enabled = false; });
+  rig.engine.sync(off, doc);
+  const on = produce(off, (draft) => { draft.tracks[0].eq.enabled = true; });
+  rig.engine.sync(on, off);
+  assert.equal(rig.engine.strips.get(first), strip, "같은 스트립");
+  assert.equal(rig.engine.strips.get(second), other, "다른 트랙도 그대로");
+  assert.equal(rig.retired.length, 0, "끊을 것이 없다");
+  assert.equal(Source.starts.length, 3, "소스를 새로 시작하지 않는다");
+  assert.ok(Source.starts.every((source) => source.stopped === undefined), "멈춘 소스도 없다");
 });
 
 test("재생 전에 들어온 sync는 문서만 기억하고 소리 경로·소스는 만들지 않는다", async () => {
   const rig = await makeEngine();
   rig.engine.sync(makeDoc([0, 1]));
-  assert.equal(rig.engine.trackGraphs.size, 0);
+  assert.equal(rig.engine.strips.size, 0);
   assert.equal(Source.starts.length, 0);
   assert.equal(rig.timer.running, false);
 });

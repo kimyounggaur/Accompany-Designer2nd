@@ -51,8 +51,9 @@ export function getClipTimelineDuration(projectBpm: number, clip: Clip) {
   return clip.duration / getClipPlaybackRate(projectBpm, clip);
 }
 
-export function getProjectDuration(project: Pick<DawProject, "bpm" | "tracks">) {
-  const lastClipEnd = project.tracks.reduce((maxEnd, track) => {
+/** 마지막 클립이 끝나는 타임라인 위치(초). 클립이 없으면 0. */
+export function getLastClipEnd(project: Pick<DawProject, "bpm" | "tracks">) {
+  return project.tracks.reduce((maxEnd, track) => {
     const trackEnd = track.clips.reduce((clipMax, clip) => {
       const end = clip.startTime + getClipTimelineDuration(project.bpm, clip);
       return Math.max(clipMax, end);
@@ -60,8 +61,10 @@ export function getProjectDuration(project: Pick<DawProject, "bpm" | "tracks">) 
 
     return Math.max(maxEnd, trackEnd);
   }, 0);
+}
 
-  return Math.max(8, lastClipEnd + getBeatSeconds(project.bpm) * 8);
+export function getProjectDuration(project: Pick<DawProject, "bpm" | "tracks">) {
+  return Math.max(8, getLastClipEnd(project) + getBeatSeconds(project.bpm) * 8);
 }
 
 export function findClip(

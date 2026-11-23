@@ -1,6 +1,7 @@
-import type { ReverbMode, ReverbSettings } from "../types";
+import type { ReverbSettings } from "../types";
 import { clamp } from "../utils/audioMath";
 import { normalizeReverbSettings } from "../utils/reverb";
+import { createImpulseBuffer, impulseKey } from "./effects/impulse";
 
 interface ReverbInsert {
   input: GainNode;
@@ -71,7 +72,7 @@ export function createReverbInsert(
   width.output.connect(wet);
   wet.connect(output);
 
-  let impulseKey = JSON.stringify([reverb.mode, reverb.decay, reverb.modEnabled, reverb.modAmount]);
+  let activeImpulseKey = impulseKey(reverb);
   let driveAmount = reverb.drive;
   return { input, output, update: (next) => {
     const value = normalizeReverbSettings(next), now = context.currentTime;
@@ -81,8 +82,8 @@ export function createReverbInsert(
     set(lowEq.gain, value.postEqLowGain); set(midEq.gain, value.postEqMidGain); set(highEq.gain, value.postEqHighGain);
     width.update(value.width);
     if (driveAmount !== value.drive) { drive.curve = createDriveCurve(value.drive); driveAmount = value.drive; }
-    const key = JSON.stringify([value.mode, value.decay, value.modEnabled, value.modAmount]);
-    if (key !== impulseKey) { convolver.buffer = createImpulseResponse(context, value); impulseKey = key; }
+    const key = impulseKey(value);
+    if (key !== activeImpulseKey) { convolver.buffer = createImpulseResponse(context, value); activeImpulseKey = key; }
   } };
 }
 
@@ -90,56 +91,8 @@ function createImpulseResponse(
   context: BaseAudioContext,
   settings: ReverbSettings,
 ) {
-  const sampleRate = context.sampleRate;
-  const length = Math.max(1, Math.floor(sampleRate * settings.decay));
-  const impulse = context.createBuffer(2, length, sampleRate);
-  const decayCurve = getDecayCurve(settings.mode);
-  const color = getModeColor(settings.mode);
-  const modDepth = settings.modEnabled ? settings.modAmount * 0.28 : 0;
-
-  for (let channel = 0; channel < 2; channel += 1) {
-    const data = impulse.getChannelData(channel);
-    let last = 0;
-
-    for (let sample = 0; sample < length; sample += 1) {
-      const progress = sample / length;
-      const envelope = Math.pow(1 - progress, decayCurve);
-      const noise = Math.random() * 2 - 1;
-      const filtered = noise * color + last * (1 - color);
-      const phase = channel === 0 ? 0 : Math.PI * 0.43;
-      const modulation =
-        1 + Math.sin(progress * Math.PI * 18 + phase) * modDepth;
-
-      last = filtered;
-      data[sample] = filtered * envelope * modulation * 0.72;
-    }
-  }
-
-  return impulse;
-}
-
-function getDecayCurve(mode: ReverbMode) {
-  if (mode === "room") {
-    return 1.35;
-  }
-
-  if (mode === "hall") {
-    return 1.1;
-  }
-
-  return 2.2;
-}
-
-function getModeColor(mode: ReverbMode) {
-  if (mode === "room") {
-    return 0.74;
-  }
-
-  if (mode === "hall") {
-    return 0.56;
-  }
-
-  return 0.68;
+  // 잔향 계산은 새 엔진과 같은 코드(effects/impulse.ts)를 쓴다: 같은 설정이면 재생과 내보내기가 같은 잔향이다.
+  return createImpulseBuffer(context, settings);
 }
 
 function createDriveCurve(amount: number) {

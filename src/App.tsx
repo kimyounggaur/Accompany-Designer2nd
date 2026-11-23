@@ -69,14 +69,15 @@ export default function App() {
       const state = useDawStore.getState();
       const duration = getProjectDuration(state);
 
-      if (current >= duration && state.recording.status !== "recording") {
+      // 이펙트 꼬리가 남은 동안에는 소리를 이어 가되, 화면의 재생 위치는 곡 끝에서 멈춘다.
+      if (current >= audioEngine.getPlaybackEnd(state) && state.recording.status !== "recording") {
         audioEngine.stop();
         setPlayhead(duration);
         setIsPlaying(false);
         return;
       }
 
-      setPlayhead(current);
+      setPlayhead(state.recording.status === "recording" ? current : Math.min(current, duration));
       animationRef.current = requestAnimationFrame(tick);
     };
 

@@ -4,8 +4,9 @@ import { planSync, type SyncDoc } from "./engine/syncPlan";
 import { clipSignature } from "./engine/clipSignature";
 import { scheduleClipGainEnvelope } from "./engine/clipEnvelope";
 import { createTrackGraph, disposeGraph, graphSignature, updateTrackGraph, type TrackGraph } from "./engine/trackGraph";
+import { getProjectDuration } from "../utils/audioMath";
 import { encodeWav } from "../utils/wavEncoder";
-import { getDelayTimeMs, normalizeDelaySettings } from "../utils/delay";
+import { projectTailSeconds } from "./effects/tail";
 import {
   createId,
   getClipPlaybackRate,
@@ -146,6 +147,11 @@ export class BrowserAudioEngine {
     return this.trackAnalysers.get(trackId);
   }
 
+  /** 재생이 끝나는 타임라인 위치(초). 옛 엔진은 곡 길이(마지막 클립 + 여백)에서 멈춘다. */
+  getPlaybackEnd(project: Pick<DawProject, "bpm" | "tracks">): number {
+    return getProjectDuration(project);
+  }
+
   async play(project: DawProject, playhead: number) {
     const context = await this.ensureContext();
     this.stop();
@@ -257,16 +263,9 @@ export class BrowserAudioEngine {
     const missing = clips.filter((clip) => !this.buffers.has(clip.audioBufferId));
     if (missing.length) throw new Error(`음원 ${missing.length}개를 찾을 수 없습니다. 음원을 다시 연결해 주세요.`);
     const end = Math.max(...clips.map((clip) => clip.startTime + getClipTimelineDuration(project.bpm, clip)));
-    const tail = project.tracks.reduce((max, track) => {
-      const reverbTail = track.reverb?.enabled ? track.reverb.decay + track.reverb.preDelayMs / 1000 : 0;
-      const delay = track.delay?.enabled ? normalizeDelaySettings(track.delay) : undefined;
-      const repeats = delay && delay.feedback > 0 ? Math.ceil(Math.log(0.001) / Math.log(delay.feedback)) : 1;
-      const delayTail = delay ? (getDelayTimeMs(delay, project.bpm) / 1000) * repeats : 0;
-      // Serial delay followed by reverb can extend the tail by both amounts.
-      return Math.max(max, reverbTail + delayTail);
-    }, 0);
+    const tail = projectTailSeconds(project);
     const sampleRate = Math.min(48000, Math.max(22050, project.sampleRate || 44100));
-    const duration = end + Math.min(30, tail);
+    const duration = end + tail;
     if (duration > 3600) throw new Error("1시간 이하의 프로젝트만 WAV로 내보낼 수 있습니다.");
     const context = new OfflineAudioContext(2, Math.max(1, Math.ceil(duration * sampleRate)), sampleRate);
     const master = context.createGain();

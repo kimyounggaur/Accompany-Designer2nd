@@ -1,10 +1,13 @@
 import type { DawProject } from "../../types";
-import { getProjectDuration } from "../../utils/audioMath";
+import { getLastClipEnd, getProjectDuration } from "../../utils/audioMath";
+import { projectTailSeconds } from "../effects/tail";
 import { BrowserAudioEngine } from "../audioEngine";
 import { Scheduler } from "./Scheduler";
 import { planSync, type SyncDoc } from "./syncPlan";
 import type { TickTimer } from "./tickTimer";
-import { createTrackGraph, disposeGraph, graphSignature, updateTrackGraph, type TrackGraph } from "./trackGraph";
+import type { EffectTimers } from "../effects/EffectNode";
+import type { EffectEnv } from "../effects/registry";
+import { TrackStrip } from "./TrackStrip";
 import { TransportClock } from "./Transport";
 
 /** 소리 경로를 끊기 전에 기다리는 시간(ms): 내려가는 중인 소리와 이펙트 꼬리가 이 안에 끝난다. */
@@ -17,6 +20,10 @@ export interface AudioEngineV2Options {
   retire?: (action: () => void) => void;
   /** 시험에서 "지금"에서 띄울 간격을 정해 둘 때(기본은 baseLatency에서 계산) */
   lead?: () => number;
+  /** 시험에서 이펙트의 기다림(교차·연결 끊기·리버브 잔향 만들기)을 손으로 돌릴 때 */
+  effectTimers?: EffectTimers;
+  /** 시험에서 리버브 잔향 만들기를 바꿔 끼울 때 */
+  makeImpulse?: EffectEnv["makeImpulse"];
 }
 
 /**
@@ -42,6 +49,10 @@ export class AudioEngineV2 extends BrowserAudioEngine {
   readonly transport: TransportClock;
   private readonly scheduler: Scheduler;
   private readonly retire: (action: () => void) => void;
+  private readonly effectTimers?: EffectTimers;
+  private readonly makeImpulse?: EffectEnv["makeImpulse"];
+  /** 트랙마다 하나씩. 이펙트를 켜고 꺼도 새로 만들지 않는다(그래서 소리 소스가 그대로 흐른다). */
+  readonly strips = new Map<string, TrackStrip>();
   /** 소리 경로가 마지막으로 맞춰진 문서. 다음 sync는 이것과 비교한다. */
   private doc?: SyncDoc;
   /** 재생을 시작하는 동안(await 사이) 들어온 문서 */
@@ -51,6 +62,8 @@ export class AudioEngineV2 extends BrowserAudioEngine {
   constructor(options: AudioEngineV2Options = {}) {
     super();
     this.retire = options.retire ?? ((action) => void setTimeout(action, RETIRE_MS));
+    this.effectTimers = options.effectTimers;
+    this.makeImpulse = options.makeImpulse;
     this.transport = new TransportClock({
       now: () => this.context?.currentTime ?? 0,
       lead: options.lead ?? (() => scheduleLead(this.context?.baseLatency)),
@@ -61,7 +74,7 @@ export class AudioEngineV2 extends BrowserAudioEngine {
       ensureRunning: async () => {
         await this.ensureContext();
       },
-      end: () => (this.doc ? getProjectDuration(this.doc) : 0),
+      end: () => (this.doc ? this.getPlaybackEnd(this.doc) : 0),
       holdOpen: () => this.holdOpenCheck(),
     });
     this.scheduler = new Scheduler({
@@ -69,12 +82,12 @@ export class AudioEngineV2 extends BrowserAudioEngine {
       context: () => this.context,
       doc: () => this.doc,
       buffer: (assetId) => this.buffers.get(assetId),
-      output: (trackId) => this.trackGraphs.get(trackId)?.input,
+      output: (trackId) => this.strips.get(trackId)?.input,
       createTimer: options.createTimer,
     });
     this.transport.connect(this.scheduler);
     this.transport.on("state", () => {
-      if (this.transport.state !== "playing") this.retireAllGraphs();
+      if (this.transport.state !== "playing") this.retireAllStrips();
     });
   }
 
@@ -93,7 +106,7 @@ export class AudioEngineV2 extends BrowserAudioEngine {
       await this.transport.play(playhead);
       return;
     }
-    this.retireAllGraphs();
+    this.retireAllStrips();
     this.doc = undefined;
     this.applyDoc(this.takePendingDoc() ?? project);
     await this.transport.play(playhead);
@@ -115,6 +128,14 @@ export class AudioEngineV2 extends BrowserAudioEngine {
     this.transport.seek(position);
   }
 
+  /**
+   * 재생이 끝나는 위치: 곡 길이(마지막 클립 + 여백)와 "마지막 클립 끝 + 이펙트 꼬리" 중 늦은 쪽.
+   * 딜레이·리버브가 켜진 트랙은 마지막 클립이 끝난 뒤에도 소리가 남으므로 그 꼬리가 다 울릴 때까지 기다린다.
+   */
+  override getPlaybackEnd(project: SyncDoc): number {
+    return Math.max(getProjectDuration(project), getLastClipEnd(project) + projectTailSeconds(project));
+  }
+
   override getCurrentPlayhead(): number {
     return this.transport.position();
   }
@@ -133,6 +154,11 @@ export class AudioEngineV2 extends BrowserAudioEngine {
       return;
     }
     this.applyDoc(project);
+  }
+
+  /** 트랙의 컴프레서가 지금 걸고 있는 압축량(dB, 0 이하). 재생 중이 아니거나 컴프레서가 꺼져 있으면 0. */
+  getCompressorReduction(trackId: string): number {
+    return this.strips.get(trackId)?.compressorReduction() ?? 0;
   }
 
   dispose(): void {
@@ -159,31 +185,30 @@ export class AudioEngineV2 extends BrowserAudioEngine {
 
     for (const id of plan.removedTrackIds) {
       this.scheduler.releaseTrack(id);
-      this.retireGraph(this.trackGraphs.get(id));
-      this.trackGraphs.delete(id);
+      this.retireStrip(this.strips.get(id));
+      this.strips.delete(id);
       this.trackAnalysers.delete(id);
     }
 
+    // 값이 바뀌는 시각은 "지금"이 아니라 안전한 시각: 지금에 걸면 소리 스레드에는 이미 지난 일이 된다.
+    const time = this.transport.safeTime();
     const touched = new Set<string>();
     for (const step of plan.steps) {
       const { track } = step;
-      let graph = this.trackGraphs.get(track.id);
-      let rebuilt = false;
-      // 이펙트 켜기/끄기·순서 같은 연결 모양이 바뀌었을 때만 이 트랙의 소리 경로를 새로 만든다(P3-3에서 이 일이 없어진다).
-      if (!graph || (step.trackChanged && graph.signature !== graphSignature(track, project.bpm))) {
-        const previous = graph;
-        graph = createTrackGraph(context, master, track, project.bpm);
-        this.trackGraphs.set(track.id, graph);
-        this.trackAnalysers.set(track.id, graph.analyser);
-        if (previous) {
-          // 옛 경로에 붙은 소리는 내려가는 동안 그 경로를 지나가야 하므로, 경로는 조금 있다가 끊는다.
-          this.scheduler.releaseTrack(track.id);
-          this.retireGraph(previous);
-        }
-        rebuilt = true;
+      let strip = this.strips.get(track.id);
+      if (!strip) {
+        strip = new TrackStrip(context, master, track, project.bpm, {
+          solo: plan.solo,
+          timers: this.effectTimers,
+          makeImpulse: this.makeImpulse,
+        });
+        this.strips.set(track.id, strip);
+        this.trackAnalysers.set(track.id, strip.analyser);
+      } else if (step.updateParams) {
+        // 이펙트 켜기/끄기·순서·값 모두 이 안에서 처리한다. 길을 새로 만들지 않으므로 소리 소스는 건드리지 않는다.
+        strip.update(track, plan.solo, project.bpm, time);
       }
-      if (step.updateParams || rebuilt) updateTrackGraph(graph, track, plan.solo, context.currentTime, project.bpm);
-      if (step.reconcileClips || rebuilt) touched.add(track.id);
+      if (step.reconcileClips) touched.add(track.id);
     }
 
     this.doc = project;
@@ -191,21 +216,21 @@ export class AudioEngineV2 extends BrowserAudioEngine {
     this.scheduler.tick();
   }
 
-  private retireGraph(graph: TrackGraph | undefined): void {
-    if (!graph) return;
-    this.retire(() => disposeGraph(graph));
+  private retireStrip(strip: TrackStrip | undefined): void {
+    if (!strip) return;
+    // 내려가는 중인 소리는 이 경로를 지나가야 하므로, 경로는 조금 있다가 끊는다.
+    this.retire(() => strip.dispose());
   }
 
   /** 멈출 때: 트랙 소리를 10ms 안에 0으로 내리고, 조금 뒤 소리 경로를 끊는다. */
-  private retireAllGraphs(): void {
+  private retireAllStrips(): void {
     const now = this.context?.currentTime ?? 0;
-    const graphs = [...this.trackGraphs.values()];
-    this.trackGraphs.clear();
+    const strips = [...this.strips.values()];
+    this.strips.clear();
     this.trackAnalysers.clear();
-    for (const graph of graphs) {
-      graph.output.gain.cancelScheduledValues(now);
-      graph.output.gain.setTargetAtTime(0, now, 0.004);
-      this.retireGraph(graph);
+    for (const strip of strips) {
+      strip.fadeOut(now);
+      this.retireStrip(strip);
     }
   }
 }
