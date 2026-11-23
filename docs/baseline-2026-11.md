@@ -80,7 +80,7 @@
   - 키보드 처리(`event.code` 기반): `App.tsx:187~324` → P5-2
   - 음원 재연결(이름·길이 기준): `App.tsx:685~692` → P4-2
   - 프로젝트 내보내기·믹스 WAV 내보내기·불러오기: `App.tsx:745`, `762`, `779~783` → P4-2, P3-6
-  - 녹음 흐름(`vocalRecorder` 시작·정지·취소): `App.tsx:488~660` 부근 → P3-5
+  - 녹음 흐름(`vocalRecorder` 시작·정지·취소): `App.tsx:488~660` 부근 → P3-5 ✅ (`audio/recording/*`, `audio/Metronome.ts`, `app/recording.ts`, `app/recordingHost.ts`, `state/recordingStore.ts`로 이동)
 
 ## 선택자 규칙
 

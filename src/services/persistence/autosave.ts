@@ -261,9 +261,12 @@ export interface AutosaveHost {
   getProject: () => DawProject;
   /** 음원 id에 해당하는 원본 데이터(없으면 undefined) */
   recallAudio: (assetId: string) => Blob | undefined;
-  /** 상태가 바뀔 때마다 (새 상태, 이전 상태)로 불린다. 해제 함수를 돌려준다. */
+  /** 문서가 담긴 상태가 바뀔 때마다 (새 상태, 이전 상태)로 불린다. 해제 함수를 돌려준다. */
   subscribe: (listener: (state: AutosaveSlice, previous: AutosaveSlice) => void) => () => void;
+  /** 녹음 흐름이 진행 중인가(준비·카운트인·녹음·저장). 이 동안은 저장하지 않고, 창을 닫으려 하면 경고한다. */
   isRecording: () => boolean;
+  /** 녹음 흐름이 끝나 쉬는 상태가 될 때마다 불린다. 해제 함수를 돌려준다. */
+  onRecordingIdle: (listener: () => void) => () => void;
   /** 저장 실패 안내의 [프로젝트 파일로 저장] 단추가 부르는 동작 */
   exportToFile: () => void;
 }
@@ -301,7 +304,12 @@ export function startAutosave(host: AutosaveHost): AutosaveHandle {
       notifyError(error, { kind: "autosave", title: ko.failed.autosave }, { action: { label: ko.action.saveProjectFile, run: host.exportToFile } }),
   });
 
-  const unsubscribe = host.subscribe(createChangeWatcher(() => scheduler.changed()));
+  const watcher = createChangeWatcher(() => scheduler.changed(), host.isRecording);
+  const unsubscribeDoc = host.subscribe(watcher);
+  const unsubscribeIdle = host.onRecordingIdle(() => {
+    watcher.idle(); // 녹음 중에 문서가 바뀌었다면(녹음 추가) 저장을 예약한다.
+    if (scheduler.hasUnsaved()) scheduler.changed(); // 녹음 때문에 건너뛴 저장이 남아 있으면 다시 예약한다.
+  });
 
   // 탭이 가려지거나(화면 전환·창 닫기 직전) 페이지가 사라질 때 기다리지 않고 바로 저장을 시작한다. 마감 전에 끝난다는 보장은 없다(최선).
   const onVisibility = () => {
@@ -327,7 +335,8 @@ export function startAutosave(host: AutosaveHost): AutosaveHandle {
     hasUnsaved: () => scheduler.hasUnsaved(),
     dispose: () => {
       scheduler.dispose();
-      unsubscribe();
+      unsubscribeDoc();
+      unsubscribeIdle();
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("beforeunload", onBeforeUnload);

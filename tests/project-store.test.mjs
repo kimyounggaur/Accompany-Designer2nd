@@ -13,6 +13,7 @@ const { planSync } = await import("../src/audio/engine/syncPlan.ts");
 const { audioEngine } = await import("../src/audio/audioEngine.ts");
 const { connectEngineSync } = await import("../src/app/engineSync.ts");
 const { useDawStore } = await import("../src/store/useDawStore.ts");
+const { useRecordingStore } = await import("../src/state/recordingStore.ts");
 const { useNoticeStore } = await import("../src/state/noticeStore.ts");
 
 /** 트랙 20개 × 클립 50개 문서(보고서가 말한 "큰 프로젝트") */
@@ -412,19 +413,22 @@ test("트랙 삭제는 선택·녹음 대기를 정리하고, 마지막 트랙�
   assert.equal(store().deleteTrack(store().tracks[0].id).reason, "last-track");
   store().addTrack();
   const [a, b] = store().tracks.map((track) => track.id);
-  store().toggleRecordingArm(b);
+  const recording = useRecordingStore.getState;
+  assert.equal(recording().toggleArm(b).ok, true);
+  assert.equal(recording().armedTrackId, b);
   store().selectTrack(b);
 
-  store().setRecordingState({ status: "recording" });
+  recording().setProgress({ status: "recording" });
   assert.equal(store().deleteTrack(b).reason, "recording");
-  store().setRecordingState({ status: "armed" });
+  assert.equal(recording().armedTrackId, b, "거절되면 녹음 대기는 그대로");
+  recording().resetProgress();
 
   const result = store().deleteTrack(b);
   assert.equal(result.ok, true);
   assert.equal(store().tracks.length, 1);
   assert.equal(store().selectedTrackId, a);
-  assert.equal(store().recording.armedTrackId, undefined);
-  assert.equal(store().recording.status, "idle");
+  assert.equal(recording().armedTrackId, undefined);
+  assert.equal(recording().status, "idle");
   assert.equal(store().deleteTrack("없는-트랙").reason, "last-track");
 });
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useDawStore } from "../store/useDawStore";
+import { useRecordingStore } from "../state/recordingStore";
 
 // 로그 스케일 주파수 밴드
 const FREQ_BANDS = [
@@ -31,7 +32,7 @@ export function SpectrumAnalyzer({ analyser }: Props) {
   const rafRef = useRef<number>(0);
   const barsRef = useRef<number[]>(new Array(FREQ_BANDS.length).fill(MIN_DB));
   const isPlaying = useDawStore((state) => state.isPlaying);
-  const isRecording = useDawStore((state) => state.recording.status === "recording");
+  const isRecording = useRecordingStore((state) => state.status === "recording");
   const active = isPlaying || isRecording;
   const [resp, setResp] = useState<Resp>(2);
 

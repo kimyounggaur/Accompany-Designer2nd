@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CountInCancelledError, isCountInCancelled, toUserMessage } from "../src/services/errors.ts";
+import { toUserMessage } from "../src/services/errors.ts";
 import { ko } from "../src/i18n/ko.ts";
 
 const decode = { kind: "decode", title: "a.mp3 디코딩 실패", fileName: "a.mp3" };
@@ -95,9 +95,4 @@ test("사용자에게 보이는 모든 오류 문구에는 영어 단어가 없�
     const english = text.replace(/\.json|mp3|wav|m4a/g, "").match(/[A-Za-z]{3,}/g);
     assert.equal(english, null, `영어 단어가 있음: ${text}`);
   }
-});
-
-test("카운트인 취소 신호는 별도 클래스로 구분한다", () => {
-  assert.equal(isCountInCancelled(new CountInCancelledError()), true);
-  assert.equal(isCountInCancelled(new Error("count-in cancelled")), false);
 });

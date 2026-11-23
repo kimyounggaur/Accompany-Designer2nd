@@ -1,4 +1,5 @@
 import { Circle, Pause, Play, Square } from "lucide-react";
+import { useRecordingStore } from "../../state/recordingStore";
 import { useDawStore } from "../../store/useDawStore";
 import { formatTime } from "../../utils/audioMath";
 
@@ -13,6 +14,7 @@ interface TransportControlsProps {
 export function TransportControls({ isRecording, onPlayPause, onStop, onRecordToggle }: TransportControlsProps) {
   const isPlaying = useDawStore((state) => state.isPlaying);
   const playhead = useDawStore((state) => state.playhead);
+  const preparing = useRecordingStore((state) => state.status === "preparing");
 
   return (
     <div className="transport-group">
@@ -33,7 +35,7 @@ export function TransportControls({ isRecording, onPlayPause, onStop, onRecordTo
         <Square size={17} />
       </button>
       <button
-        className={`icon-button record-button ${isRecording ? "recording" : ""}`}
+        className={`icon-button record-button ${isRecording && !preparing ? "recording" : ""} ${preparing ? "preparing" : ""}`}
         onClick={onRecordToggle}
         title={isRecording ? "녹음 정지" : "보컬 녹음"}
         data-testid="transport-record"

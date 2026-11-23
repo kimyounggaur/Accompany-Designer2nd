@@ -12,7 +12,7 @@
 - **여러 트랙 타임라인**: 클립 이동(트랙 사이 이동 포함), 양쪽 끝 자르기, 가르기, 복사·붙여넣기, 삭제(실행 취소로 복원). 트랙 추가·삭제·순서 변경.
 - **템포 맞추기**: 프로젝트 BPM, 박자 맞춤(스냅), 확대·축소, 원본 BPM 감지, 재생 속도 맞춤.
 - **믹싱**: 트랙 볼륨·팬·뮤트·솔로, 이펙트(5밴드 EQ, 컴프레서, 딜레이, 리버브), 레벨 미터와 스펙트럼.
-- **녹음**: 마이크 녹음, 카운트인, 입력 모니터링.
+- **녹음**: 마이크 녹음, 카운트인(0~8박)·메트로놈, 입력 모니터링. 장치 지연을 자동으로 맞추고, 어긋나면 "지연 보정(ms)"(−200~+200)으로 직접 맞춥니다. 녹음 중에는 임시 파형만 보이고, 끝나면 클립이 한 번에 생겨 실행 취소 한 번으로 지워집니다.
 - **실행 취소·다시 실행**과 **믹스 WAV 내보내기**.
 
 ## 저장 방식
@@ -50,14 +50,14 @@ npm run test:e2e     # 회귀 테스트 (Playwright, 처음에는 npx playwright
 ```text
 src/
   App.tsx, main.tsx   화면 조립과 진입점
-  app/                화면 틀(AppShell), 사용자 동작(actions), 앱 시작(bootstrap), 엔진 연결(engineSync)
+  app/                화면 틀(AppShell), 사용자 동작(actions), 앱 시작(bootstrap), 엔진 연결(engineSync), 녹음 연결(recording · recordingHost: 어느 트랙에 놓을지·저장·안내)
   ui/                 화면 부품: 안내·확인창·자동 저장 표시(feedback), 상단 바, 인스펙터
   components/         화면 부품(타임라인 등, 순차적으로 ui/로 이동 중)
   i18n/               화면 문구(ko.ts)
   services/           안내(notify)·오류 변환(errors)·확인창, 자동 저장(persistence/)
-  audio/              소리 엔진: 옛 엔진(audioEngine.ts) · 새 엔진(engine/AudioEngine.ts: 재생 시계 Transport · 예약기 Scheduler · 클립 재생 단위 ClipVoice · 트랙 경로 TrackStrip · 마스터 길 MasterBus(볼륨 → 선읽기 리미터 → 분석기 → 스피커) · 모니터 길 MonitorBus(메트로놈·입력 모니터, 믹스에 안 섞임)) · 리미터(worklets/limiter.worklet.ts, 계산은 limiterCore.ts) · 이펙트 부품(effects/: 공통 약속 EffectNode · EQ · 컴프레서 · 딜레이 · 리버브 · 같은 설정은 같은 잔향 impulse · 꼬리 길이 tail) · 엔진 고르기(currentEngine.ts) · 바뀐 트랙만 고르는 계획(engine/syncPlan.ts) · 예약 타이머(workers/tick.worker.ts) · 녹음
-  domain/             화면·소리 없이 시험할 수 있는 순수 계산(timeline/clipMath.ts: 클립을 어떻게 재생할지 정하는 planVoice · master/volume.ts: 마스터 볼륨 범위·dB 변환)
-  store/, state/      상태: 프로젝트 문서(state/projectStore.ts, immer로 불변 갱신) · 편집 함수(state/commands/) · 이력(state/history.ts) / 화면 상태(store/useDawStore.ts, 문서를 거울처럼 비춤) / 안내·확인창·자동 저장 상태
+  audio/              소리 엔진: 옛 엔진(audioEngine.ts) · 새 엔진(engine/AudioEngine.ts: 재생 시계 Transport · 예약기 Scheduler · 클립 재생 단위 ClipVoice · 트랙 경로 TrackStrip · 마스터 길 MasterBus(볼륨 → 선읽기 리미터 → 분석기 → 스피커) · 모니터 길 MonitorBus(메트로놈·입력 모니터, 믹스에 안 섞임)) · 리미터(worklets/limiter.worklet.ts, 계산은 limiterCore.ts) · 이펙트 부품(effects/: 공통 약속 EffectNode · EQ · 컴프레서 · 딜레이 · 리버브 · 같은 설정은 같은 잔향 impulse · 꼬리 길이 tail) · 엔진 고르기(currentEngine.ts) · 바뀐 트랙만 고르는 계획(engine/syncPlan.ts) · 예약 타이머(workers/tick.worker.ts) · 녹음(recording/RecordingController.ts: 대기 → 준비 → 카운트인 → 녹음 → 마무리 상태 기계 · recording/Recorder.ts: 마이크 받기 · worklets/recorder.worklet.ts: 4,096 샘플씩 조각과 파형 최대값을 보냄, 계산은 recorderCore.ts) · 메트로놈·카운트인(Metronome.ts: 오디오 시계로 미리 예약)
+  domain/             화면·소리 없이 시험할 수 있는 순수 계산(timeline/clipMath.ts: 클립을 어떻게 재생할지 정하는 planVoice · master/volume.ts: 마스터 볼륨 범위·dB 변환 · recording/latency.ts: 녹음 지연 보정)
+  store/, state/      상태: 프로젝트 문서(state/projectStore.ts, immer로 불변 갱신) · 편집 함수(state/commands/) · 이력(state/history.ts) / 화면 상태(store/useDawStore.ts, 문서를 거울처럼 비춤) / 녹음 상태(state/recordingStore.ts: 진행·임시 파형·설정, 문서에는 안 들어감) / 안내·확인창·자동 저장 상태
   storage/            프로젝트 파일 형식(읽기·쓰기·검증)
   styles/             화면 틀·안내·글자 가독성 CSS
   utils/              계산·인코딩 함수

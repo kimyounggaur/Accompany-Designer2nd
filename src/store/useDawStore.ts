@@ -6,7 +6,7 @@
  * 문서를 바꾸는 함수(addClip, updateTrack …)는 예전 이름과 모양을 그대로 두고 안에서 state/commands를 부른다.
  * 그래서 화면 부품은 한 번에 고치지 않아도 되고, 부품을 고칠 때마다 useProject로 옮긴다.
  *
- * 이 저장소에 남는 것: 선택, 재생 상태, 확대, 스냅, 도구, 화면 모드, 녹음 단계 (화면 상태).
+ * 이 저장소에 남는 것: 선택, 재생 상태, 확대, 스냅, 도구, 화면 모드 (화면 상태). 녹음 상태는 state/recordingStore가 가진다(P3-5).
  * 실행 취소 이력은 state/history가 가진다.
  */
 import { create } from "zustand";
@@ -17,7 +17,6 @@ import type {
   PlaylistSnap,
   PlaylistTool,
   ProjectDoc,
-  RecordingState,
   Track,
 } from "../types";
 import { clamp, createId, getClipTimelineDuration } from "../utils/audioMath";
@@ -25,24 +24,12 @@ import { fail, ok, type CommandResult } from "../state/commandResult";
 import * as commands from "../state/commands/index";
 import { history, type EditOptions } from "../state/history";
 import { getDoc, projectStore } from "../state/projectStore";
+import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
 import { getSnapDivision, resolveSnap } from "../state/snap";
 
 type HistoryOptions = {
   history?: boolean;
 };
-
-const DEFAULT_RECORDING_STATE: RecordingState = {
-  status: "idle",
-  startedAtProjectTime: 0,
-  elapsed: 0,
-  monitoringEnabled: false,
-  metronomeEnabled: false,
-  countInBeats: 0,
-  countInRemaining: 0,
-  waveformPeaks: [],
-};
-
-const RECORDING_BUSY = ["counting-in", "recording", "stopping"];
 
 interface DawStore extends DawProject {
   selectedTrackId?: string;
@@ -58,13 +45,12 @@ interface DawStore extends DawProject {
   globalSnap: Exclude<PlaylistSnap, "main">;
   performanceMode: boolean;
   playlistDetached: boolean;
-  recording: RecordingState;
   /** 지금 문서를 한 단계로 남긴다(끌기 시작처럼, 이어지는 편집이 history:false일 때) */
   captureHistory: () => void;
   beginHistoryGroup: () => void;
   endHistoryGroup: () => void;
-  undo: () => CommandResult<"empty">;
-  redo: () => CommandResult<"empty">;
+  undo: () => CommandResult<"empty" | "recording">;
+  redo: () => CommandResult<"empty" | "recording">;
   setBpm: (bpm: number) => void;
   setMasterVolumeDb: (volumeDb: number) => void;
   setProjectName: (name: string) => void;
@@ -75,13 +61,6 @@ interface DawStore extends DawProject {
   setPlaylistTool: (tool: PlaylistTool) => void;
   setPlaylistSnap: (snap: PlaylistSnap) => void;
   setGlobalSnap: (snap: Exclude<PlaylistSnap, "main">) => void;
-  setRecordingState: (patch: Partial<RecordingState>) => void;
-  resetRecordingState: () => void;
-  toggleRecordingArm: (trackId: string) => CommandResult<"recording", { armed: boolean }>;
-  setRecordingInputDevice: (inputDeviceId?: string) => void;
-  setRecordingMonitoring: (monitoringEnabled: boolean) => void;
-  setRecordingMetronome: (metronomeEnabled: boolean) => void;
-  setRecordingCountIn: (countInBeats: number) => void;
   addAudioAsset: (asset: AudioAsset, options?: HistoryOptions) => void;
   updateAudioAsset: (
     assetId: string,
@@ -180,7 +159,6 @@ function freshViewState() {
     globalSnap: "line" as const,
     performanceMode: false,
     playlistDetached: false,
-    recording: { ...DEFAULT_RECORDING_STATE, waveformPeaks: [] },
   };
 }
 
@@ -199,16 +177,18 @@ export const useDawStore = create<DawStore>((set, get) => ({
   globalSnap: "line",
   performanceMode: false,
   playlistDetached: false,
-  recording: DEFAULT_RECORDING_STATE,
   captureHistory: () => history.capture(),
   beginHistoryGroup: () => history.beginGesture("group"),
   endHistoryGroup: () => history.endGesture(),
   undo: () => {
+    // 녹음하는 동안에는 문서를 되돌리지 않는다(녹음할 트랙이 사라질 수 있다).
+    if (isRecordingBusy()) return fail("recording");
     if (!history.undo()) return fail("empty");
     set({ selectedTrackId: undefined, selectedClipId: undefined, selectedClipIds: [] });
     return ok();
   },
   redo: () => {
+    if (isRecordingBusy()) return fail("recording");
     if (!history.redo()) return fail("empty");
     set({ selectedTrackId: undefined, selectedClipId: undefined, selectedClipIds: [] });
     return ok();
@@ -251,76 +231,6 @@ export const useDawStore = create<DawStore>((set, get) => ({
         gridDivision: getSnapDivision(effectiveSnap),
       };
     }),
-  setRecordingState: (patch) =>
-    set((state) => ({
-      recording: {
-        ...state.recording,
-        ...patch,
-      },
-    })),
-  resetRecordingState: () =>
-    set((state) => ({
-      recording: {
-        ...DEFAULT_RECORDING_STATE,
-        armedTrackId: state.recording.armedTrackId,
-        inputDeviceId: state.recording.inputDeviceId,
-        monitoringEnabled: state.recording.monitoringEnabled,
-        metronomeEnabled: state.recording.metronomeEnabled,
-        countInBeats: state.recording.countInBeats,
-        status: state.recording.armedTrackId ? "armed" : "idle",
-        countInRemaining: 0,
-        waveformPeaks: [],
-      },
-    })),
-  toggleRecordingArm: (trackId) => {
-    const { recording } = get();
-    if (RECORDING_BUSY.includes(recording.status)) return fail("recording");
-
-    const armedTrackId = recording.armedTrackId === trackId ? undefined : trackId;
-    set({
-      recording: {
-        ...recording,
-        armedTrackId,
-        trackId: undefined,
-        clipId: undefined,
-        status: armedTrackId ? "armed" : "idle",
-        startedAtProjectTime: 0,
-        elapsed: 0,
-        countInRemaining: 0,
-        waveformPeaks: [],
-      },
-    });
-    return ok({ armed: Boolean(armedTrackId) });
-  },
-  setRecordingInputDevice: (inputDeviceId) =>
-    set((state) => ({
-      recording: {
-        ...state.recording,
-        inputDeviceId,
-      },
-    })),
-  setRecordingMonitoring: (monitoringEnabled) =>
-    set((state) => ({
-      recording: {
-        ...state.recording,
-        monitoringEnabled,
-      },
-    })),
-  setRecordingMetronome: (metronomeEnabled) =>
-    set((state) => ({
-      recording: {
-        ...state.recording,
-        metronomeEnabled,
-      },
-    })),
-  setRecordingCountIn: (countInBeats) =>
-    set((state) => ({
-      recording: {
-        ...state.recording,
-        countInBeats: clamp(Math.round(countInBeats), 0, 8),
-        countInRemaining: 0,
-      },
-    })),
   addAudioAsset: (asset, options) => {
     commands.addAudioAsset(asset, editOptions(options));
   },
@@ -502,7 +412,7 @@ export const useDawStore = create<DawStore>((set, get) => ({
   },
   deleteTrack: (trackId) => {
     const state = get();
-    if (RECORDING_BUSY.includes(state.recording.status)) return fail("recording");
+    if (isRecordingBusy()) return fail("recording");
     if (state.tracks.length <= 1) return fail("last-track");
     const track = state.tracks.find((item) => item.id === trackId);
     if (!track) return fail("not-found");
@@ -516,14 +426,12 @@ export const useDawStore = create<DawStore>((set, get) => ({
         ? selectedClipIds[selectedClipIds.length - 1]
         : state.selectedClipId,
       selectedClipIds,
-      recording: state.recording.armedTrackId === trackId
-        ? { ...state.recording, armedTrackId: undefined, status: "idle" }
-        : state.recording,
     });
+    useRecordingStore.getState().disarmTrack(trackId);
     return ok({ name: track.name });
   },
   reorderTrack: (trackId, direction) => {
-    if (RECORDING_BUSY.includes(get().recording.status)) return;
+    if (isRecordingBusy()) return;
     commands.reorderTrack(trackId, direction);
   },
   updateTrack: (trackId, patch) => {
@@ -531,10 +439,12 @@ export const useDawStore = create<DawStore>((set, get) => ({
   },
   importProject: (project) => {
     commands.replaceDoc(project);
+    useRecordingStore.getState().resetForNewProject();
     set({ ...freshViewState(), gridDivision: getSnapDivision("line") });
   },
   resetProject: () => {
     commands.resetDoc();
+    useRecordingStore.getState().resetForNewProject();
     set({ ...freshViewState(), zoomPxPerSecond: 96, gridDivision: 2 });
   },
 }));

@@ -128,7 +128,7 @@ export class AudioEngineV2 extends BrowserAudioEngine {
     this.holdOpenCheck = check;
   }
 
-  override async play(project: DawProject, playhead: number): Promise<void> {
+  override async play(project: DawProject, playhead: number, options: { atContextTime?: number } = {}): Promise<void> {
     // 이 호출 뒤에, 시작을 기다리는 사이 들어온 문서만 "나중 문서"로 본다(await 앞에서 비워야 그 문서를 놓치지 않는다).
     this.pendingDoc = undefined;
     await this.ensureContext();
@@ -141,7 +141,7 @@ export class AudioEngineV2 extends BrowserAudioEngine {
     this.retireAllStrips();
     this.doc = undefined;
     this.applyDoc(this.takePendingDoc() ?? project);
-    await this.transport.play(playhead);
+    await this.transport.play(playhead, options);
     // 시작을 기다리는 사이에 문서가 바뀌었다면 그 내용까지 맞춘다.
     const latest = this.takePendingDoc();
     if (latest && this.transportPlaying()) this.applyDoc(latest);
@@ -170,6 +170,14 @@ export class AudioEngineV2 extends BrowserAudioEngine {
 
   override getCurrentPlayhead(): number {
     return this.transport.position();
+  }
+
+  override positionAt(contextTime: number): number {
+    return this.transport.positionAt(contextTime);
+  }
+
+  override contextTimeAt(position: number): number {
+    return this.transport.contextTimeAt(position);
   }
 
   override isPlaying(): boolean {

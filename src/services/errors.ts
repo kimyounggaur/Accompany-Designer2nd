@@ -71,18 +71,6 @@ function describe(name: string, text: string): string | undefined {
   return label || text || undefined;
 }
 
-/** 카운트인(녹음 전 박자 세기)을 사용자가 멈췄을 때 던지는 신호. 오류로 안내하지 않는다. */
-export class CountInCancelledError extends Error {
-  constructor() {
-    super("count-in cancelled");
-    this.name = "CountInCancelledError";
-  }
-}
-
-export function isCountInCancelled(error: unknown): boolean {
-  return error instanceof CountInCancelledError;
-}
-
 export function toUserMessage(error: unknown, context: ErrorContext): UserMessage {
   const name = errorName(error);
   const text = errorText(error);

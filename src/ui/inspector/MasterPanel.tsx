@@ -8,6 +8,7 @@ import {
 } from "../../domain/master/volume";
 import { ko } from "../../i18n/ko";
 import { useProject } from "../../state/projectStore";
+import { useRecordingStore } from "../../state/recordingStore";
 import { useDawStore } from "../../store/useDawStore";
 import { PanelSection } from "./PanelSection";
 
@@ -39,7 +40,8 @@ function useLimiterReduction(active: boolean): number {
 export function MasterPanel() {
   const volumeDb = useProject((state) => state.doc.master?.volumeDb ?? MASTER_VOLUME_DEFAULT_DB);
   const setMasterVolumeDb = useDawStore((state) => state.setMasterVolumeDb);
-  const active = useDawStore((state) => state.isPlaying || state.recording.status === "recording");
+  const capturing = useRecordingStore((state) => state.status === "recording");
+  const active = useDawStore((state) => state.isPlaying) || capturing;
   const reduction = useLimiterReduction(active);
   const text = ko.master;
   const working = reduction <= -0.1;
