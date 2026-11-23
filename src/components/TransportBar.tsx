@@ -1,6 +1,7 @@
 import {
   Circle,
   FolderOpen,
+  Download,
   Headphones,
   Magnet,
   Music2,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDawStore } from "../store/useDawStore";
+import { CommittedNumberInput } from "./CommittedNumberInput";
 import { findClip, formatTime, getClipPlaybackRate } from "../utils/audioMath";
 
 interface TransportBarProps {
@@ -25,6 +27,7 @@ interface TransportBarProps {
   onPlayPause: () => void;
   onRecordToggle: () => void;
   onSaveProject: () => void;
+  onExportMix: () => void;
   onStop: () => void;
 }
 
@@ -36,6 +39,7 @@ export function TransportBar({
   onPlayPause,
   onRecordToggle,
   onSaveProject,
+  onExportMix,
   onStop,
 }: TransportBarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,6 +54,8 @@ export function TransportBar({
   const setSnapEnabled = useDawStore((state) => state.setSnapEnabled);
   const projectName = useDawStore((state) => state.name);
   const setProjectName = useDawStore((state) => state.setProjectName);
+  const beginHistoryGroup = useDawStore((state) => state.beginHistoryGroup);
+  const endHistoryGroup = useDawStore((state) => state.endHistoryGroup);
   const tracks = useDawStore((state) => state.tracks);
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const updateClip = useDawStore((state) => state.updateClip);
@@ -104,6 +110,8 @@ export function TransportBar({
         <input
           aria-label="프로젝트 이름"
           value={projectName}
+          onFocus={beginHistoryGroup}
+          onBlur={endHistoryGroup}
           onChange={(event) => setProjectName(event.target.value)}
         />
       </div>
@@ -161,22 +169,23 @@ export function TransportBar({
         <label className="count-in-control">
           <Timer size={14} />
           <select
+            aria-label="녹음 카운트인"
             disabled={isRecording}
             onChange={(event) => setRecordingCountIn(Number(event.target.value))}
             value={recording.countInBeats}
           >
-            <option value={0}>No count</option>
-            <option value={1}>1 beat</option>
-            <option value={2}>2 beats</option>
-            <option value={4}>1 bar</option>
-            <option value={8}>2 bars</option>
+            <option value={0}>카운트 없음</option>
+            <option value={1}>1박</option>
+            <option value={2}>2박</option>
+            <option value={4}>1마디</option>
+            <option value={8}>2마디</option>
           </select>
         </label>
       </div>
 
       <div className="transport-group input-device-group">
         <label className="input-select-control">
-          <span>INPUT</span>
+          <span>입력</span>
           <select
             disabled={isRecording}
             onChange={(event) =>
@@ -184,10 +193,10 @@ export function TransportBar({
             }
             value={recording.inputDeviceId ?? ""}
           >
-            <option value="">Default Mic</option>
+            <option value="">기본 마이크</option>
             {inputDevices.map((device, index) => (
               <option key={device.deviceId} value={device.deviceId}>
-                {device.label || `Input ${index + 1}`}
+                {device.label || `입력 ${index + 1}`}
               </option>
             ))}
           </select>
@@ -197,13 +206,7 @@ export function TransportBar({
       <div className="transport-group">
         <label className="number-control">
           <span>템포</span>
-          <input
-            max={300}
-            min={20}
-            onChange={(event) => setBpm(Number(event.target.value))}
-            type="number"
-            value={bpm}
-          />
+          <CommittedNumberInput label="템포" min={20} max={300} value={bpm} onCommit={setBpm} />
         </label>
         <button
           className={`icon-button ${snapEnabled ? "active" : ""}`}
@@ -279,6 +282,7 @@ export function TransportBar({
         >
           <FolderOpen size={17} />
         </button>
+        <button className="icon-button" onClick={onExportMix} title="완성 믹스 WAV 내보내기" aria-label="완성 믹스 WAV 내보내기" type="button"><Download size={17} /></button>
         <button
           className="icon-button"
           onClick={onSaveProject}
@@ -308,21 +312,10 @@ export function TransportBar({
 
         <label className="warp-field">
           <span className="warp-label">원본 BPM</span>
-          <input
-            className="warp-input"
-            disabled={!selectedClip}
-            max={300}
-            min={20}
-            onChange={(event) =>
-              selectedClip &&
-              updateClip(selectedClip.id, {
-                sourceBpm: Number(event.target.value) || bpm,
-              })
-            }
-            step={0.1}
-            type="number"
+          <CommittedNumberInput key={selectedClip?.id ?? "none"} className="warp-input" label="원본 BPM"
+            disabled={!selectedClip} min={20} max={300} step={0.1}
             value={selectedClip?.sourceBpm ?? bpm}
-          />
+            onCommit={(value) => selectedClip && updateClip(selectedClip.id, { sourceBpm: value })} />
         </label>
 
         <div className="warp-rate" title="현재 재생 배속">

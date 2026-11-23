@@ -5,8 +5,19 @@ import { Inspector } from "./components/Inspector";
 import { Timeline } from "./components/Timeline";
 import { TransportBar } from "./components/TransportBar";
 import type { AudioAsset, Clip, DawProject } from "./types";
-import { createId, findClip, getProjectDuration } from "./utils/audioMath";
+import { createId, getProjectDuration } from "./utils/audioMath";
 import { useDawStore } from "./store/useDawStore";
+import { exportProject, hasRememberedAudio, loadAutosave, parseProjectFile, rememberAudio, restoreAudio, saveAutosave } from "./storage/projectStorage";
+
+async function decodeStoredAudio(blob: Blob, asset: AudioAsset): Promise<{ asset: AudioAsset; commit: () => void }> {
+  // Decode without requiring an autoplay gesture during automatic recovery.
+  const context = new OfflineAudioContext(1, 1, 44100);
+  const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+  return {
+    asset: { ...asset, blobUrl: asset.sourceType === "recording" ? URL.createObjectURL(blob) : undefined },
+    commit: () => audioEngine.registerBuffer(asset.id, buffer),
+  };
+}
 
 function getProjectSnapshot(): DawProject {
   const state = useDawStore.getState();
@@ -55,6 +66,8 @@ export default function App() {
   const setRecordingState = useDawStore((state) => state.setRecordingState);
   const resetRecordingState = useDawStore((state) => state.resetRecordingState);
   const [status, setStatus] = useState("오디오 파일을 업로드하면 첫 트랙에 클립이 생성됩니다.");
+  const copiedClips = useRef<Clip[]>([]);
+  useEffect(() => { if (commandMessage) setStatus(commandMessage); }, [commandMessage]);
   const isRecording =
     recordingState.status === "counting-in" ||
     recordingState.status === "recording" ||
@@ -74,6 +87,57 @@ export default function App() {
     | undefined
   >(undefined);
 
+  useEffect(() => {
+    let cancelled = false;
+    let ready = false;
+    let timer: number | undefined;
+    let unsaved = false;
+    let pending: Promise<void> = Promise.resolve();
+    const initial = getProjectSnapshot();
+    const subscribe = useDawStore.subscribe((state, previous) => {
+      if (!ready || state.recording.status !== "idle") return;
+      if (previous.recording.status === "idle" && state.name === previous.name && state.bpm === previous.bpm && state.tracks === previous.tracks && state.audioAssets === previous.audioAssets && state.timeMarkers === previous.timeMarkers) return;
+      if (timer) window.clearTimeout(timer);
+      unsaved = true;
+      timer = window.setTimeout(() => {
+        timer = undefined;
+        const project = getProjectSnapshot();
+        pending = pending.catch(() => {}).then(() => saveAutosave(project)).then(() => {
+          if (!timer) unsaved = false;
+        }).catch(() => {
+          if (!cancelled) setStatus("자동 저장에 실패했습니다. 프로젝트 파일을 따로 저장해 주세요.");
+        });
+      }, 1200);
+    });
+    const recover = async () => {
+      try {
+        const data = await loadAutosave();
+        if (cancelled) return;
+        const now = getProjectSnapshot();
+        // Do not overwrite edits made while the saved session was loading.
+        if (data && now.tracks === initial.tracks && now.name === initial.name && now.bpm === initial.bpm && Object.keys(now.audioAssets).length === 0) {
+          const restored = await restoreAudio(data, decodeStoredAudio);
+          if (cancelled) return;
+          const current = getProjectSnapshot();
+          if (current.tracks === initial.tracks && current.name === initial.name && current.bpm === initial.bpm && Object.keys(current.audioAssets).length === 0) {
+            audioEngine.clearBuffers();
+            restored.commit();
+            importProject(restored.project);
+            setStatus(restored.missing ? `자동 저장된 프로젝트를 복구했습니다. 음원 ${restored.missing}개를 다시 연결해 주세요.` : "자동 저장된 프로젝트와 음원을 복구했습니다.");
+          }
+        }
+      } catch {
+        if (!cancelled) setStatus("자동 저장된 작업을 복구하지 못했습니다. 프로젝트 파일을 확인해 주세요.");
+      } finally { ready = true; }
+    };
+    void recover();
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (unsaved || useDawStore.getState().recording.status !== "idle") { event.preventDefault(); event.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => { cancelled = true; subscribe(); window.removeEventListener("beforeunload", beforeUnload); if (timer) window.clearTimeout(timer); };
+  }, [importProject]);
+
   const schedulingSignature = useMemo(
     () =>
       JSON.stringify({
@@ -88,13 +152,12 @@ export default function App() {
       return;
     }
 
-    const state = useDawStore.getState();
-    const duration = getProjectDuration(state);
-
     const tick = () => {
       const current = audioEngine.getCurrentPlayhead();
+      const state = useDawStore.getState();
+      const duration = getProjectDuration(state);
 
-      if (current >= duration) {
+      if (current >= duration && state.recording.status !== "recording") {
         audioEngine.stop();
         setPlayhead(duration);
         setIsPlaying(false);
@@ -118,20 +181,16 @@ export default function App() {
       return;
     }
 
-    const restart = async () => {
-      const playhead = audioEngine.getCurrentPlayhead();
-      await audioEngine.play(getProjectSnapshot(), playhead);
-    };
-
-    void restart();
+    audioEngine.sync(getProjectSnapshot());
   }, [isPlaying, schedulingSignature]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const isTyping =
-        target?.tagName === "INPUT" ||
+        (target?.tagName === "INPUT" && (target as HTMLInputElement).type !== "range") ||
         target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
         target?.isContentEditable;
 
       if (isTyping) {
@@ -139,7 +198,7 @@ export default function App() {
       }
 
       const hasCommandModifier = event.ctrlKey || event.metaKey;
-      const shortcutKey = event.key.toLowerCase();
+      const shortcutKey = event.code.startsWith("Key") ? event.code.slice(3).toLowerCase() : event.key.toLowerCase();
 
       if (hasCommandModifier && shortcutKey === "z") {
         event.preventDefault();
@@ -157,6 +216,31 @@ export default function App() {
         return;
       }
 
+      if (hasCommandModifier && shortcutKey === "s") {
+        event.preventDefault();
+        void handleSaveProject();
+        return;
+      }
+      if (hasCommandModifier && shortcutKey === "c") {
+        event.preventDefault();
+        const state = useDawStore.getState();
+        copiedClips.current = state.tracks.flatMap(track => track.clips.filter(clip => state.selectedClipIds.includes(clip.id))).map(clip => ({ ...clip }));
+        setStatus(`클립 ${copiedClips.current.length}개 복사됨`);
+        return;
+      }
+      if (hasCommandModifier && shortcutKey === "v") {
+        event.preventDefault();
+        const state = useDawStore.getState();
+        const first = Math.min(...copiedClips.current.map(clip => clip.startTime));
+        for (const clip of copiedClips.current) {
+          if (state.tracks.some(track => track.id === clip.trackId))
+            state.addClip(clip.trackId, { ...clip, id: createId("clip"), startTime: state.playhead + clip.startTime - first });
+        }
+        if (copiedClips.current.length) setStatus(`클립 ${copiedClips.current.length}개 붙여넣기 완료`);
+        return;
+      }
+      if (hasCommandModifier || event.altKey && shortcutKey !== "q") return;
+
       if (event.altKey && event.key.toLowerCase() === "q") {
         event.preventDefault();
         quantizeSelectedClips();
@@ -169,19 +253,19 @@ export default function App() {
         return;
       }
 
-      if (event.shiftKey && ["1", "2", "3"].includes(event.key)) {
+      if (event.shiftKey && ["Digit1", "Digit2", "Digit3"].includes(event.code)) {
         event.preventDefault();
-        setZoom(event.key === "1" ? 72 : event.key === "2" ? 132 : 220);
+        setZoom(event.code === "Digit1" ? 72 : event.code === "Digit2" ? 132 : 220);
         return;
       }
 
-      if (event.shiftKey && event.key === "4") {
+      if (event.shiftKey && event.code === "Digit4") {
         event.preventDefault();
         setZoom(72);
         return;
       }
 
-      if (event.shiftKey && event.key === "5") {
+      if (event.shiftKey && event.code === "Digit5") {
         event.preventDefault();
         zoomToSelectedClips();
         return;
@@ -290,10 +374,10 @@ export default function App() {
     }
   }
 
-  function playMetronomeClick(context: AudioContext, strong = false) {
+  function playMetronomeClick(context: AudioContext, strong = false, at = context.currentTime) {
     const oscillator = context.createOscillator();
     const gain = context.createGain();
-    const now = context.currentTime;
+    const now = at;
 
     oscillator.type = "square";
     oscillator.frequency.setValueAtTime(strong ? 1320 : 880, now);
@@ -311,13 +395,16 @@ export default function App() {
       return;
     }
 
-    const beatMs = Math.max(80, (60 / state.bpm) * 1000);
+    const beatSeconds = 60 / state.bpm;
     let beatIndex = 0;
-    playMetronomeClick(context, true);
+    let nextBeat = context.currentTime;
     metronomeTimerRef.current = window.setInterval(() => {
-      beatIndex += 1;
-      playMetronomeClick(context, beatIndex % 4 === 0);
-    }, beatMs);
+      while (nextBeat < context.currentTime + 0.1) {
+        playMetronomeClick(context, beatIndex % 4 === 0, nextBeat);
+        nextBeat += beatSeconds;
+        beatIndex += 1;
+      }
+    }, 25);
   }
 
   async function runCountIn(context: AudioContext) {
@@ -341,8 +428,8 @@ export default function App() {
         status: "counting-in",
         countInRemaining: beat,
       });
-      setStatus(`Recording starts in ${beat}...`);
-      useDawStore.getState().setCommandMessage(`Recording starts in ${beat}...`);
+      setStatus(`${beat}박 후 녹음 시작`);
+      useDawStore.getState().setCommandMessage(`${beat}박 후 녹음 시작`);
       playMetronomeClick(context, beat === totalBeats);
       await new Promise<void>((resolve) => {
         countInResolveRef.current = resolve;
@@ -370,11 +457,20 @@ export default function App() {
       return;
     }
 
-    await audioEngine.play(getProjectSnapshot(), state.playhead);
+    const duration = getProjectDuration(state);
+    const startAt = state.playhead >= duration ? 0 : state.playhead;
+    state.setPlayhead(startAt);
+    await audioEngine.play(getProjectSnapshot(), startAt);
     state.setIsPlaying(true);
   }
 
   function handleStop() {
+    if (useDawStore.getState().recording.status === "counting-in") {
+      clearRecordingTimers();
+      resetRecordingState();
+    } else if (recordingRef.current) {
+      void stopRecording();
+    }
     audioEngine.stop();
     setPlayhead(0);
     setIsPlaying(false);
@@ -384,8 +480,8 @@ export default function App() {
     if (recordingState.status === "counting-in") {
       clearRecordingTimers();
       resetRecordingState();
-      setStatus("Recording count-in cancelled.");
-      useDawStore.getState().setCommandMessage("Recording count-in cancelled.");
+      setStatus("녹음 카운트인이 취소되었습니다.");
+      useDawStore.getState().setCommandMessage("녹음 카운트인이 취소되었습니다.");
       return;
     }
 
@@ -405,12 +501,11 @@ export default function App() {
       const armedTrack = state.tracks.find(
         (track) => track.id === state.recording.armedTrackId,
       );
-      let targetTrack =
-        armedTrack ?? findClip(state.tracks, state.selectedClipId)?.track ?? state.tracks[0];
+      let targetTrack = armedTrack ?? state.tracks.find(track => track.clips.length === 0);
 
       if (!targetTrack) {
         addTrack();
-        targetTrack = useDawStore.getState().tracks[0];
+        targetTrack = useDawStore.getState().tracks.at(-1);
       }
 
       if (!targetTrack) {
@@ -421,7 +516,7 @@ export default function App() {
         Object.values(state.audioAssets).filter(
           (asset) => asset.sourceType === "recording",
         ).length + 1;
-      const fileName = `Vocal Recording ${String(recordingIndex).padStart(3, "0")}.wav`;
+      const fileName = `녹음 ${String(recordingIndex).padStart(3, "0")}.wav`;
       const assetId = createId("asset");
       const clipId = createId("clip");
       const startTime = state.playhead;
@@ -491,6 +586,10 @@ export default function App() {
         startTime,
         trackId: targetTrack.id,
       };
+      if (!useDawStore.getState().isPlaying) {
+        await audioEngine.play(getProjectSnapshot(), startTime);
+        setIsPlaying(true);
+      }
       startRecordingMetronome(context);
       addAudioAsset(tempAsset);
       addClip(targetTrack.id, clip);
@@ -512,8 +611,8 @@ export default function App() {
       recordingRef.current = undefined;
       resetRecordingState();
       if ((error as Error).message === "Count-in cancelled.") {
-        setStatus("Recording count-in cancelled.");
-        useDawStore.getState().setCommandMessage("Recording count-in cancelled.");
+        setStatus("녹음 카운트인이 취소되었습니다.");
+        useDawStore.getState().setCommandMessage("녹음 카운트인이 취소되었습니다.");
       } else {
         setStatus(`녹음 시작 실패: ${(error as Error).message}`);
         useDawStore
@@ -540,6 +639,7 @@ export default function App() {
         "recording",
       );
 
+      rememberAudio(session.assetId, result.blob);
       updateAudioAsset(session.assetId, {
         ...asset,
         duration: asset.duration || result.duration,
@@ -579,17 +679,30 @@ export default function App() {
       const file = fileArray[i];
       try {
         const { asset } = await audioEngine.decodeFile(file);
+        rememberAudio(asset.id, file);
 
-        // 매번 최신 state를 읽어 트랙/플레이헤드 정보 반영
         const state = useDawStore.getState();
+        const missingAsset = Object.values(state.audioAssets).find((existing) =>
+          !hasRememberedAudio(existing.id) && existing.fileName === file.name && Math.abs(existing.duration - asset.duration) < 0.25,
+        );
+        if (missingAsset) {
+          const buffer = audioEngine.getBuffer(asset.id);
+          if (buffer) audioEngine.registerBuffer(missingAsset.id, buffer);
+          rememberAudio(missingAsset.id, file);
+          updateAudioAsset(missingAsset.id, { ...asset, id: missingAsset.id }, { history: false });
+          setStatus(`${file.name} 음원을 기존 클립에 다시 연결했습니다.`);
+          continue;
+        }
         const startTime = state.playhead;
-
-        // 첫 번째 파일은 트랙 0 재사용, 이후 파일은 새 트랙 생성
-        let targetTrack = state.tracks[i];
-        if (!targetTrack) {
+        const selected = state.tracks.find((track) => track.id === state.selectedTrackId);
+        let targetTrack = selected ?? state.tracks[0];
+        const overlaps = (track: typeof targetTrack) => track.clips.some((clip) =>
+          clip.startTime < startTime + asset.duration && clip.startTime + clip.duration > startTime,
+        );
+        if (!targetTrack || overlaps(targetTrack)) {
           addTrack();
-          // addTrack은 동기 zustand set이지만 state 스냅샷은 즉시 반영됨
-          targetTrack = useDawStore.getState().tracks[i];
+          const allTracks = useDawStore.getState().tracks;
+          targetTrack = allTracks[allTracks.length - 1];
         }
 
         const clip: Clip = {
@@ -601,7 +714,7 @@ export default function App() {
           offset: 0,
           duration: asset.duration,
           sourceBpm: state.bpm,
-          stretchMode: "resample",
+          stretchMode: "none",
           gain: 1,
           fadeIn: 0,
           fadeOut: 0,
@@ -626,27 +739,49 @@ export default function App() {
     }
   }
 
-  function handleSaveProject() {
-    const project = getProjectSnapshot();
-    const blob = new Blob([JSON.stringify(project, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${project.name.replace(/\s+/g, "-").toLowerCase()}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-    setStatus("프로젝트 JSON을 저장했습니다. 오디오 원본은 다음 단계에서 IndexedDB로 묶습니다.");
+  async function handleSaveProject() {
+    try {
+      const project = getProjectSnapshot();
+      const blob = await exportProject(project);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${project.name.replace(/[\\/:*?"<>|\s]+/g, "-").toLowerCase() || "project"}.json`;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setStatus("음원을 포함한 프로젝트 파일을 저장했습니다.");
+    } catch (error) {
+      setStatus(`프로젝트 저장 실패: ${(error as Error).message}`);
+    }
+  }
+
+  async function handleExportMix() {
+    try {
+      setStatus("믹스 WAV를 만드는 중입니다...");
+      const project = getProjectSnapshot();
+      const blob = await audioEngine.renderMix(project);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${project.name.replace(/[\\/:*?"<>|\s]+/g, "-") || "project"}-mix.wav`;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setStatus("믹스 WAV 파일을 저장했습니다.");
+    } catch (error) {
+      setStatus(`믹스 저장 실패: ${(error as Error).message}`);
+    }
   }
 
   async function handleLoadProject(file: File) {
     try {
-      const text = await file.text();
-      const project = JSON.parse(text) as DawProject;
+      const data = await parseProjectFile(file);
+      if (!window.confirm("현재 프로젝트를 불러온 내용으로 바꾸시겠습니까? 현재 작업은 먼저 파일로 저장할 수 있습니다.")) return;
+      const restored = await restoreAudio(data, decodeStoredAudio);
       audioEngine.stop();
-      importProject(project);
-      setStatus("프로젝트 JSON을 불러왔습니다. 재생하려면 같은 오디오 파일을 다시 업로드해야 합니다.");
+      audioEngine.clearBuffers();
+      restored.commit();
+      importProject(restored.project);
+      setStatus(restored.missing ? `프로젝트를 불러왔습니다. 음원 ${restored.missing}개가 파일에 포함되지 않았습니다.` : "프로젝트와 음원을 불러왔습니다.");
     } catch (error) {
       setStatus(`프로젝트 불러오기 실패: ${(error as Error).message}`);
     }
@@ -656,12 +791,13 @@ export default function App() {
     <main className="app-shell">
       <TransportBar
         isRecording={isRecording}
-        status={commandMessage || status}
+        status={status}
         onFiles={handleFiles}
         onLoadProject={handleLoadProject}
         onPlayPause={handlePlayPause}
         onRecordToggle={handleRecordToggle}
         onSaveProject={handleSaveProject}
+        onExportMix={handleExportMix}
         onStop={handleStop}
       />
       <div className={`workspace ${playlistDetached ? "detached" : ""}`}>

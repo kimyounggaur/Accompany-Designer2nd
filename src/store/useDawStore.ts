@@ -105,6 +105,8 @@ interface DawStore extends DawProject {
   past: HistorySnapshot[];
   future: HistorySnapshot[];
   captureHistory: () => void;
+  beginHistoryGroup: () => void;
+  endHistoryGroup: () => void;
   undo: () => void;
   redo: () => void;
   setBpm: (bpm: number) => void;
@@ -164,6 +166,8 @@ interface DawStore extends DawProject {
   togglePerformanceMode: () => void;
   togglePlaylistDetached: () => void;
   addTrack: () => void;
+  deleteTrack: (trackId: string) => void;
+  reorderTrack: (trackId: string, direction: -1 | 1) => void;
   updateTrack: (trackId: string, patch: Partial<Omit<Track, "clips">>) => void;
   importProject: (project: DawProject) => void;
   resetProject: () => void;
@@ -458,7 +462,7 @@ function cloneClipFromSource(
     offset: 0,
     duration: firstAsset.duration,
     sourceBpm: state.bpm,
-    stretchMode: "resample",
+    stretchMode: "none",
     gain: 1,
     fadeIn: 0,
     fadeOut: 0,
@@ -468,13 +472,17 @@ function cloneClipFromSource(
 }
 
 export const useDawStore = create<DawStore>((set) => {
+  let groupingHistory = false;
+  let groupRecorded = false;
   const setWithHistory = (
     updater: (state: DawStore) => Partial<DawStore>,
     options?: HistoryOptions,
   ) => {
     set((state) => {
       const patch = updater(state);
-      return options?.history === false ? patch : withHistoryPatch(state, patch);
+      if (options?.history === false || (groupingHistory && groupRecorded)) return patch;
+      if (groupingHistory && patchTouchesHistory(patch)) groupRecorded = true;
+      return withHistoryPatch(state, patch);
     });
   };
 
@@ -488,7 +496,7 @@ export const useDawStore = create<DawStore>((set) => {
   zoomPxPerSecond: 96,
   snapEnabled: true,
   gridDivision: 2,
-  playlistTool: "draw",
+  playlistTool: "move",
   playlistSnap: "line",
   globalSnap: "line",
   performanceMode: false,
@@ -497,6 +505,8 @@ export const useDawStore = create<DawStore>((set) => {
   commandMessage: "",
   past: [],
   future: [],
+  beginHistoryGroup: () => { groupingHistory = true; groupRecorded = false; },
+  endHistoryGroup: () => { groupingHistory = false; groupRecorded = false; },
   captureHistory: () =>
     set((state) => ({
       past: trimHistory([...state.past, createHistorySnapshot(state)]),
@@ -537,12 +547,12 @@ export const useDawStore = create<DawStore>((set) => {
       };
     }),
   setBpm: (bpm) =>
-    setWithHistory(() => ({ bpm: clamp(Number(bpm) || 120, 20, 300) })),
-  setProjectName: (name) => setWithHistory(() => ({ name })),
+    setWithHistory((state) => { const value = clamp(Number(bpm) || 120, 20, 300); return value === state.bpm ? {} : { bpm: value }; }),
+  setProjectName: (name) => setWithHistory((state) => state.name === name ? {} : { name }),
   setPlayhead: (playhead) => set({ playhead: Math.max(0, playhead) }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setZoom: (zoomPxPerSecond) =>
-    set({ zoomPxPerSecond: clamp(zoomPxPerSecond, 40, 320) }),
+    set({ zoomPxPerSecond: clamp(zoomPxPerSecond, 1, 320) }),
   setSnapEnabled: (snapEnabled) =>
     set({
       snapEnabled,
@@ -623,7 +633,7 @@ export const useDawStore = create<DawStore>((set) => {
           countInRemaining: 0,
           waveformPeaks: [],
         },
-        commandMessage: armedTrackId ? "Track armed for recording." : "Recording arm cleared.",
+        commandMessage: armedTrackId ? "이 트랙에 녹음하도록 설정했습니다." : "녹음 대기 트랙을 해제했습니다.",
       };
     }),
   setRecordingInputDevice: (inputDeviceId) =>
@@ -632,7 +642,7 @@ export const useDawStore = create<DawStore>((set) => {
         ...state.recording,
         inputDeviceId,
       },
-      commandMessage: "Recording input changed.",
+      commandMessage: "녹음 입력 장치를 변경했습니다.",
     })),
   setRecordingMonitoring: (monitoringEnabled) =>
     set((state) => ({
@@ -720,14 +730,17 @@ export const useDawStore = create<DawStore>((set) => {
     return createdId;
   },
   updateClip: (clipId, patch, options) =>
-    setWithHistory((state) => ({
+    setWithHistory((state) => {
+      const existing = findClip(state.tracks, clipId)?.clip;
+      if (!existing || Object.entries(patch).every(([key, value]) => existing[key as keyof Clip] === value)) return {};
+      return {
       tracks: state.tracks.map((track) => ({
         ...track,
         clips: track.clips.map((clip) =>
           clip.id === clipId ? { ...clip, ...patch } : clip,
         ),
       })),
-    }), options),
+    }; }, options),
   moveClip: (clipId, targetTrackId, patch = {}, options) =>
     setWithHistory((state) => {
       let movingClip: Clip | undefined;
@@ -1076,12 +1089,42 @@ export const useDawStore = create<DawStore>((set) => {
         selectedClipIds: [],
       };
     }),
+  deleteTrack: (trackId) =>
+    setWithHistory((state) => {
+      if (state.tracks.length <= 1 || ["counting-in", "recording", "stopping"].includes(state.recording.status)) return {};
+      const track = state.tracks.find((item) => item.id === trackId);
+      if (!track) return {};
+      const removedIds = new Set(track.clips.map((clip) => clip.id));
+      const tracks = state.tracks.filter((item) => item.id !== trackId);
+      const selectedClipIds = state.selectedClipIds.filter((id) => !removedIds.has(id));
+      return {
+        tracks,
+        selectedTrackId: state.selectedTrackId === trackId ? tracks[0].id : state.selectedTrackId,
+        selectedClipId: state.selectedClipId && removedIds.has(state.selectedClipId) ? selectedClipIds[selectedClipIds.length - 1] : state.selectedClipId,
+        selectedClipIds,
+        recording: state.recording.armedTrackId === trackId ? { ...state.recording, armedTrackId: undefined, status: "idle" } : state.recording,
+        commandMessage: `${track.name} 트랙이 삭제되었습니다. 실행 취소로 되돌릴 수 있습니다.`,
+      };
+    }),
+  reorderTrack: (trackId, direction) =>
+    setWithHistory((state) => {
+      if (["counting-in", "recording", "stopping"].includes(state.recording.status)) return {};
+      const index = state.tracks.findIndex((track) => track.id === trackId);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= state.tracks.length) return {};
+      const tracks = [...state.tracks];
+      [tracks[index], tracks[target]] = [tracks[target], tracks[index]];
+      return { tracks, commandMessage: `${tracks[target].name} 트랙 순서를 변경했습니다.` };
+    }),
   updateTrack: (trackId, patch) =>
-    setWithHistory((state) => ({
+    setWithHistory((state) => {
+      const existing = state.tracks.find((track) => track.id === trackId);
+      if (!existing || Object.entries(patch).every(([key, value]) => existing[key as keyof Track] === value)) return {};
+      return {
       tracks: state.tracks.map((track) =>
         track.id === trackId ? { ...track, ...patch } : track,
       ),
-    })),
+    }; }),
   importProject: (project) =>
     setWithHistory(() => ({
       id: project.id || createId("project"),
@@ -1100,7 +1143,7 @@ export const useDawStore = create<DawStore>((set) => {
       playhead: 0,
       snapEnabled: true,
       gridDivision: getSnapDivision("line"),
-      playlistTool: "draw",
+      playlistTool: "move",
       playlistSnap: "line",
       globalSnap: "line",
       performanceMode: false,
@@ -1122,7 +1165,7 @@ export const useDawStore = create<DawStore>((set) => {
       zoomPxPerSecond: 96,
       snapEnabled: true,
       gridDivision: 2,
-      playlistTool: "draw",
+      playlistTool: "move",
       playlistSnap: "line",
       globalSnap: "line",
       performanceMode: false,

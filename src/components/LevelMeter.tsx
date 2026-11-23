@@ -118,6 +118,7 @@ export function LevelMeter({
 
 export function LevelMeterRack() {
   const tracks = useDawStore((state) => state.tracks);
+  const active = useDawStore((state) => state.isPlaying || state.recording.status === "recording");
   const [readings, setReadings] = useState<Record<string, MeterReading>>({});
   const readingsRef = useRef<Record<string, MeterReading>>({});
   const buffersRef = useRef(new Map<string, Float32Array<ArrayBuffer>>());
@@ -126,6 +127,12 @@ export function LevelMeterRack() {
   const trackSignature = tracks.map((track) => `${track.id}:${track.name}`).join("|");
 
   useEffect(() => {
+    if (!active) {
+      readingsRef.current = {};
+      clipUntilRef.current.clear();
+      setReadings({});
+      return;
+    }
     let rafId = 0;
     let disposed = false;
 
@@ -170,7 +177,7 @@ export function LevelMeterRack() {
       disposed = true;
       cancelAnimationFrame(rafId);
     };
-  }, [trackSignature]);
+  }, [trackSignature, active]);
 
   return (
     <div className="meter-rack">
