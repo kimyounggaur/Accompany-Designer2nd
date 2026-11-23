@@ -8,7 +8,7 @@
 - [ ] 프로젝트 설정 → Git → **Production Branch를 `master`로** 바꾼다. (지금까지 어느 브랜치가 운영으로 나갔는지는 확인하지 못했습니다.)
 - [ ] 프로젝트 설정 → Environments(또는 Environment Variables)에서 **시스템 환경 변수 노출**(`VERCEL_GIT_COMMIT_SHA`)이 켜져 있는지 본다. 꺼져 있으면 화면의 빌드 표시가 `빌드 local`로 나옵니다.
 - [ ] 빌드 설정의 **Node.js 버전을 22.x 이상**으로 맞춘다(`package.json`의 `engines: >=22.12.0`, `.nvmrc`는 `22`).
-- [ ] **수용 확인:** master에 병합한 뒤 운영 주소 화면 오른쪽 아래의 `빌드 xxxxxxx`가 `git rev-parse --short=7 HEAD`와 같다. PR마다 미리보기 주소가 생긴다.
+- [ ] **수용 확인:** master에 병합한 뒤 운영 주소 화면의 상태 줄 오른쪽 끝에 보이는 `빌드 xxxxxxx`가 `git rev-parse --short=7 HEAD`와 같다. PR마다 미리보기 주소가 생긴다.
 - 되돌리기: Vercel의 이전 배포로 되돌리기(Instant Rollback).
 
 ## GitHub (결정 0001, 설계서 P1-1·P1-2)
@@ -21,7 +21,7 @@
   git push origin --delete main
   ```
 - [ ] 저장소 설정 → Pages를 끈다. (코드의 `pages.yml`과 `build:pages`는 P1-2에서 삭제합니다.) 이미 Pages 주소를 알린 사람이 있다면 끄기 전에 "주소가 바뀌었습니다" 안내 한 장을 2~4주 올려 둘 수 있습니다.
-- [ ] README 첫 줄의 "공식 주소"에 Vercel 주소 하나를 적는다.
+- [ ] README 첫 줄의 "공식 주소"에 Vercel 주소 하나를 적는다. 이때 `index.html`의 `og:image`(`/og.png`)도 절대 주소(`https://<공식 주소>/og.png`)로 바꾼다. 카카오톡·슬랙 같은 곳의 공유 미리보기는 절대 주소가 있어야 이미지를 가져옵니다.
 
 ## CI와 브랜치 보호 (설계서 P1-5)
 
