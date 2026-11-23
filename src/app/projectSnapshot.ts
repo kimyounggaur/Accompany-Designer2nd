@@ -19,6 +19,7 @@ export function getProjectSnapshot(): DawProject {
     name: doc.name,
     bpm: doc.bpm,
     sampleRate: doc.sampleRate,
+    master: doc.master,
     tracks: doc.tracks,
     audioAssets,
     timeMarkers: doc.timeMarkers,

@@ -66,6 +66,7 @@ interface DawStore extends DawProject {
   undo: () => CommandResult<"empty">;
   redo: () => CommandResult<"empty">;
   setBpm: (bpm: number) => void;
+  setMasterVolumeDb: (volumeDb: number) => void;
   setProjectName: (name: string) => void;
   setPlayhead: (playhead: number) => void;
   setIsPlaying: (isPlaying: boolean) => void;
@@ -135,6 +136,7 @@ function docFields(doc: ProjectDoc) {
     name: doc.name,
     bpm: doc.bpm,
     sampleRate: doc.sampleRate,
+    master: doc.master,
     tracks: doc.tracks,
     audioAssets: doc.audioAssets,
     timeMarkers: doc.timeMarkers,
@@ -213,6 +215,9 @@ export const useDawStore = create<DawStore>((set, get) => ({
   },
   setBpm: (bpm) => {
     commands.setBpm(bpm);
+  },
+  setMasterVolumeDb: (volumeDb) => {
+    commands.setMasterVolumeDb(volumeDb);
   },
   setProjectName: (name) => {
     commands.setProjectName(name);

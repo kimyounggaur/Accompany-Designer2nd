@@ -79,17 +79,20 @@ export interface AutosaveSlice {
   tracks: unknown;
   audioAssets: unknown;
   timeMarkers: unknown;
+  /** 마스터 설정(볼륨). 옛 시험 자료에는 없을 수 있다 */
+  master?: unknown;
   recording: { status: string };
 }
 
-/** 저장해야 할 문서(이름·템포·트랙·음원·마커)가 바뀌었는가. 선택·재생 위치·확대 같은 화면 상태는 저장 대상이 아니다. */
+/** 저장해야 할 문서(이름·템포·마스터·트랙·음원·마커)가 바뀌었는가. 선택·재생 위치·확대 같은 화면 상태는 저장 대상이 아니다. */
 export function documentChanged(state: AutosaveSlice, previous: AutosaveSlice): boolean {
   return (
     state.name !== previous.name ||
     state.bpm !== previous.bpm ||
     state.tracks !== previous.tracks ||
     state.audioAssets !== previous.audioAssets ||
-    state.timeMarkers !== previous.timeMarkers
+    state.timeMarkers !== previous.timeMarkers ||
+    state.master !== previous.master
   );
 }
 

@@ -2,6 +2,7 @@
  * 문서의 기본값과 보정 함수.
  * 예전에는 store/useDawStore.ts 안에 있었다. P4-1(문서 형식 v2와 검사기 하나)에서 domain/project/로 합친다.
  */
+import { MASTER_VOLUME_DEFAULT_DB } from "../domain/master/volume";
 import type { Clip, EffectSlot, EffectSlotType, ProjectDoc, Track } from "../types";
 import { clamp, createId } from "../utils/audioMath";
 import { DEFAULT_DELAY_SETTINGS, normalizeDelaySettings } from "../utils/delay";
@@ -73,6 +74,7 @@ export function createEmptyDoc(): ProjectDoc {
     name: "새 세션",
     bpm: 120,
     sampleRate: 44100,
+    master: { volumeDb: MASTER_VOLUME_DEFAULT_DB },
     tracks: [createDefaultTrack(1)],
     audioAssets: {},
     timeMarkers: [],

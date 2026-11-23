@@ -1,5 +1,8 @@
-import { Headphones, Mic, Music2, Timer } from "lucide-react";
+import { Headphones, Mic, Music2, Timer, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { audioEngine } from "../../audio/currentEngine";
+import { ko } from "../../i18n/ko";
+import { readMonitorVolume, writeMonitorVolume } from "../../services/monitorVolume";
 import { useDawStore } from "../../store/useDawStore";
 import { useDismiss } from "../useDismiss";
 
@@ -18,9 +21,17 @@ export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
   const setRecordingCountIn = useDawStore((state) => state.setRecordingCountIn);
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
   const [open, setOpen] = useState(false);
+  const [monitorVolume, setMonitorVolume] = useState(readMonitorVolume);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useDismiss(rootRef, open, () => setOpen(false));
+
+  // 기억해 둔 모니터 볼륨을 소리 엔진에 알린다(엔진은 소리 길을 만들 때 이 값을 쓴다). 녹음 중에도 바꿀 수 있다.
+  useEffect(() => {
+    audioEngine.setMonitorVolume(monitorVolume);
+  }, [monitorVolume]);
+
+  const monitorPercent = Math.round(monitorVolume * 100);
 
   useEffect(() => {
     let mounted = true;
@@ -62,6 +73,24 @@ export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
       >
         <Music2 size={16} />
       </button>
+      <label className="monitor-volume-control" title={ko.monitor.volumeTitle}>
+        <Volume2 size={14} aria-hidden="true" />
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          value={monitorPercent}
+          aria-label={ko.monitor.volumeLabel}
+          aria-valuetext={ko.monitor.volumeValue(monitorPercent)}
+          data-testid="monitor-volume"
+          onChange={(event) => {
+            const next = Number(event.target.value) / 100;
+            setMonitorVolume(next);
+            writeMonitorVolume(next);
+          }}
+        />
+      </label>
       <label className="count-in-control">
         <Timer size={14} />
         <select

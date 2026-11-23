@@ -284,7 +284,8 @@ export default function App() {
     gain.gain.setValueAtTime(strong ? 0.18 : 0.11, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
     oscillator.connect(gain);
-    gain.connect(context.destination);
+    // 메트로놈은 모니터 길로 보낸다(마스터 길·미터·내보내기에 섞이지 않고, 모니터 볼륨을 따른다).
+    gain.connect(audioEngine.getMonitorInput() ?? context.destination);
     oscillator.start(now);
     oscillator.stop(now + 0.06);
   }
@@ -447,6 +448,7 @@ export default function App() {
         {
           inputDeviceId: state.recording.inputDeviceId,
           monitoringEnabled: state.recording.monitoringEnabled,
+          monitorOutput: audioEngine.getMonitorInput(),
         },
       );
 

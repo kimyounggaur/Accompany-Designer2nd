@@ -7,6 +7,7 @@ import "./styles.css";
 import "./styles/layout.css";
 import "./styles/feedback.css";
 import "./styles/legibility.css";
+import "./styles/master.css";
 
 installGlobalErrorHandlers();
 

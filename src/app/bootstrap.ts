@@ -44,6 +44,7 @@ export function startApp(): () => void {
       now.tracks === initial.tracks &&
       now.name === initial.name &&
       now.bpm === initial.bpm &&
+      now.master === initial.master &&
       now.timeMarkers === initial.timeMarkers &&
       Object.keys(now.audioAssets).length === 0
     );

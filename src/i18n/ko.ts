@@ -80,6 +80,24 @@ export const ko = {
     peakTitle: (label: string, db: string) => `${label} 피크 ${db} dB`,
   },
 
+  monitor: {
+    volumeLabel: "모니터 볼륨",
+    volumeTitle: "입력 모니터링과 메트로놈 소리의 크기입니다. 믹스와 내보내기에는 섞이지 않습니다.",
+    volumeValue: (percent: number) => `${percent}%`,
+  },
+
+  master: {
+    heading: "마스터",
+    volumeLabel: "마스터 볼륨",
+    volumeValue: (db: number) => `${db > 0 ? "+" : ""}${db.toFixed(1)} dB`,
+    resetLabel: "0 dB",
+    resetTitle: "마스터 볼륨을 0 dB로 되돌립니다",
+    limiterLabel: "리미터",
+    limiterMeterLabel: "리미터가 누르는 양",
+    limiterValue: (db: number) => `${db.toFixed(1)} dB`,
+    limiterHint: "순간적으로 큰 소리가 −1 dB를 넘지 않도록 누르는 양입니다. 0이면 건드리지 않는 것입니다.",
+  },
+
   clip: { noWavData: "이 세션에는 WAV 원본 데이터가 없습니다." },
 
   playlist: { snapFallback: "라인" },

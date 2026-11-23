@@ -10,6 +10,8 @@ import type { Track } from "../../types";
 export interface SyncDoc {
   bpm: number;
   tracks: Track[];
+  /** 마스터 볼륨. 옛 프로젝트에는 없을 수 있다(0 dB로 본다). */
+  master?: { volumeDb: number };
 }
 
 export interface TrackStep {

@@ -1,0 +1,101 @@
+/*
+ * 마스터 칸 — P3-4
+ * 마스터 볼륨 슬라이더와 리미터 동작량 표시. 색은 기존 토큰만 쓴다.
+ */
+
+.master-panel .panel-section__body {
+  display: grid;
+  gap: 8px;
+}
+
+.master-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.master-label {
+  flex: 0 0 auto;
+  color: var(--mistral-black);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.master-value {
+  margin-left: auto;
+  min-width: 64px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.master-value.working {
+  color: #c8261a;
+  font-weight: 700;
+}
+
+.master-slider {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--mistral-orange);
+}
+
+.master-reset {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.master-limiter .master-label {
+  min-width: 44px;
+}
+
+.master-reduction-bar {
+  position: relative;
+  flex: 1 1 auto;
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+
+/* 막대는 오른쪽 끝에서 왼쪽으로 차오른다(0 dB = 비어 있음) */
+.master-reduction-bar > span {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--mistral-sunshine);
+  transition: width 80ms linear;
+}
+
+.master-reduction-bar.working > span {
+  background: #c8261a;
+}
+
+/* 모니터 볼륨(상단 바 녹음 옵션) */
+.monitor-volume-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 8px;
+  color: var(--text-muted);
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: var(--surface-2);
+}
+
+.topbar .monitor-volume-control {
+  height: 32px;
+}
+
+.monitor-volume-control input[type="range"] {
+  width: 64px;
+  min-width: 0;
+  accent-color: var(--mistral-orange);
+}
