@@ -14,6 +14,7 @@ interface TopBarProps {
   onRecordToggle: () => void;
   onSaveProject: () => void;
   onExportMix: () => void;
+  onRelink: () => void;
   onStop: () => void;
 }
 
@@ -32,6 +33,7 @@ export function TopBar({
   onRecordToggle,
   onSaveProject,
   onExportMix,
+  onRelink,
   onStop,
 }: TopBarProps) {
   const wide = useMediaQuery("(min-width: 1600px)");
@@ -70,6 +72,7 @@ export function TopBar({
           onLoadProject={onLoadProject}
           onSaveProject={onSaveProject}
           onExportMix={onExportMix}
+          onRelink={onRelink}
         />
       </div>
 

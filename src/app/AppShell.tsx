@@ -1,6 +1,7 @@
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { ReactNode } from "react";
 import { useDawStore } from "../store/useDawStore";
+import { RelinkDialog } from "../ui/dialogs/RelinkDialog";
 import { AutosaveStatus } from "../ui/feedback/AutosaveStatus";
 import { BuildStamp } from "../ui/feedback/BuildStamp";
 import { ConfirmDialog } from "../ui/feedback/ConfirmDialog";
@@ -55,6 +56,7 @@ export function AppShell({ topBar, timeline, inspector }: AppShellProps) {
       <ToastRegion />
       <ConfirmDialog />
       <ExportDialog />
+      <RelinkDialog />
     </main>
   );
 }

@@ -24,6 +24,15 @@ export function sha256Hex(blob: Blob): Promise<string> {
   return hit;
 }
 
+/** 해시를 계산할 수 없는 환경(보안 연결이 아닌 주소 등)에서는 undefined. 해시가 없어도 앱은 동작하고, 같은 파일 판별만 이름·길이로 줄어든다. */
+export async function hashOrUndefined(blob: Blob): Promise<string | undefined> {
+  try {
+    return await sha256Hex(blob);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * 저장소 키로 쓸 음원 식별자. 해시를 계산할 수 없는 환경(보안 연결이 아닌 주소 등)에서는
  * 공유 없이 프로젝트·음원 id로 구분하는 키로 대신한다(저장은 되지만 같은 음원을 한 번만 담지는 못한다).

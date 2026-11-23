@@ -6,6 +6,7 @@
  * - 선택자는 S 한 곳에만 둔다. 화면 부품에는 data-testid를 붙여 두었으므로 CSS 이름이 바뀌어도(6단계) 깨지지 않는다.
  */
 import { expect, test, type Download, type Page, type TestInfo } from "@playwright/test";
+import { strToU8, unzipSync, zipSync } from "fflate";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -66,6 +67,11 @@ const S = {
   exportProgress: '[data-testid="export-progress"]',
   exportSampleRate: '[data-testid="export-sample-rate"]',
   exportBitDepth: '[data-testid="export-bit-depth"]',
+  relinkDialog: '[data-testid="relink-dialog"]',
+  relinkRow: '[data-testid="relink-row"]',
+  relinkInput: '[data-testid="relink-input"]',
+  relinkConfirm: '[data-testid="relink-confirm"]',
+  relinkClose: '[data-testid="relink-close"]',
 };
 
 /** 소리 소스 시작 횟수, rAF 호출 수, 최종 출력 분석기를 잡아 두는 측정 훅 */
@@ -141,6 +147,8 @@ async function outputPeak(page: Page, ms = 1000) {
   }, ms);
 }
 
+const strFromBytes = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
+
 // ───────────────────────── 1순위 ─────────────────────────
 
 test.describe("A2 화면 폭", () => {
@@ -201,13 +209,13 @@ test.describe("P2-1 화면 틀", () => {
     await expect(page.locator(S.countIn)).toHaveCount(0);
   });
 
-  test("파일 메뉴 하나에 올리기·열기·저장·내보내기가 모여 있고 Esc로 닫힌다", async ({ page }) => {
+  test("파일 메뉴 하나에 올리기·열기·저장·내보내기·음원 다시 연결이 모여 있고 Esc로 닫힌다", async ({ page }) => {
     await openApp(page);
     const trigger = page.locator(S.fileMenuTrigger);
     await trigger.click();
     const items = page.locator(`${S.fileMenuPanel} [role="menuitem"]`);
-    await expect(items).toHaveCount(4);
-    await expect(items).toHaveText([/오디오 업로드/, /프로젝트 불러오기/, /프로젝트 저장/, /믹스 WAV 내보내기/]);
+    await expect(items).toHaveCount(5); // P4-2에서 "음원 다시 연결"이 맨 아래에 늘었다(저장은 계속 3번째)
+    await expect(items).toHaveText([/오디오 업로드/, /프로젝트 불러오기/, /프로젝트 저장/, /믹스 WAV 내보내기/, /음원 다시 연결/]);
     await page.keyboard.press("ArrowDown");
     await expect(items.nth(1)).toBeFocused();
     await page.keyboard.press("Escape");
@@ -362,7 +370,7 @@ test.describe("P2-2 안내 통로", () => {
       page.locator(`${S.fileMenuPanel} [role="menuitem"]`).nth(2).click(),
     ]);
     // 파일 이름에 한글이 섞인 경로는 브라우저가 못 읽는 경우가 있어, 영문 임시 경로에 저장한다.
-    const saved = path.join(os.tmpdir(), `ad2-saved-project-${testInfo.workerIndex}-${Date.now()}.json`);
+    const saved = path.join(os.tmpdir(), `ad2-saved-project-${testInfo.workerIndex}-${Date.now()}.adproj`);
     await download.saveAs(saved);
     await expect(page.locator(S.status)).toContainText("프로젝트 파일을 저장했습니다");
 
@@ -630,9 +638,9 @@ test.describe("P2-4 자동 저장 서비스", () => {
     // 단추로 프로젝트 파일을 내려받을 수 있다.
     const download = page.waitForEvent("download");
     await alert.getByRole("button", { name: "프로젝트 파일로 저장" }).click();
-    const saved = path.join(os.tmpdir(), `ad2-quota-${Date.now()}.json`);
+    const saved = path.join(os.tmpdir(), `ad2-quota-${Date.now()}.adproj`);
     await (await download).saveAs(saved); // 파일 이름은 운영체제 글자 처리에 따라 달라지므로 내용으로 확인한다
-    const file = JSON.parse(fs.readFileSync(saved, "utf8"));
+    const file = JSON.parse(strFromBytes(unzipSync(new Uint8Array(fs.readFileSync(saved)))["project.json"]));
     expect(file.format).toBe("accompany-designer-project");
     expect(file.schemaVersion).toBe(2);
     expect(file.doc.bpm).toBe(95); // 저장하지 못한 변경도 파일에는 들어 있다
@@ -2053,5 +2061,229 @@ test.describe("P4-1 문서 형식 v2", () => {
       await alert.getByRole("button", { name: "안내 닫기" }).click();
       await expect(alert).toHaveCount(0);
     }
+  });
+});
+
+test.describe("P4-2 .adproj 파일과 음원 다시 연결", () => {
+  /** 파일 메뉴의 "프로젝트 저장"으로 .adproj를 내려받아 영문 임시 경로에 둔다 */
+  async function saveAdproj(page: Page, testInfo: TestInfo, label = "saved") {
+    await page.locator(S.fileMenuTrigger).click();
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.locator(`${S.fileMenuPanel} [role="menuitem"]`).nth(2).click(),
+    ]);
+    // 헤드리스 크롬은 한글이 섞인 내려받기 이름을 그대로 알려 주지 않으므로 이름 대신 내용(zip)을 확인한다.
+    const saved = path.join(os.tmpdir(), `ad2-p42-${label}-${testInfo.workerIndex}-${Date.now()}.adproj`);
+    await download.saveAs(saved);
+    return saved;
+  }
+
+  /** 음원 데이터만 뺀 프로젝트 파일. 문서에는 음원 해시가 그대로 남는다(파일이 잘렸거나 음원 폴더를 옮긴 경우). */
+  function withoutAudio(adproj: string, testInfo: TestInfo) {
+    const entries = unzipSync(new Uint8Array(fs.readFileSync(adproj)));
+    const out = path.join(os.tmpdir(), `ad2-p42-noaudio-${testInfo.workerIndex}-${Date.now()}.adproj`);
+    fs.writeFileSync(out, zipSync({ "project.json": [entries["project.json"], { level: 0 }] }));
+    return out;
+  }
+
+  /** 6월 형식(음원 없음) 프로젝트: 음원 이름·길이가 quiet-loud-8s.wav와 같다 */
+  function legacyFile(testInfo: TestInfo, asset: { fileName: string; duration: number } = { fileName: "quiet-loud-8s.wav", duration: 8 }) {
+    const file = path.join(os.tmpdir(), `ad2-p42-legacy-${testInfo.workerIndex}-${Date.now()}.json`);
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        id: "p42-legacy", name: "옛 파일", bpm: 100, sampleRate: 44100,
+        tracks: [{ id: "t1", name: "트랙 1", volume: 0.86, pan: 0, muted: false, solo: false,
+          clips: [{ id: "c1", audioBufferId: "a1", trackId: "t1", name: "옛 음원", startTime: 0, offset: 0, duration: 8, sourceBpm: 100, stretchMode: "none", gain: 1, fadeIn: 0, fadeOut: 0 }] }],
+        audioAssets: { a1: { id: "a1", fileName: asset.fileName, duration: asset.duration, sampleRate: 44100, channels: 2 } },
+        timeMarkers: [],
+      }),
+    );
+    return file;
+  }
+
+  /** 뒤 4초(큰 소리)에서 재생해 마스터 출력의 최고점을 잰다 */
+  async function loudPeak(page: Page) {
+    await clickRuler(page, 4.5, 96);
+    await page.click(S.play);
+    await page.waitForTimeout(400);
+    const peak = await outputPeak(page, 600);
+    await page.click(S.stop);
+    return peak;
+  }
+
+  test("저장한 프로젝트 파일은 음원을 담은 zip이고, 새 브라우저 프로필에서 열어도 소리가 난다", async ({ page, browser, baseURL }, testInfo) => {
+    await openApp(page);
+    await upload(page);
+    const saved = await saveAdproj(page, testInfo);
+    await expect(page.locator(S.status)).toContainText("프로젝트 파일을 저장했습니다");
+
+    const bytes = new Uint8Array(fs.readFileSync(saved));
+    expect([...bytes.slice(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]); // PK\x03\x04
+    const entries = unzipSync(bytes);
+    const wavBytes = fs.readFileSync(WAV);
+    const hash = createHash("sha256").update(wavBytes).digest("hex");
+    expect(Object.keys(entries).sort()).toEqual(["project.json", `audio/${hash}.wav`].sort());
+    expect(Buffer.from(entries[`audio/${hash}.wav`]).equals(wavBytes)).toBe(true); // 음원 원본 그대로(base64로 부풀리지 않는다)
+    expect(bytes.length).toBeLessThan(wavBytes.length + 20_000); // 원본 + project.json 정도
+    const doc = JSON.parse(strFromBytes(entries["project.json"])).doc;
+    expect(Object.values<any>(doc.assets).map((asset) => asset.hash)).toEqual([hash]);
+
+    const context = await browser.newContext({ baseURL, viewport: { width: 1440, height: 900 } });
+    try {
+      const fresh = await context.newPage();
+      await openApp(fresh);
+      await expect(fresh.locator(S.clip)).toHaveCount(0);
+      await fresh.setInputFiles(S.projectInput, saved);
+      await fresh.locator(S.confirmOk).click();
+      await expect(fresh.locator(S.status)).toContainText("프로젝트와 음원을 불러왔습니다");
+      await expect(fresh.locator(S.clip)).toHaveCount(1);
+      await expect(fresh.locator(S.relinkDialog)).toBeHidden(); // 음원이 다 들어 있으므로 다시 연결할 것이 없다
+      expect(await loudPeak(fresh)).toBeGreaterThan(0.25); // 소리가 난다
+    } finally {
+      await context.close();
+      fs.rmSync(saved, { force: true });
+    }
+  });
+
+  test("음원이 빠진 파일을 열면 재연결 대화상자가 뜨고, 이름·길이가 같은 파일은 확인한 뒤 연결된다(클립 수는 그대로, 새로고침 뒤에도 유지)", async ({ page }, testInfo) => {
+    await openApp(page);
+    const file = legacyFile(testInfo);
+    await page.setInputFiles(S.projectInput, file);
+    await page.locator(S.confirmOk).click();
+
+    await expect(page.locator(S.relinkDialog)).toBeVisible();
+    const row = page.locator(S.relinkRow);
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText("quiet-loud-8s.wav");
+    await expect(row).toContainText("길이 0:08");
+    await expect(row).toContainText("클립 1개");
+    await expect(page.locator(S.clip)).toHaveCount(1);
+
+    // 해시를 모르는 옛 파일이므로 같은 파일이어도 확인을 거친다.
+    await page.setInputFiles(S.relinkInput, WAV);
+    await expect(row).toHaveAttribute("data-state", "confirm");
+    await expect(row).toContainText("이 파일로 연결할까요?");
+    await page.locator(S.relinkConfirm).click();
+    await expect(row).toHaveAttribute("data-state", "linked");
+    await expect(row).toContainText("연결했습니다");
+    await page.locator(S.relinkClose).click();
+    await expect(page.locator(S.relinkDialog)).toBeHidden();
+    await expect(page.locator(S.toast).filter({ hasText: "음원 1개를 모두 다시 연결했습니다" })).toBeVisible();
+
+    await expect(page.locator(S.clip)).toHaveCount(1); // 클립 수는 그대로
+    expect(await loudPeak(page)).toBeGreaterThan(0.25); // 소리가 난다
+
+    // 문서는 그대로여도 연결한 음원 데이터는 자동 저장에 들어간다: 새로고침해도 다시 연결할 필요가 없다.
+    await page.waitForTimeout(2500);
+    await page.reload();
+    await page.locator(S.inspector).waitFor();
+    await expect(page.locator(S.status)).toContainText("자동 저장된 프로젝트와 음원을 복구했습니다", { timeout: 5000 });
+    await expect(page.locator(S.relinkDialog)).toBeHidden();
+    fs.rmSync(file, { force: true });
+  });
+
+  test("다른 파일을 고르면 연결하지 않고 이유를 보이며, 대화상자는 파일 메뉴에서 다시 열 수 있다", async ({ page }, testInfo) => {
+    await openApp(page);
+    const file = legacyFile(testInfo);
+    await page.setInputFiles(S.projectInput, file);
+    await page.locator(S.confirmOk).click();
+    const row = page.locator(S.relinkRow);
+    await expect(row).toHaveCount(1);
+
+    await page.setInputFiles(S.relinkInput, STEADY); // 이름도 길이(12초)도 다르다
+    await expect(row).toHaveAttribute("data-state", "different");
+    await expect(row).toContainText("다른 파일로 보입니다(길이 0:08 / 0:12)");
+    await expect(page.locator(S.relinkConfirm)).toHaveCount(0);
+
+    await page.locator(S.relinkClose).click();
+    await expect(page.locator(S.relinkDialog)).toBeHidden();
+    await expect(page.locator(S.toast).filter({ hasText: "다시 연결했습니다" })).toHaveCount(0); // 연결한 것이 없으면 말하지 않는다
+
+    // 닫은 뒤에도 파일 메뉴(맨 아래 항목)에서 다시 연다.
+    await page.locator(S.fileMenuTrigger).click();
+    await page.locator(`${S.fileMenuPanel} [role="menuitem"]`).last().click();
+    await expect(page.locator(S.relinkDialog)).toBeVisible();
+    await expect(page.locator(S.relinkRow)).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(S.relinkDialog)).toBeHidden();
+    fs.rmSync(file, { force: true });
+  });
+
+  test("해시를 아는 빠진 음원은 같은 파일을 고르면 확인 없이 연결하고, 다른 이름의 파일도 내용이 같으면 연결한다", async ({ page }, testInfo) => {
+    await openApp(page);
+    await upload(page);
+    const saved = await saveAdproj(page, testInfo);
+    const stripped = withoutAudio(saved, testInfo);
+
+    await page.setInputFiles(S.projectInput, stripped);
+    await page.locator(S.confirmOk).click();
+    await expect(page.locator(S.relinkDialog)).toBeVisible();
+    await expect(page.locator(S.status)).toContainText("음원 1개가 파일에 포함되지 않았습니다");
+    const row = page.locator(S.relinkRow);
+    await expect(row).toHaveCount(1);
+
+    // 이름이 다른 사본: 내용(해시)이 같으므로 확인 없이 연결된다.
+    const renamed = path.join(os.tmpdir(), `ad2-p42-copy-${testInfo.workerIndex}-${Date.now()}.wav`);
+    fs.copyFileSync(WAV, renamed);
+    await page.setInputFiles(S.relinkInput, renamed);
+    await expect(row).toHaveAttribute("data-state", "linked");
+    await expect(row).toContainText("같은 파일입니다. 연결했습니다.");
+    await expect(page.locator(S.relinkConfirm)).toHaveCount(0);
+    await page.locator(S.relinkClose).click();
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    expect(await loudPeak(page)).toBeGreaterThan(0.25);
+    for (const f of [saved, stripped, renamed]) fs.rmSync(f, { force: true });
+  });
+
+  test("평소에 같은 파일을 다시 올리면 새 클립을 만들지 않고 빠진 음원에 다시 연결하고, 이름만 같은 다른 파일은 새 클립이 된다", async ({ page }, testInfo) => {
+    await openApp(page);
+    await upload(page);
+    const saved = await saveAdproj(page, testInfo);
+    const stripped = withoutAudio(saved, testInfo);
+    await page.setInputFiles(S.projectInput, stripped);
+    await page.locator(S.confirmOk).click();
+    await expect(page.locator(S.relinkDialog)).toBeVisible();
+    await page.locator(S.relinkClose).click(); // 대화상자를 쓰지 않고 닫는다
+    await expect(page.locator(S.clip)).toHaveCount(1);
+
+    await page.setInputFiles(S.upload, WAV); // 같은 파일 → 기존 클립에 다시 연결
+    await expect(page.locator(S.toast).filter({ hasText: "기존 클립 1개에 다시 연결했습니다" })).toBeVisible();
+    await expect(page.locator(S.clip)).toHaveCount(1); // 새 클립이 생기지 않았다
+    await expect(page.locator(S.trackHeader)).toHaveCount(1);
+    expect(await loudPeak(page)).toBeGreaterThan(0.25);
+
+    // 이미 연결된 뒤에는 같은 파일도 평소처럼 새 클립이 된다.
+    await page.setInputFiles(S.upload, WAV);
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    for (const f of [saved, stripped]) fs.rmSync(f, { force: true });
+  });
+
+  test("11월 형식(JSON) 파일을 열어 다시 저장하면 .adproj가 되고 음원 해시가 채워진다", async ({ page }, testInfo) => {
+    await openApp(page);
+    const wavBytes = fs.readFileSync(WAV);
+    const file = path.join(os.tmpdir(), `ad2-p42-v1-${testInfo.workerIndex}-${Date.now()}.json`);
+    fs.writeFileSync(file, JSON.stringify({
+      format: "accompany-designer-project", version: 1,
+      project: {
+        id: "p42-v1", name: "옛 프로젝트", bpm: 100, sampleRate: 44100,
+        tracks: [{ id: "t1", name: "트랙 1", volume: 0.86, pan: 0, muted: false, solo: false,
+          clips: [{ id: "c1", audioBufferId: "a1", trackId: "t1", name: "음원", startTime: 0, offset: 0, duration: 8, sourceBpm: 100, stretchMode: "none", gain: 1, fadeIn: 0, fadeOut: 0 }] }],
+        audioAssets: { a1: { id: "a1", fileName: "quiet-loud-8s.wav", duration: 8, sampleRate: 44100, channels: 2, mimeType: "audio/wav" } },
+        timeMarkers: [],
+      },
+      audio: { a1: `data:audio/wav;base64,${wavBytes.toString("base64")}` },
+    }));
+    await page.setInputFiles(S.projectInput, file);
+    await page.locator(S.confirmOk).click();
+    await expect(page.locator(S.status)).toContainText("프로젝트와 음원을 불러왔습니다");
+    await expect(page.locator(S.relinkDialog)).toBeHidden();
+
+    const saved = await saveAdproj(page, testInfo, "from-v1");
+    const entries = unzipSync(new Uint8Array(fs.readFileSync(saved)));
+    const hash = createHash("sha256").update(wavBytes).digest("hex");
+    expect(Object.keys(entries).sort()).toEqual(["project.json", `audio/${hash}.wav`].sort());
+    expect(JSON.parse(strFromBytes(entries["project.json"])).doc.assets.a1.hash).toBe(hash);
+    for (const f of [file, saved]) fs.rmSync(f, { force: true });
   });
 });

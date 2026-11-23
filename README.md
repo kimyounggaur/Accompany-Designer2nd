@@ -19,7 +19,8 @@
 ## 저장 방식
 
 - **자동 저장**: 편집이 멈추면 1.2초 뒤(탭을 숨기거나 떠날 때는 바로) 브라우저(IndexedDB)에 음원까지 함께 저장하고, 새로고침하면 복구합니다. 같은 음원은 한 번만 저장하고, 최근 프로젝트 5개를 남깁니다. 상태 줄 오른쪽에 "자동 저장됨 02:41"처럼 보이고, 저장하지 못하면 [프로젝트 파일로 저장] 단추가 나옵니다. 브라우저 데이터를 지우면 함께 사라지니 중요한 작업은 프로젝트 파일로도 보관하세요.
-- **프로젝트 파일**: 상단의 저장·불러오기로 음원이 담긴 파일을 내보내고 불러옵니다. 다른 기기로 옮기거나 백업할 때 씁니다. 지금은 JSON 한 파일(`{ format: "accompany-designer-project", schemaVersion: 2, doc, audio }`)이고, 새 형식 `.adproj`(zip)는 [설계서](docs/refactoring-design.md) P4-2에서 도입합니다. 6월 파일과 11월 파일도 그대로 열립니다. 불러올 때는 검사기 하나(`domain/project/parseProject.ts`)가 값의 자료형과 범위를 보고, 범위를 벗어난 값은 가까운 값으로 고친 뒤 "값 N개를 허용 범위로 고쳤습니다"라고 알려 줍니다.
+- **프로젝트 파일**: 상단의 저장·불러오기로 음원이 담긴 파일(`.adproj`)을 내보내고 불러옵니다. 다른 기기로 옮기거나 백업할 때 씁니다. `.adproj`는 압축하지 않은 zip이라 음원 크기가 거의 그대로입니다(옛 JSON은 음원을 base64로 넣어 약 1.33배였음): `project.json`(`{ format: "accompany-designer-project", schemaVersion: 2, doc }`) 한 개와 `audio/<SHA-256><확장자>` 음원 파일들이 들어 있고, 같은 내용의 음원은 한 번만 담습니다. 다른 프로그램의 zip 풀기로도 열어 볼 수 있습니다. 불러올 때는 첫 4바이트로 zip(`PK\x03\x04`)인지 옛 JSON(`{`)인지 가려, 6월 파일·11월 파일·임시 v2 JSON도 그대로 엽니다.
+- **음원 다시 연결**: 파일에 음원이 빠져 있거나(옛 6월 파일 등) 자동 저장에 음원이 없으면, 열 때 "음원 다시 연결" 창이 뜹니다. 빠진 음원마다 이름·길이·쓰는 클립 수가 나오고 [파일 찾기]로 고릅니다. 내용(해시)이 같으면 바로 연결하고, 해시는 달라도 이름이 같고 길이 차이가 0.25초 이내면 "이 파일로 연결할까요?"로 한 번 묻고, 그 밖에는 "다른 파일로 보입니다(길이 3:12 / 3:40)"라며 연결하지 않습니다. 창은 파일 메뉴의 "음원 다시 연결"로 언제든 다시 엽니다. 평소처럼 같은 파일을 올려도 새 클립을 만들지 않고 빠진 음원에 "기존 클립 3개에 다시 연결했습니다"로 이어 줍니다. 불러올 때는 검사기 하나(`domain/project/parseProject.ts`)가 값의 자료형과 범위를 보고, 범위를 벗어난 값은 가까운 값으로 고친 뒤 "값 N개를 허용 범위로 고쳤습니다"라고 알려 줍니다.
 
 ## 지원 브라우저
 
@@ -51,14 +52,14 @@ npm run test:e2e     # 회귀 테스트 (Playwright, 처음에는 npx playwright
 ```text
 src/
   App.tsx, main.tsx   화면 조립과 진입점
-  app/                화면 틀(AppShell), 사용자 동작(actions), 앱 시작(bootstrap), 엔진 연결(engineSync), 녹음 연결(recording · recordingHost: 어느 트랙에 놓을지·저장·안내)
-  ui/                 화면 부품: 안내·확인창·자동 저장 표시(feedback), 상단 바, 인스펙터
+  app/                화면 틀(AppShell), 사용자 동작(actions), 앱 시작(bootstrap), 엔진 연결(engineSync), 녹음 연결(recording · recordingHost: 어느 트랙에 놓을지·저장·안내), 파일 올리기(importing: 올린 음원 풀기·같은 파일이면 다시 연결), 프로젝트 파일 저장·열기(projectFile), 음원 다시 연결(relinking), 자동 저장 재촉(autosaveControl)
+  ui/                 화면 부품: 안내·확인창·자동 저장 표시(feedback), 상단 바, 인스펙터, 대화상자(dialogs: 음원 다시 연결 RelinkDialog)
   components/         화면 부품(타임라인 등, 순차적으로 ui/로 이동 중)
   i18n/               화면 문구(ko.ts)
-  services/           안내(notify)·오류 변환(errors)·확인창, 저장(persistence/: 자동 저장 · 프로젝트 파일 읽기·쓰기 · 음원 원본 기억), 파형 점 보관소(peaksCache)
+  services/           안내(notify)·오류 변환(errors)·확인창, 저장(persistence/: 자동 저장 · `.adproj` zip 읽기·쓰기(projectFile) · 음원 원본 기억 · 음원 해시), 올린 음원 읽기와 빠진 음원에 붙이기(importer), 파형 점 보관소(peaksCache)
   audio/              소리 엔진: 옛 엔진(audioEngine.ts) · 새 엔진(engine/AudioEngine.ts: 재생 시계 Transport · 예약기 Scheduler · 클립 재생 단위 ClipVoice · 트랙 경로 TrackStrip · 마스터 길 MasterBus(볼륨 → 선읽기 리미터 → 분석기 → 스피커) · 모니터 길 MonitorBus(메트로놈·입력 모니터, 믹스에 안 섞임)) · 리미터(worklets/limiter.worklet.ts, 계산은 limiterCore.ts) · 이펙트 부품(effects/: 공통 약속 EffectNode · EQ · 컴프레서 · 딜레이 · 리버브 · 같은 설정은 같은 잔향 impulse · 꼬리 길이 tail) · 엔진 고르기(currentEngine.ts) · 바뀐 트랙만 고르는 계획(engine/syncPlan.ts) · 예약 타이머(workers/tick.worker.ts) · 녹음(recording/RecordingController.ts: 대기 → 준비 → 카운트인 → 녹음 → 마무리 상태 기계 · recording/Recorder.ts: 마이크 받기 · worklets/recorder.worklet.ts: 4,096 샘플씩 조각과 파형 최대값을 보냄, 계산은 recorderCore.ts) · 메트로놈·카운트인(Metronome.ts: 오디오 시계로 미리 예약)
-  domain/             화면·소리 없이 시험할 수 있는 순수 계산(timeline/clipMath.ts: 클립을 어떻게 재생할지 정하는 planVoice · master/volume.ts: 마스터 볼륨 범위·dB 변환 · recording/latency.ts: 녹음 지연 보정 · types.ts: 문서 형식 v2의 자료형 · project/: 문서 검사기 parseProject·parsePreset, 옛 형식 이전 migrations, 기본값 defaults, 값의 범위 ranges)
-  store/, state/      상태: 프로젝트 문서(state/projectStore.ts, immer로 불변 갱신) · 편집 함수(state/commands/) · 이력(state/history.ts) / 화면 상태(store/useDawStore.ts, 문서를 거울처럼 비춤) / 녹음 상태(state/recordingStore.ts: 진행·임시 파형·설정, 문서에는 안 들어감) / 안내·확인창·자동 저장 상태
+  domain/             화면·소리 없이 시험할 수 있는 순수 계산(timeline/clipMath.ts: 클립을 어떻게 재생할지 정하는 planVoice · master/volume.ts: 마스터 볼륨 범위·dB 변환 · recording/latency.ts: 녹음 지연 보정 · types.ts: 문서 형식 v2의 자료형 · project/: 문서 검사기 parseProject·parsePreset, 옛 형식 이전 migrations, 기본값 defaults, 값의 범위 ranges, 빠진 음원 찾기·같은 파일 판정 relink)
+  store/, state/      상태: 프로젝트 문서(state/projectStore.ts, immer로 불변 갱신) · 편집 함수(state/commands/) · 이력(state/history.ts) / 화면 상태(store/useDawStore.ts, 문서를 거울처럼 비춤) / 녹음 상태(state/recordingStore.ts: 진행·임시 파형·설정, 문서에는 안 들어감) / 안내·확인창·자동 저장 상태 / 다시 연결 창 상태(state/relinkStore.ts)
   styles/             화면 틀·안내·글자 가독성 CSS
   utils/              계산·인코딩 함수
 tests/                단위 테스트 (node:test)

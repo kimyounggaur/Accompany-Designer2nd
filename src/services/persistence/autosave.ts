@@ -286,6 +286,8 @@ export interface AutosaveHost {
 export interface AutosaveHandle {
   /** 복구가 끝났으니 이제부터 저장한다. `dirty`는 복구를 기다리는 사이 사용자가 문서를 바꿨다는 뜻이다. */
   markReady: (options?: { dirty?: boolean }) => void;
+  /** 문서 참조는 그대로인데 저장할 내용이 늘었다(음원을 다시 연결해 데이터가 생겼다). 저장을 예약한다. */
+  changed: () => void;
   flush: () => Promise<void>;
   hasUnsaved: () => boolean;
   dispose: () => void;
@@ -343,6 +345,7 @@ export function startAutosave(host: AutosaveHost): AutosaveHandle {
       scheduler.markReady();
       if (options?.dirty) scheduler.changed();
     },
+    changed: () => scheduler.changed(),
     flush: () => scheduler.flush(),
     hasUnsaved: () => scheduler.hasUnsaved(),
     dispose: () => {

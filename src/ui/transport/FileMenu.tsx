@@ -1,5 +1,6 @@
-import { ChevronDown, Download, FolderOpen, Save, Upload } from "lucide-react";
+import { ChevronDown, Download, FolderOpen, Link2, Save, Upload } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { ko } from "../../i18n/ko";
 import { useDismiss } from "../useDismiss";
 
 interface FileMenuProps {
@@ -7,10 +8,11 @@ interface FileMenuProps {
   onLoadProject: (file: File) => void;
   onSaveProject: () => void;
   onExportMix: () => void;
+  onRelink: () => void;
 }
 
-/** 오디오 업로드 · 프로젝트 불러오기 · 저장 · 믹스 WAV 내보내기를 한 메뉴로 모은다. */
-export function FileMenu({ onFiles, onLoadProject, onSaveProject, onExportMix }: FileMenuProps) {
+/** 오디오 업로드 · 프로젝트 불러오기 · 저장 · 믹스 WAV 내보내기 · 음원 다시 연결을 한 메뉴로 모은다. */
+export function FileMenu({ onFiles, onLoadProject, onSaveProject, onExportMix, onRelink }: FileMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -67,7 +69,7 @@ export function FileMenu({ onFiles, onLoadProject, onSaveProject, onExportMix }:
       />
       <input
         ref={projectInputRef}
-        accept="application/json,.json"
+        accept=".adproj,application/zip,application/json,.json"
         data-testid="project-input"
         hidden
         onChange={(event) => {
@@ -117,6 +119,10 @@ export function FileMenu({ onFiles, onLoadProject, onSaveProject, onExportMix }:
           <button role="menuitem" type="button" onClick={() => choose(onExportMix)} aria-label="완성 믹스 WAV 내보내기">
             <Download size={16} />
             <span>믹스 WAV 내보내기</span>
+          </button>
+          <button role="menuitem" type="button" onClick={() => choose(onRelink)}>
+            <Link2 size={16} />
+            <span>{ko.relink.menuItem}</span>
           </button>
         </div>
       )}

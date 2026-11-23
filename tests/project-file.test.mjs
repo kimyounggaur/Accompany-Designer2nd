@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { createEmptyDoc } from "../src/domain/project/defaults.ts";
 import { FORMAT, SCHEMA_VERSION } from "../src/domain/project/serialize.ts";
 import { forgetAllAudio, hasRememberedAudio, recallAudio, rememberAudio } from "../src/services/persistence/audioBlobs.ts";
-import { exportProject, projectFailure, projectFromJson, readProjectFile, restoreAudio } from "../src/services/persistence/projectFile.ts";
+import { exportProjectFile, projectFailure, projectFromJson, readProjectFile, restoreAudio } from "../src/services/persistence/projectFile.ts";
+import { sha256Hex } from "../src/services/persistence/assetHash.ts";
 import { clearPeaks, getPeaks, setPeaks } from "../src/services/peaksCache.ts";
 import { ko } from "../src/i18n/ko.ts";
 
@@ -86,15 +87,17 @@ test("내보낸 프로젝트를 다시 읽으면 문서와 음원이 그대로 �
   const doc = createEmptyDoc();
   doc.assets.a1 = { id: "a1", fileName: "녹음 001.wav", duration: 2, sampleRate: 44100, channels: 1, source: "recording", mimeType: "audio/wav", byteSize: 3 };
   doc.assets.a2 = { id: "a2", fileName: "데이터 없는 음원.wav", duration: 1, sampleRate: 48000, channels: 2, source: "upload" };
-  const blob = await exportProject(doc, (id) => (id === "a1" ? new Blob([new Uint8Array([7, 8, 9])], { type: "audio/wav" }) : undefined));
-  const json = JSON.parse(await blob.text());
-  assert.equal(json.format, FORMAT);
-  assert.equal(json.schemaVersion, SCHEMA_VERSION);
-  assert.deepEqual(Object.keys(json.audio), ["a1"], "데이터를 기억하는 음원만 담긴다");
+  const bytes = new Blob([new Uint8Array([7, 8, 9])], { type: "audio/wav" });
+  const blob = await exportProjectFile(doc, (id) => (id === "a1" ? bytes : undefined));
+  assert.equal(blob.type, "application/zip");
 
   const loaded = await readProjectFile(blob);
-  assert.deepEqual(loaded.doc, doc);
+  // 담은 음원의 해시는 데이터에서 다시 계산해 문서에 적힌다. 데이터가 없는 음원은 그대로다.
+  const expected = structuredClone(doc);
+  expected.assets.a1.hash = await sha256Hex(bytes);
+  assert.deepEqual(loaded.doc, expected);
   assert.deepEqual(loaded.issues, []);
+  assert.deepEqual(Object.keys(loaded.audio), ["a1"], "데이터를 기억하는 음원만 담긴다");
   assert.deepEqual([...new Uint8Array(await loaded.audio.a1.arrayBuffer())], [7, 8, 9]);
   assert.equal(loaded.audio.a1.type, "audio/wav");
 });
@@ -113,7 +116,11 @@ test("restoreAudio: 풀기가 끝나기 전에는 아무것도 바꾸지 않고,
   const committed = [];
   const restored = await restoreAudio({ doc, audio: blobs }, async (blob, asset) => ({ commit: () => committed.push(asset.id) }));
   assert.equal(restored.missing, 1, "a3은 데이터가 없다");
-  assert.equal(restored.doc, doc);
+  // 해시가 없던 음원은 데이터에서 계산해 돌려주는 문서에 채운다(원래 문서는 건드리지 않는다).
+  assert.equal(restored.doc.assets.a1.hash, await sha256Hex(blobs.a1));
+  assert.equal(restored.doc.assets.a2.hash, await sha256Hex(blobs.a2));
+  assert.equal(restored.doc.assets.a3.hash, undefined);
+  assert.equal(doc.assets.a1.hash, undefined);
   assert.deepEqual(committed, []);
   assert.equal(hasRememberedAudio("old"), true, "commit 전에는 지금 것을 그대로 둔다");
   assert.deepEqual(getPeaks("old"), [0.5]);
