@@ -8,6 +8,8 @@ import { loadAutosave, startAutosave } from "../services/persistence/autosave";
 import { restoreAudio } from "../services/persistence/projectFile";
 import { readLatencyOffsetMs, writeLatencyOffsetMs } from "../services/recordingSettings";
 import { useAutosaveStore } from "../state/autosaveStore";
+import { installGestureGuards } from "../state/gestureGuards";
+import { history } from "../state/history";
 import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
 import { useDawStore } from "../store/useDawStore";
 import { registerAutosave } from "./autosaveControl";
@@ -35,6 +37,9 @@ export function startApp(): () => void {
   const offLatencySync = useRecordingStore.subscribe((state, previous) => {
     if (state.latencyOffsetMs !== previous.latencyOffsetMs) writeLatencyOffsetMs(state.latencyOffsetMs);
   });
+
+  // 끌기·입력 묶음(실행 취소 한 단계)이 뗌 신호를 놓쳐 열린 채로 남지 않게, 문서 전체의 뗌·창 blur에서도 닫는다.
+  const offGestureGuards = installGestureGuards(history);
 
   // 문서가 바뀌면 재생 중인 소리 경로를 바뀐 부분만 맞춘다(예전 App.tsx의 schedulingSignature 효과를 대체).
   const offEngineSync = connectEngineSync(audioEngine);
@@ -109,6 +114,7 @@ export function startApp(): () => void {
     cancelled = true;
     registerAutosave(undefined);
     offLatencySync();
+    offGestureGuards();
     offEngineSync();
     autosave.dispose();
   };

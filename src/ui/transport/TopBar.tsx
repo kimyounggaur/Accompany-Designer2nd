@@ -1,4 +1,5 @@
 import { useDawStore } from "../../store/useDawStore";
+import { useTextGesture } from "../inspector/useHistoryGesture";
 import { useMediaQuery } from "../useMediaQuery";
 import { FileMenu } from "./FileMenu";
 import { RecordOptions } from "./RecordOptions";
@@ -40,8 +41,7 @@ export function TopBar({
   const narrow = useMediaQuery("(max-width: 1279px)");
   const projectName = useDawStore((state) => state.name);
   const setProjectName = useDawStore((state) => state.setProjectName);
-  const beginHistoryGroup = useDawStore((state) => state.beginHistoryGroup);
-  const endHistoryGroup = useDawStore((state) => state.endHistoryGroup);
+  const nameGesture = useTextGesture("project:name");
 
   const layout = wide ? "wide" : narrow ? "narrow" : "medium";
 
@@ -52,8 +52,7 @@ export function TopBar({
           <input
             aria-label="프로젝트 이름"
             value={projectName}
-            onFocus={beginHistoryGroup}
-            onBlur={endHistoryGroup}
+            {...nameGesture}
             onChange={(event) => setProjectName(event.target.value)}
           />
         </div>

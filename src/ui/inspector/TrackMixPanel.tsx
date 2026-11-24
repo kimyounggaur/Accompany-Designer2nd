@@ -27,7 +27,7 @@ function formatPan(value: number): string {
 /** 트랙 믹스 칸: 선택한 트랙의 음소거·솔로와 볼륨·팬 노브 */
 export function TrackMixPanel({ track }: { track: Track }) {
   const updateTrack = useDawStore((state) => state.updateTrack);
-  const gesture = useHistoryGesture();
+  const gesture = useHistoryGesture(`track:${track.id}:mix`);
 
   return (
     <PanelSection id="trax" title="트랙 믹스" className="trax-panel">

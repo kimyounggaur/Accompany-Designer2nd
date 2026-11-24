@@ -68,7 +68,7 @@ function DecayReadout({ decay, onCommit }: { decay: number; onCommit: (input: nu
 }
 
 export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) {
-  const gesture = useHistoryGesture();
+  const gesture = useHistoryGesture("effect:reverb");
   const wetBlend = reverb.wet / Math.max(0.01, reverb.dry + reverb.wet);
   const defaults = DEFAULT_REVERB_SETTINGS;
 

@@ -27,7 +27,7 @@ const WET_ENTRY = scaledEntry("효과음 딜레이 값(%)", 100, 0, 100, 1);
 // ── Panel ────────────────────────────────────────────────────────────────────
 export function DelayPluginPanel({ bpm, delay, onChange }: DelayPluginPanelProps) {
   const effectiveTimeMs = getDelayTimeMs(delay, bpm);
-  const gesture = useHistoryGesture();
+  const gesture = useHistoryGesture("effect:delay");
 
   return (
     <div className={`dly-rack ${delay.enabled ? "on" : ""}`}>

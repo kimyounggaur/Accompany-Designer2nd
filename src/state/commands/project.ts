@@ -7,13 +7,15 @@ import { history, type EditOptions } from "../history";
 import { getDoc } from "../projectStore";
 import { baseOf } from "./locate";
 
+/** 템포를 바꾼다(20 ~ 300). 이어서 고치는 편집(단추 연타 등)은 800ms 안에서 한 단계로 묶인다. */
 export function setBpm(bpm: number, options?: EditOptions): boolean {
   const value = clamp(Number(bpm) || 120, 20, 300);
-  return history.edit("템포 변경", (doc) => { doc.bpm = value; }, options);
+  return history.edit("템포 변경", (doc) => { doc.bpm = value; }, { key: "project:bpm", ...options });
 }
 
+/** 프로젝트 이름을 바꾼다. 글자를 이어서 치는 동안은 한 단계로 묶인다(초점 묶음이 없는 곳에서도). */
 export function setProjectName(name: string, options?: EditOptions): boolean {
-  return history.edit("프로젝트 이름 변경", (doc) => { doc.name = name; }, options);
+  return history.edit("프로젝트 이름 변경", (doc) => { doc.name = name; }, { key: "project:name", ...options });
 }
 
 /**

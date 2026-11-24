@@ -50,7 +50,7 @@ function useLimiterReduction(active: boolean): number {
 export function MasterPanel() {
   const volumeDb = useProject((state) => state.doc.master?.volumeDb ?? MASTER_VOLUME_DEFAULT_DB);
   const setMasterVolumeDb = useDawStore((state) => state.setMasterVolumeDb);
-  const gesture = useHistoryGesture();
+  const gesture = useHistoryGesture("master");
   const capturing = useRecordingStore((state) => state.status === "recording");
   const active = useDawStore((state) => state.isPlaying) || capturing;
   const reduction = useLimiterReduction(active);

@@ -270,35 +270,42 @@ test("connectEngineSync: 엔진이 오류를 내도 문서 편집은 반영되�
 
 // ───── 이력 ─────
 
-test("실행 취소·다시 실행은 바꾸기 전 문서 참조를 그대로 돌려놓는다", () => {
+test("실행 취소·다시 실행은 바꾸기 전·후와 같은 문서를 돌려놓고, 바뀌지 않은 부분은 그대로 공유한다", () => {
+  resetStore(bigDoc());
   const initial = getDoc();
-  commands.setProjectName("하나");
+  commands.updateTrack(initial.tracks[7].id, { volume: 0.3 });
   const one = getDoc();
-  commands.setProjectName("둘");
+  commands.addTrack();
   const two = getDoc();
   assert.equal(history.depth().undo, 2);
+
   assert.equal(history.undo(), true);
-  assert.equal(getDoc(), one);
+  assert.deepEqual(getDoc(), one);
   assert.equal(history.undo(), true);
-  assert.equal(getDoc(), initial);
+  assert.deepEqual(getDoc(), initial);
   assert.equal(history.undo(), false);
+  // 패치로 되돌려도 건드리지 않은 트랙·클립은 처음 문서와 같은 참조다(통째로 복사하지 않는다)
+  assert.equal(getDoc().tracks[3], initial.tracks[3]);
+  assert.equal(getDoc().tracks[7].clips, initial.tracks[7].clips);
+
   assert.equal(history.redo(), true);
-  assert.equal(getDoc(), one);
+  assert.deepEqual(getDoc(), one);
   assert.equal(history.redo(), true);
-  assert.equal(getDoc(), two);
+  assert.deepEqual(getDoc(), two);
   assert.equal(history.redo(), false);
 });
 
-test("새 편집을 하면 다시 실행 목록이 비워진다. 이력은 100단계까지", () => {
-  commands.setProjectName("a");
-  commands.setProjectName("b");
+test("새 편집을 하면 다시 실행 목록이 비워진다. 이력은 200단계까지", () => {
+  commands.addTrack();
+  commands.addTrack();
   history.undo();
   assert.equal(history.canRedo(), true);
-  commands.setProjectName("c");
+  commands.addTrack();
   assert.equal(history.canRedo(), false);
 
   history.clear();
-  for (let i = 0; i < HISTORY_LIMIT + 25; i++) commands.setProjectName(`이름 ${i}`);
+  assert.equal(HISTORY_LIMIT, 200);
+  for (let i = 0; i < HISTORY_LIMIT + 25; i++) commands.addTrack();
   assert.equal(history.depth().undo, HISTORY_LIMIT);
 });
 
@@ -312,7 +319,7 @@ test("조작 묶음(beginGesture~endGesture)은 한 단계, record:false는 이�
   history.endGesture();
   assert.equal(history.depth().undo, 1);
   history.undo();
-  assert.equal(getDoc(), initial);
+  assert.deepEqual(getDoc(), initial);
 
   history.clear();
   commands.updateTrack(trackId, { volume: 0.7 }, { record: false });
