@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { audioEngine } from "../audio/currentEngine";
 import { ko } from "../i18n/ko";
+import { onFrame } from "../services/frameLoop";
 import { useRecordingStore } from "../state/recordingStore";
 import { useDawStore } from "../store/useDawStore";
 
@@ -136,9 +137,6 @@ export function LevelMeterRack() {
       setReadings({});
       return;
     }
-    let rafId = 0;
-    let disposed = false;
-
     const tick = (time: number) => {
       const meterIds = ["master", ...tracks.map((track) => track.id)];
       const nextReadings: Record<string, MeterReading> = {};
@@ -169,17 +167,10 @@ export function LevelMeterRack() {
         setReadings(nextReadings);
         lastCommitRef.current = time;
       }
-
-      if (!disposed) {
-        rafId = requestAnimationFrame(tick);
-      }
     };
 
-    rafId = requestAnimationFrame(tick);
-    return () => {
-      disposed = true;
-      cancelAnimationFrame(rafId);
-    };
+    // 화면 갱신 루프는 앱 전체에서 하나다(services/frameLoop.ts). 재생·녹음 중에만 돈다.
+    return onFrame(tick);
   }, [trackSignature, active]);
 
   return (

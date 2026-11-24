@@ -872,6 +872,8 @@ button {
 .playhead {
   position: absolute;
   top: 0;
+  left: 0; /* 가로 자리는 style.transform(translateX)으로 정한다 — PlayheadOverlay */
+  will-change: transform;
   z-index: 3;
   width: 2px;
   background: var(--red);

@@ -249,7 +249,7 @@ test("connectEngineSync: 문서가 바뀔 때마다 (새 문서, 이전 문서)�
   assert.equal(calls[1][1], calls[0][0]);
   assert.equal(calls[1][0], getDoc());
   // 화면 상태(선택·재생 위치)는 문서가 아니므로 부르지 않는다.
-  useDawStore.getState().setPlayhead(3);
+  useDawStore.getState().setCursor(3);
   useDawStore.getState().selectTrack(getDoc().tracks[0].id);
   assert.equal(calls.length, 2);
   off();
@@ -443,11 +443,11 @@ test("프로젝트 불러오기·새 프로젝트는 문서를 통째로 바꾸�
   const store = useDawStore.getState;
   const initialId = getDoc().id;
   const imported = bigDoc(2, 2);
-  store().setPlayhead(9);
+  store().setCursor(9);
   store().importProject({ ...imported, bpm: 96 }); // 받는 문서는 이미 검사기를 거친 것이다(보정·기본값 채우기는 project-parse.test.mjs)
   assert.equal(getDoc().id, "big");
   assert.equal(store().bpm, 96);
-  assert.equal(store().playhead, 0);
+  assert.equal(store().cursor, 0);
   assert.equal(store().tracks.length, 2);
   assert.equal(store().assets, getDoc().assets);
 

@@ -36,7 +36,8 @@ interface DawStore extends ProjectDoc {
   selectedClipId?: string;
   selectedClipIds: string[];
   isPlaying: boolean;
-  playhead: number;
+  /** 편집 커서 = 재생을 시작할 자리(초). 정지·일시정지·이동할 때만 바뀌고 재생 중에는 프레임마다 바뀌지 않는다. 지금 흐르는 위치는 `app/playhead.ts`의 `readPlayhead()`로 읽는다. */
+  cursor: number;
   zoomPxPerSecond: number;
   /** 타임라인이 화면에 보이는 가로 폭(px). 확대 범위의 아래쪽 끝(전체 보기)을 정하는 데 쓴다. 아직 모르면 0. */
   timelineViewportWidth: number;
@@ -52,7 +53,7 @@ interface DawStore extends ProjectDoc {
   setBpm: (bpm: number) => void;
   setMasterVolumeDb: (volumeDb: number) => void;
   setProjectName: (name: string) => void;
-  setPlayhead: (playhead: number) => void;
+  setCursor: (cursor: number) => void;
   setIsPlaying: (isPlaying: boolean) => void;
   setZoom: (zoomPxPerSecond: number) => void;
   setTimelineViewportWidth: (width: number) => void;
@@ -155,7 +156,7 @@ function freshViewState() {
     selectedClipId: undefined,
     selectedClipIds: [] as string[],
     isPlaying: false,
-    playhead: 0,
+    cursor: 0,
     snapEnabled: true,
     playlistTool: "move" as PlaylistTool,
     playlistSnap: "line" as PlaylistSnap,
@@ -171,7 +172,7 @@ export const useDawStore = create<DawStore>((set, get) => ({
   selectedClipId: undefined,
   selectedClipIds: [],
   isPlaying: false,
-  playhead: 0,
+  cursor: 0,
   zoomPxPerSecond: 96,
   timelineViewportWidth: 0,
   snapEnabled: true,
@@ -203,7 +204,7 @@ export const useDawStore = create<DawStore>((set, get) => ({
   setProjectName: (name) => {
     commands.setProjectName(name);
   },
-  setPlayhead: (playhead) => set({ playhead: Math.max(0, playhead) }),
+  setCursor: (cursor) => set({ cursor: Math.max(0, cursor) }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setZoom: (zoomPxPerSecond) =>
     set((state) => ({
@@ -397,7 +398,7 @@ export const useDawStore = create<DawStore>((set, get) => ({
     );
     const span = Math.max(0.25, end - start);
     set({
-      playhead: start,
+      cursor: start,
       zoomPxPerSecond: clamp(760 / span, 40, 320),
     });
     return ok();
@@ -410,7 +411,7 @@ export const useDawStore = create<DawStore>((set, get) => ({
     return ok({ count: selected.length });
   },
   addTimeMarker: (time) => {
-    commands.addTimeMarker(time ?? get().playhead);
+    commands.addTimeMarker(time ?? get().cursor);
   },
   clearTimeMarkers: () => {
     commands.clearTimeMarkers();

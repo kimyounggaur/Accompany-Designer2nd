@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { onFrame } from "../services/frameLoop";
 import { useDawStore } from "../store/useDawStore";
 import { useRecordingStore } from "../state/recordingStore";
 
@@ -29,7 +30,6 @@ interface Props {
 
 export function SpectrumAnalyzer({ analyser }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef = useRef<number>(0);
   const barsRef = useRef<number[]>(new Array(FREQ_BANDS.length).fill(MIN_DB));
   const isPlaying = useDawStore((state) => state.isPlaying);
   const isRecording = useRecordingStore((state) => state.status === "recording");
@@ -145,14 +145,11 @@ export function SpectrumAnalyzer({ analyser }: Props) {
     observer.observe(canvas);
     if (!active) barsRef.current.fill(MIN_DB);
     resize();
-    const tick = () => {
-      draw();
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    if (active) rafRef.current = requestAnimationFrame(tick);
+    // 화면 갱신 루프는 앱 전체에서 하나다(services/frameLoop.ts). 재생·녹음 중에만 돈다.
+    const stop = active ? onFrame(draw) : undefined;
     return () => {
       observer.disconnect();
-      cancelAnimationFrame(rafRef.current);
+      stop?.();
     };
   }, [draw, active]);
 

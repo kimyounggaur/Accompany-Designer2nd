@@ -402,7 +402,7 @@ test("흐름: Ctrl+C·Ctrl+V는 앱 안 클립보드로 클립을 하나 더 만
 
   assert.equal(fire(key("KeyC", { ctrl: true })), true);
   assert.equal(status(), "클립 1개 복사됨");
-  useDawStore.getState().setPlayhead(10);
+  useDawStore.getState().setCursor(10);
   assert.equal(fire(key("KeyV", { ctrl: true })), true);
   assert.equal(status(), "클립 1개 붙여넣기 완료");
   assert.equal(clipCount(), 2, "클립 수 +1");

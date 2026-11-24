@@ -15,6 +15,7 @@ import { useDawStore } from "../store/useDawStore";
 import { registerAutosave } from "./autosaveControl";
 import { connectEngineSync } from "./engineSync";
 import { installKeyboard } from "./keyboard";
+import { installPlaybackLoop } from "./playbackLoop";
 import { cancelAllPeaks, ensurePeaksForAssets } from "./peaks";
 import { decodeStoredAudio, saveProjectFile } from "./projectFile";
 import { getProjectSnapshot } from "./projectSnapshot";
@@ -44,6 +45,9 @@ export function startApp(): () => void {
 
   // 키보드 단축키: 창 전체에서 키를 듣는 곳은 여기서 켜는 이 하나뿐이다(표는 services/shortcuts.ts, 연결은 app/keyboard.ts).
   const offKeyboard = installKeyboard();
+
+  // 화면 갱신 루프(재생선·시간 표시·미터·분석기가 함께 쓰는 하나)를 재생·녹음 중에만 켜고, 곡 끝에 닿으면 멈춘다.
+  const offPlaybackLoop = installPlaybackLoop();
 
   // 문서가 바뀌면 재생 중인 소리 경로를 바뀐 부분만 맞춘다(예전 App.tsx의 schedulingSignature 효과를 대체).
   const offEngineSync = connectEngineSync(audioEngine);
@@ -120,6 +124,7 @@ export function startApp(): () => void {
     offLatencySync();
     offGestureGuards();
     offKeyboard();
+    offPlaybackLoop();
     offEngineSync();
     autosave.dispose();
   };

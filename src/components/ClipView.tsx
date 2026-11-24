@@ -48,7 +48,7 @@ export function ClipView({
   const moveClip = useDawStore((state) => state.moveClip);
   const toggleClipMuted = useDawStore((state) => state.toggleClipMuted);
   const selectClip = useDawStore((state) => state.selectClip);
-  const setPlayhead = useDawStore((state) => state.setPlayhead);
+  const setCursor = useDawStore((state) => state.setCursor);
   const bpm = useDawStore((state) => state.bpm);
   const zoomPxPerSecond = useDawStore((state) => state.zoomPxPerSecond);
   const snapEnabled = useDawStore((state) => state.snapEnabled);
@@ -79,7 +79,7 @@ export function ClipView({
       clip.startTime + timelineDuration,
     );
 
-    setPlayhead(startAt);
+    setCursor(startAt);
     window.dispatchEvent(new CustomEvent("playlist-play-from", { detail: startAt }));
   }
 
