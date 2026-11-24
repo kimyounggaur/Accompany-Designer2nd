@@ -3,6 +3,7 @@
  * 그래서 단위 시험이 가짜 엔진·가짜 녹음기를 끼우고도 진짜 스토어와 문서 명령을 거쳐 "녹음 한 번 = 문서 변경 한 번"을 확인할 수 있다.
  */
 import type { RecordingEvent, RecordingHost } from "../audio/recording/RecordingController";
+import * as placement from "../domain/timeline/placement";
 import { ko } from "../i18n/ko";
 import { notify, notifyError } from "../services/notify";
 import * as commands from "../state/commands/index";
@@ -55,11 +56,15 @@ export const recordingHost: RecordingHost = {
   setPlaying: (playing) => useDawStore.getState().setIsPlaying(playing),
   setPlayhead: (position) => useDawStore.getState().setPlayhead(position),
   chooseTrack: () => {
-    const doc = getDoc();
-    const { armedTrackId } = useRecordingStore.getState();
-    const target = doc.tracks.find((track) => track.id === armedTrackId) ?? doc.tracks.find((track) => track.clips.length === 0);
-    if (target) return { trackId: target.id, created: false };
-    // 녹음 대기 트랙도 빈 트랙도 없으면 새 트랙에 녹음한다. 녹음을 취소하면 거두므로 이력에는 남기지 않는다.
+    // 녹음 대기 트랙 → 클립이 하나도 없는 첫 트랙 → 새 트랙(배치 규칙). 녹음은 끝나야 길이를 알므로 길이는 0으로 넘긴다.
+    const choice = placement.chooseTrack(getDoc(), {
+      purpose: "recording",
+      armedTrackId: useRecordingStore.getState().armedTrackId,
+      start: useDawStore.getState().playhead,
+      length: 0,
+    });
+    if ("trackId" in choice) return { trackId: choice.trackId, created: false };
+    // 새 트랙에 녹음한다. 녹음을 취소하면 거두므로 이력에는 남기지 않는다.
     return { trackId: commands.addTrack({ record: false }).id, created: true };
   },
   discardTrack: (trackId) => {

@@ -2469,7 +2469,14 @@ test.describe("P4-3 다단계 파형과 확대 범위", () => {
     await waitForWaveforms(page, 1);
     for (let i = 0; i < 62; i++) await page.keyboard.press("PageUp"); // 96 → 1,000(한 번에 16)
     await page.locator(S.timelineScroll).evaluate((el) => { el.scrollLeft = 5200; }); // 큰 소리 구간(5.2초~)
-    await expect.poll(async () => (await waveformStats(page))[0]?.drawn ?? 0, { timeout: 5000 }).toBeGreaterThan(200);
+    // 스크롤한 뒤 캔버스가 새 자리를 다시 그리기까지 잠깐 걸린다. 그 사이에 읽으면 스크롤하기 전(조용한 처음 구간)의 그림이 잡혀
+    // 칸 수는 넘지만 막대가 모두 중심선 위에 있다(CPU가 바쁠 때 가끔). 그래서 '칸이 그려졌다'에서 멈추지 않고, 확인하려는 모양이 나올 때까지 기다린다.
+    await expect
+      .poll(async () => {
+        const [first] = await waveformStats(page);
+        return first ? first.drawn > 200 && first.offCenter > 20 && first.tallest >= 20 : false;
+      }, { timeout: 5000 })
+      .toBe(true);
     const [stats] = await waveformStats(page);
     measuredP43("1,000px/초 파형", { 칸: stats.drawn, 중심선을_지나지_않는_막대: stats.offCenter, 가장_높은_막대: stats.tallest });
     expect(stats.offCenter).toBeGreaterThan(20);
@@ -2837,5 +2844,68 @@ test.describe("P4-4 템포 맞춤·BPM 감지·숫자 칸", () => {
     await expect(page.locator(S.masterVolumeValue)).toHaveText("-60.0 dB");
     await typeInto(master, "0");
     await expect(page.locator(S.masterVolumeValue)).toHaveText("0.0 dB");
+  });
+});
+
+const measuredP45 = (name: string, value: unknown) => console.log(`P4-5 측정 ${name}: ${JSON.stringify(value)}`);
+
+test.describe("P4-5 클립 배치 규칙", () => {
+  /** 숫자 칸에 값을 넣고 확정(Enter)한다 */
+  async function typeInto(field: Locator, value: string) {
+    await field.click();
+    await field.press("Control+a");
+    await field.pressSequentially(value);
+    await field.press("Enter");
+  }
+
+  /** 클립이 놓인 줄(트랙)을 가리키는 세로 위치: 같은 트랙의 클립은 같은 값이다 */
+  const rowOf = async (page: Page, index: number) => Math.round((await page.locator(S.clip).nth(index).boundingBox())!.y);
+
+  test("B8 올린 음원은 그 구간이 비어 있으면 선택한 트랙에, 겹치면 새 트랙에 놓인다 — 템포 맞춤으로 짧아진 클립은 줄어든 길이로 판단한다", async ({ page }) => {
+    await openApp(page);
+    await upload(page); // 8초 클립: 트랙 1의 0~8초
+    await expect(page.locator(S.trackHeader)).toHaveCount(1);
+
+    // 프로젝트 템포 240 · 원본 BPM 120 · 템포 맞춤 켜기 → 배속 2: 클립이 타임라인에서 0~4초만 차지한다
+    await page.locator(S.clip).first().click({ position: { x: 60, y: 40 } });
+    await typeInto(page.locator(S.tempo), "240");
+    await typeInto(page.locator(`${S.inspector} ${S.sourceBpm}`), "120");
+    await page.locator(`${S.inspector} ${S.warpToggle}`).click();
+    await expect(page.locator(`${S.inspector} ${S.warpRate}`)).toHaveText("2.00×");
+
+    // 5초에서 올리면 5~13초: 템포 맞춤 클립(0~4초) 뒤라 비어 있다 → 같은 트랙(원본 길이 8초로 보면 겹친다고 잘못 판단해 새 트랙이 생김)
+    await clickRuler(page, 5, 96);
+    await upload(page);
+    const sameTrack = await page.locator(S.trackHeader).count();
+    const rows = [await rowOf(page, 0), await rowOf(page, 1)];
+    measuredP45("템포 맞춤 클립(0~4초) 뒤 5초에 올리기", { 트랙_수: sameTrack, 클립_줄: rows });
+    await expect(page.locator(S.trackHeader)).toHaveCount(1);
+    expect(rows[1]).toBe(rows[0]);
+
+    // 3초에서 올리면 3~11초: 템포 맞춤 클립(0~4초)과 5초 클립 둘 다에 걸친다 → 새 트랙
+    await clickRuler(page, 3, 96);
+    await upload(page);
+    await expect(page.locator(S.trackHeader)).toHaveCount(2);
+    const rowsAfter = [await rowOf(page, 0), await rowOf(page, 1), await rowOf(page, 2)];
+    expect(rowsAfter[1]).toBe(rowsAfter[0]);
+    expect(rowsAfter[2]).not.toBe(rowsAfter[0]);
+  });
+
+  test("B8 같은 자리에 두 번째로 올리면 새 트랙에 놓이고, 한 줄에 겹쳐 놓이지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await upload(page);
+    await expect(page.locator(S.trackHeader)).toHaveCount(2);
+    expect(await rowOf(page, 1)).not.toBe(await rowOf(page, 0));
+  });
+
+  test("B8 파일 여러 개를 한꺼번에 올리면 한 파일씩 차례로 규칙을 적용해 같은 자리의 파일은 각자 새 트랙에 놓인다", async ({ page }) => {
+    await openApp(page);
+    await page.setInputFiles(S.upload, [WAV, STEADY, WAV]);
+    await expect(page.locator(S.clip)).toHaveCount(3, { timeout: 30_000 });
+    await expect(page.locator(S.trackHeader)).toHaveCount(3);
+    const rows = [await rowOf(page, 0), await rowOf(page, 1), await rowOf(page, 2)];
+    measuredP45("파일 3개 한꺼번에 올리기", { 트랙_수: 3, 클립_줄: rows });
+    expect(new Set(rows).size).toBe(3);
   });
 });
