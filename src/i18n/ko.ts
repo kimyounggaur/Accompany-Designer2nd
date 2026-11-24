@@ -168,8 +168,13 @@ export const ko = {
     disarmed: "녹음 대기 트랙을 해제했습니다.",
 
     drawNeedsSource: "오디오를 업로드하거나 클립을 선택한 뒤 그리세요.",
-    clipDeleted: "클립 삭제됨",
-    clipsDeleted: (count: number) => `클립 ${count}개 삭제됨`,
+    clipDeleted: "클립을 삭제했습니다.",
+    clipsDeleted: (count: number) => `클립 ${count}개를 삭제했습니다.`,
+    undoDelete: "되돌리기",
+    undoDeleteStale: "그 사이에 다른 편집을 해서 이 삭제만 되돌릴 수 없습니다. 실행 취소(Ctrl+Z)로 순서대로 되돌릴 수 있습니다.",
+    clipDuplicated: "클립을 복제했습니다.",
+    playheadOutsideClip: "재생선이 이 클립 안에 있어야 자를 수 있습니다.",
+    clipNameEmpty: "클립 이름은 비워 둘 수 없습니다.",
     noClipSelected: "선택된 클립이 없습니다.",
     clipSliced: "클립 자르기 완료",
     sliceNeedsClip: "자를 클립을 선택하세요.",
@@ -243,6 +248,29 @@ export const ko = {
     failed: "자동 저장 실패",
     storageNearlyFull: (percent: number) =>
       `브라우저 저장 공간을 ${percent}% 사용 중입니다. 곧 자동 저장이 안 될 수 있으니 프로젝트 파일로 저장해 두세요.`,
+  },
+
+  // ───── 우클릭 메뉴(P5-4) ─────
+
+  menu: {
+    clip: {
+      label: "클립 메뉴",
+      sliceAtPlayhead: "재생선에서 자르기",
+      duplicate: "복제",
+      copy: "복사",
+      toggleMute: "음소거 전환",
+      rename: "이름 바꾸기",
+      ungroup: "그룹 해제",
+      delete: "삭제",
+    },
+    track: {
+      label: "트랙 메뉴",
+      rename: "이름 바꾸기",
+      moveUp: "위로",
+      moveDown: "아래로",
+      delete: "삭제",
+    },
+    renameClip: (name: string) => `${name} 클립 이름`,
   },
 
   // ───── 확인창 ─────

@@ -7,13 +7,17 @@ import { notify } from "../services/notify";
 import { history } from "../state/history";
 import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
 import { useDawStore } from "../store/useDawStore";
-import { addClipFromSource, deleteTrackWithConfirm, setSelectedClips, toggleRecordingArm } from "../app/actions";
+import { addClipFromSource, deleteTrack, setSelectedClips, toggleRecordingArm } from "../app/actions";
 import { readPlayhead } from "../app/playhead";
 import { DEFAULT_TRACK_VOLUME } from "../domain/project/defaults";
 import type { PlaylistTool } from "../domain/types";
+import { ContextMenu } from "../ui/controls/ContextMenu";
 import { scaledEntry } from "../ui/controls/entries";
+import type { Point } from "../ui/controls/menuMath";
+import { useLongPress } from "../ui/controls/useLongPress";
 import { countRender } from "../ui/debug/renderCount";
 import { Slider } from "../ui/controls/Slider";
+import { buildTrackMenuItems } from "../ui/timeline/menuItems";
 import { PlayheadOverlay } from "../ui/timeline/PlayheadOverlay";
 import {
   clamp,
@@ -82,6 +86,12 @@ export function Timeline() {
   const sessionRef = useRef<LanePointerSession | undefined>(undefined);
   const [dragBox, setDragBox] = useState<DragBox | undefined>();
   const [cursorAccent, setCursorAccent] = useState<CursorAccent | undefined>();
+  /** 열려 있는 트랙 메뉴(트랙 머리 우클릭·터치 길게 누르기) */
+  const [trackMenu, setTrackMenu] = useState<{ trackId: string; anchor: Point } | undefined>();
+  const closeTrackMenu = useCallback(() => setTrackMenu(undefined), []);
+  /** 트랙 머리마다 이름 칸(메뉴의 "이름 바꾸기"가 초점을 옮길 곳) */
+  const nameInputs = useRef(new Map<string, HTMLInputElement>());
+  const pressedTrackId = useRef<string | undefined>(undefined);
   // 룰러 드래그 줌용
   const rulerDragRef = useRef<{ startX: number; startZoom: number } | null>(null);
   const tracks = useDawStore((state) => state.tracks);
@@ -111,6 +121,15 @@ export function Timeline() {
   const setZoom = useDawStore((state) => state.setZoom);
   const setTimelineViewportWidth = useDawStore((state) => state.setTimelineViewportWidth);
   const timelineViewportWidth = useDawStore((state) => state.timelineViewportWidth);
+
+  function openTrackMenu(trackId: string, anchor: Point) {
+    selectTrack(trackId);
+    setTrackMenu({ trackId, anchor });
+  }
+  // 터치에서 500 ms 길게 누르면 우클릭과 같은 트랙 메뉴
+  const headerLongPress = useLongPress((point) => {
+    if (pressedTrackId.current) openTrackMenu(pressedTrackId.current, point);
+  });
 
   // 눈금은 화면 근처(양옆 한 화면 폭 여유)만 그린다: 한 시간 곡을 96px/초로 볼 때 눈금 7천여 개를 DOM에 두지 않는다.
   const [rulerWindow, setRulerWindow] = useState<RulerWindow>(INITIAL_RULER_WINDOW);
@@ -459,6 +478,32 @@ export function Timeline() {
     setDragBox(undefined);
   }
 
+  /** 트랙 메뉴: 이름 바꾸기 · 위로 · 아래로 · 삭제(트랙 머리의 단추와 같은 규칙) */
+  function renderTrackMenu(menu: { trackId: string; anchor: Point }) {
+    const index = tracks.findIndex((track) => track.id === menu.trackId);
+    if (index < 0) return null;
+    return (
+      <ContextMenu
+        label={ko.menu.track.label}
+        anchor={menu.anchor}
+        onClose={closeTrackMenu}
+        items={buildTrackMenuItems(
+          { index, count: tracks.length, isRecording },
+          {
+            rename: () => {
+              const input = nameInputs.current.get(menu.trackId);
+              input?.focus();
+              input?.select();
+            },
+            moveUp: () => reorderTrack(menu.trackId, -1),
+            moveDown: () => reorderTrack(menu.trackId, 1),
+            remove: () => void deleteTrack(menu.trackId),
+          },
+        )}
+      />
+    );
+  }
+
   return (
     <section
       className={`playlist ${performanceMode ? "performance-mode" : ""}`}
@@ -480,11 +525,30 @@ export function Timeline() {
             data-testid="track-header"
             key={track.id}
             onClick={() => selectTrack(track.id)}
+            onContextMenu={(event) => {
+              // 글자 칸(트랙 이름)에서는 그 칸의 기본 메뉴(복사·붙여넣기)를 그대로 둔다.
+              if ((event.target as HTMLElement).closest("input, textarea")) return;
+              event.preventDefault();
+              openTrackMenu(track.id, { x: event.clientX, y: event.clientY });
+            }}
+            onPointerDown={(event) => {
+              // 단추·노브·글자 칸을 오래 누르는 것은 메뉴 신호가 아니다.
+              if ((event.target as HTMLElement).closest("input, button, textarea, select, [aria-valuenow]")) return;
+              pressedTrackId.current = track.id;
+              headerLongPress.onPointerDown(event);
+            }}
+            onPointerMove={headerLongPress.onPointerMove}
+            onPointerUp={headerLongPress.onPointerUp}
+            onPointerCancel={headerLongPress.onPointerCancel}
           >
             <div className="track-heading">
               <input
                 aria-label={`${track.name} 트랙 이름`}
                 data-testid="track-name"
+                ref={(element) => {
+                  if (element) nameInputs.current.set(track.id, element);
+                  else nameInputs.current.delete(track.id);
+                }}
                 value={track.name}
                 onFocus={() => history.beginGesture(`track:${track.id}:name`, "focus")}
                 onBlur={() => history.endGesture({ kind: "focus" })}
@@ -498,7 +562,7 @@ export function Timeline() {
                 onClick={(event) => { event.stopPropagation(); reorderTrack(track.id, 1); }}><ArrowDown size={14} /></button>
               <button type="button" className="track-order-button" disabled={tracks.length <= 1 || isRecording}
                 aria-label={`${track.name} 삭제`} title={tracks.length <= 1 ? "트랙은 하나 이상 필요합니다" : "트랙 삭제"}
-                onClick={(event) => { event.stopPropagation(); void deleteTrackWithConfirm(track.id); }}><Trash2 size={14} /></button>
+                onClick={(event) => { event.stopPropagation(); void deleteTrack(track.id); }}><Trash2 size={14} /></button>
             </div>
             <div className="track-toggles">
               <button
@@ -648,6 +712,7 @@ export function Timeline() {
           )}
         </div>
       </div>
+      {trackMenu && renderTrackMenu(trackMenu)}
     </section>
   );
 }

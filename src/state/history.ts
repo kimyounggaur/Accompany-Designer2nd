@@ -72,12 +72,19 @@ export interface HistoryApi {
   redoLabel(): string | undefined;
   /** 이력 단계 수 */
   depth(): { undo: number; redo: number };
+  /**
+   * 되돌리면 사라질 맨 위 단계의 번호(없으면 undefined). 단계마다 만들어질 때 한 번 매겨지며 바뀌지 않는다.
+   * "방금 한 삭제를 되돌리기"처럼, 그 사이에 다른 편집이 끼어들지 않았을 때만 되돌려야 하는 곳이 쓴다.
+   */
+  topId(): number | undefined;
   /** 단계 수·패치 수·크기(점검용) */
   stats(): HistoryStats;
   clear(): void;
 }
 
 interface Entry {
+  /** 단계 번호(만들어질 때 한 번 매기고 바뀌지 않는다) */
+  id: number;
   label: string;
   key: string | undefined;
   /** 이 단계를 만든 조작 묶음의 번호(묶음 밖 편집이면 undefined) */
@@ -116,6 +123,7 @@ export function createHistory(store: StoreApi<ProjectState>, config: HistoryConf
   let open: Entry | undefined;
   let gesture: (OpenGesture & { timer: ReturnType<typeof setTimeout> | undefined }) | undefined;
   let gestureSeq = 0;
+  let entrySeq = 0;
 
   function armGestureTimer() {
     if (!gesture) return;
@@ -198,7 +206,8 @@ export function createHistory(store: StoreApi<ProjectState>, config: HistoryConf
       open.at = at;
       if (open.redo.length >= open.compactAt) compactEntry(open);
     } else {
-      const entry: Entry = { label, key, gesture: gesture?.id, at, redo, undo: [undo], compactAt: FIRST_COMPACT_AT };
+      entrySeq += 1;
+      const entry: Entry = { id: entrySeq, label, key, gesture: gesture?.id, at, redo, undo: [undo], compactAt: FIRST_COMPACT_AT };
       pushPast(entry);
       open = entry;
     }
@@ -252,6 +261,7 @@ export function createHistory(store: StoreApi<ProjectState>, config: HistoryConf
     undoLabel: () => past[past.length - 1]?.label,
     redoLabel: () => future[future.length - 1]?.label,
     depth: () => ({ undo: past.length, redo: future.length }),
+    topId: () => past[past.length - 1]?.id,
     stats() {
       let patches = 0;
       let bytes = 0;

@@ -438,7 +438,7 @@ test("흐름: Delete는 고른 클립이 있을 때만 지우고, 없으면 키�
   assert.equal(fire(event), true);
   assert.equal(event.defaultPrevented, true);
   assert.equal(clipCount(), 1);
-  assert.equal(status(), "클립 1개 삭제됨");
+  assert.equal(status(), "클립을 삭제했습니다.");
 });
 
 test("흐름: Ctrl+A는 모든 클립을 고르고, Ctrl+Z·Ctrl+Shift+Z는 되돌리고 다시 한다", () => {

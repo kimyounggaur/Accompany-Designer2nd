@@ -50,3 +50,12 @@ export function planVoice(
     startsMidClip: elapsed > 0,
   };
 }
+
+/** 클립 양끝에서 이만큼(초) 안쪽이어야 자를 수 있다(너무 짧은 조각이 생기지 않게) */
+export const SLICE_EDGE_MARGIN = 0.03;
+
+/** `time`(타임라인 초)에서 이 클립을 자를 수 있는가: 클립 양끝에서 `SLICE_EDGE_MARGIN`보다 안쪽이어야 한다. */
+export function canSliceAt(clip: Clip, bpm: number, time: number): boolean {
+  const local = time - clip.startTime;
+  return local > SLICE_EDGE_MARGIN && local < getClipTimelineDuration(bpm, clip) - SLICE_EDGE_MARGIN;
+}

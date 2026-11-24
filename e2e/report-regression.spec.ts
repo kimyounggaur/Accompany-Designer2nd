@@ -96,6 +96,8 @@ const S = {
   bpmApplyClip: '[data-testid="bpm-apply-clip"]',
   bpmApplyProject: '[data-testid="bpm-apply-project"]',
   bpmStatus: '[data-testid="bpm-status"]',
+  contextMenu: '[data-testid="context-menu"]',
+  clipNameEditor: '[data-testid="clip-name-editor"]',
 };
 
 /** 소리 소스 시작 횟수, rAF 호출 수, 최종 출력 분석기를 잡아 두는 측정 훅 */
@@ -338,38 +340,42 @@ test.describe("P2-2 안내 통로", () => {
     await expect(page.locator(S.toast)).toHaveCount(0);
   });
 
-  test("트랙 삭제는 앱 안의 확인창을 거치고, 취소하면 그대로다", async ({ page }) => {
+  test("클립이 든 트랙의 삭제는 앱 안의 확인창을 거치고, 취소하면 그대로다(빈 트랙은 확인창 없이 바로 지운다: P5-4)", async ({ page }) => {
     const nativeDialogs: string[] = [];
     page.on("dialog", async (dialog) => {
       nativeDialogs.push(dialog.message());
       await dialog.dismiss();
     });
     await openApp(page);
+    await upload(page); // 첫 트랙에 클립 하나
     await page.locator('button[title="트랙 추가"]').click();
     await expect(page.locator(S.trackHeader)).toHaveCount(2);
-    const remove = page.locator(S.trackHeader).nth(1).locator('button[title="트랙 삭제"]');
+    const remove = page.locator(S.trackHeader).nth(0).locator('button[title="트랙 삭제"]');
 
     await remove.click();
     const dialog = page.locator(S.confirmDialog);
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("'트랙 2' 트랙과 클립 0개를 삭제할까요?");
+    await expect(dialog).toContainText("'트랙 1' 트랙과 클립 1개를 삭제할까요?");
     await expect(page.locator(S.confirmCancel)).toBeFocused(); // 되돌리기 어려운 작업은 취소에 초점
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await expect(page.locator(S.trackHeader)).toHaveCount(2);
+    await expect(page.locator(S.clip)).toHaveCount(1);
 
     await remove.click();
     await page.locator(S.confirmOk).click();
     await expect(page.locator(S.trackHeader)).toHaveCount(1);
-    await expect(page.locator(S.status)).toContainText("트랙 2 트랙이 삭제되었습니다");
+    await expect(page.locator(S.status)).toContainText("트랙 1 트랙이 삭제되었습니다");
     expect(nativeDialogs).toEqual([]);
   });
 
   test("확인창이 열려 있는 동안 Delete·Space 단축키는 뒤의 화면에 작용하지 않는다", async ({ page }) => {
     await openApp(page);
-    await upload(page); // 올린 클립은 선택된 상태
-    await page.locator('button[title="트랙 추가"]').click();
-    await page.locator(S.trackHeader).nth(1).locator('button[title="트랙 삭제"]').click();
+    await upload(page);
+    await page.locator('button[title="트랙 추가"]').click(); // 트랙을 더하면 선택이 풀리므로
+    await page.locator(S.clip).click(); // 클립을 다시 고른다: 뒤의 화면에 Delete가 작용하면 이 클립이 지워진다
+    await expect(page.locator(`${S.clip}.selected`)).toHaveCount(1);
+    await page.locator(S.trackHeader).nth(0).locator('button[title="트랙 삭제"]').click(); // 클립이 든 트랙만 확인창이 뜬다(P5-4)
     await expect(page.locator(S.confirmDialog)).toBeVisible();
     const base = await starts(page);
     await page.keyboard.press("Delete");
@@ -4139,5 +4145,420 @@ test.describe("P5-3 화면 갱신 루프 하나", () => {
     await reset();
     await page.waitForTimeout(800);
     expect(await draws()).toBe(0);
+  });
+});
+
+const measuredP54 = (name: string, value: unknown) => console.log(`P5-4 측정 ${name}: ${JSON.stringify(value)}`);
+
+test.describe("P5-4 클립 메뉴와 삭제 안전장치", () => {
+  const menu = (page: Page) => page.locator(S.contextMenu);
+  const item = (page: Page, id: string) => page.locator(`[data-testid="menu-${id}"]`);
+  const tool = (page: Page, label: string) => page.locator(`.playlist-tool-button[title^="${label} ("]`);
+  const menuLabels = (page: Page) => page.locator(`${S.contextMenu} [role="menuitem"] > span:first-child`).allInnerTexts();
+  const menuIds = (page: Page) => page.locator(`${S.contextMenu} [role="menuitem"]`).evaluateAll((elements) => elements.map((element) => element.getAttribute("data-testid")));
+  const clipName = (page: Page, index = 0) => page.locator(S.clip).nth(index).getAttribute("aria-label");
+  const trackNames = (page: Page) => page.locator(S.trackName).evaluateAll((elements) => elements.map((element) => (element as HTMLInputElement).value));
+  const deleteToast = (page: Page) => page.locator(S.toast).filter({ hasText: "클립을 삭제했습니다." });
+  const clearSelection = async (page: Page) => {
+    await page.locator('button[title="플레이리스트 메뉴"]').click();
+    await page.locator(".menu-dropdown button", { hasText: "선택 해제" }).click();
+  };
+
+  async function openClipMenu(page: Page, index = 0) {
+    await page.locator(S.clip).nth(index).click({ button: "right" });
+    await expect(menu(page)).toBeVisible();
+  }
+
+  async function openTrackMenu(page: Page, index = 0) {
+    await page.locator(S.trackHeader).nth(index).click({ button: "right", position: { x: 4, y: 4 } });
+    await expect(menu(page)).toBeVisible();
+  }
+
+  test("클립을 우클릭하면 일곱 항목 메뉴가 설계의 순서대로 뜨고, 우클릭한 클립이 선택된다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await clearSelection(page);
+    await expect(page.locator(`${S.clip}.selected`)).toHaveCount(0);
+
+    await openClipMenu(page);
+    await expect(page.locator(`${S.clip}.selected`)).toHaveCount(1); // 우클릭한 클립이 선택된다
+    await expect(menu(page)).toHaveAttribute("role", "menu");
+    await expect(menu(page)).toHaveAttribute("aria-label", "클립 메뉴");
+    expect(await menuLabels(page)).toEqual(["재생선에서 자르기", "복제", "복사", "음소거 전환", "이름 바꾸기", "그룹 해제", "삭제"]);
+    expect(await menuIds(page)).toEqual(["menu-slice", "menu-duplicate", "menu-copy", "menu-mute", "menu-rename", "menu-ungroup", "menu-delete"]);
+    // 재생선(0초)이 클립의 시작점이라 '자르기'를, 묶인 클립이 없어 '그룹 해제'를 쓸 수 없다. 첫 초점은 쓸 수 있는 첫 항목.
+    await expect(item(page, "slice")).toBeDisabled();
+    await expect(item(page, "ungroup")).toBeDisabled();
+    for (const id of ["duplicate", "copy", "mute", "rename", "delete"]) await expect(item(page, id)).toBeEnabled();
+    await expect(item(page, "duplicate")).toBeFocused();
+    await expect(item(page, "copy").locator(".context-menu__hint")).toHaveText("Ctrl+C");
+    await expect(item(page, "delete").locator(".context-menu__hint")).toContainText("Delete");
+    await expect(item(page, "delete")).toHaveClass(/danger/);
+    measuredP54("클립 메뉴", { 항목_수: 7, 쓸_수_없는_항목: ["재생선에서 자르기", "그룹 해제"], 첫_초점: "복제" });
+  });
+
+  test("삭제 → [되돌리기] 토스트 → 누르면 클립이 그 자리로 돌아온다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    const lefts = await clipLefts(page);
+    await openClipMenu(page);
+    await item(page, "delete").click();
+    await expect(menu(page)).toHaveCount(0);
+    await expect(page.locator(S.clip)).toHaveCount(0);
+
+    const toast = deleteToast(page);
+    await expect(toast).toBeVisible();
+    await expect(toast).toHaveAttribute("data-level", "success");
+    await toast.getByRole("button", { name: "되돌리기" }).click();
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    expect(await clipLefts(page)).toEqual(lefts);
+    await expect(toast).toHaveCount(0); // 누르면 안내도 사라진다
+    await expect(page.locator(S.status)).toContainText("실행 취소");
+  });
+
+  test("삭제 안내는 5초쯤 남아 있다가 사라지고(완료 안내 기본 3초보다 길다), 그 뒤에도 Ctrl+Z로 돌아온다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await openClipMenu(page);
+    await item(page, "delete").click();
+    const toast = deleteToast(page);
+    await expect(toast).toBeVisible();
+    const shownAt = Date.now();
+    await page.waitForTimeout(3600);
+    await expect(toast).toBeVisible(); // 3초 기본 시간이 지나도 남아 있다
+    await expect(toast).toHaveCount(0, { timeout: 5000 });
+    const lasted = Date.now() - shownAt;
+    measuredP54("삭제 안내 시간", { 보인_뒤_ms: lasted });
+    expect(lasted).toBeGreaterThan(4300);
+    expect(lasted).toBeLessThan(6500);
+    await page.keyboard.press("Control+z");
+    await expect(page.locator(S.clip)).toHaveCount(1);
+  });
+
+  test("지운 뒤 다른 편집을 했으면 [되돌리기]는 엉뚱한 편집을 되돌리지 않고 이유만 알린다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await upload(page);
+    await expect(page.locator(S.clip)).toHaveCount(2);
+
+    await openClipMenu(page, 0);
+    await item(page, "delete").click();
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    const toast = deleteToast(page);
+    await expect(toast).toBeVisible();
+
+    await openClipMenu(page, 0); // 남은 클립을 음소거: 지우기 뒤의 다른 편집
+    await item(page, "mute").click();
+    await expect(page.locator(`${S.clip}.muted`)).toHaveCount(1);
+
+    await toast.getByRole("button", { name: "되돌리기" }).click();
+    const warning = page.locator(S.toast).filter({ hasText: "그 사이에 다른 편집" });
+    await expect(warning).toBeVisible();
+    await expect(warning).toHaveAttribute("data-level", "warning");
+    await expect(page.locator(S.clip)).toHaveCount(1); // 지운 클립은 그대로 지워진 채
+    await expect(page.locator(`${S.clip}.muted`)).toHaveCount(1); // 음소거 편집도 그대로
+    measuredP54("엉뚱한 편집 보호", { 클립_수: 1, 음소거_유지: true });
+  });
+
+  test("Esc·바깥 클릭·휠 돌리기로 메뉴가 닫히고, 닫기만 했을 때는 아무것도 바뀌지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    const lefts = await clipLefts(page);
+
+    await openClipMenu(page);
+    await page.keyboard.press("Escape");
+    await expect(menu(page)).toHaveCount(0);
+
+    await openClipMenu(page);
+    await page.mouse.click(700, 650); // 빈 곳
+    await expect(menu(page)).toHaveCount(0);
+
+    await openClipMenu(page);
+    await page.mouse.move(700, 650);
+    await page.mouse.wheel(0, 120);
+    await expect(menu(page)).toHaveCount(0);
+
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    expect(await clipLefts(page)).toEqual(lefts);
+    await expect(deleteToast(page)).toHaveCount(0);
+    measuredP54("메뉴 닫기", { Esc: true, 바깥_클릭: true, 휠: true });
+  });
+
+  test("화살표·Home·End로 항목을 옮기고(쓸 수 없는 항목은 건너뛰고 끝에서 돌아감) Enter로 고른다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await openClipMenu(page);
+    await expect(item(page, "duplicate")).toBeFocused(); // '자르기'는 쓸 수 없어 첫 초점은 '복제'
+    await page.keyboard.press("ArrowDown");
+    await expect(item(page, "copy")).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(item(page, "delete")).toBeFocused();
+    await page.keyboard.press("ArrowDown"); // 끝에서 쓸 수 있는 첫 항목으로
+    await expect(item(page, "duplicate")).toBeFocused();
+    await page.keyboard.press("ArrowUp"); // 처음에서 위로 가면 마지막
+    await expect(item(page, "delete")).toBeFocused();
+    await page.keyboard.press("ArrowUp"); // '그룹 해제'는 쓸 수 없어 건너뛴다
+    await expect(item(page, "rename")).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(item(page, "duplicate")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(menu(page)).toHaveCount(0);
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    await expect(page.locator(S.status)).toContainText("클립을 복제했습니다.");
+  });
+
+  test("화면 오른쪽·아래 끝에서 연 메뉴도 화면 안에 다 보인다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    const view = page.viewportSize()!;
+    const margin = 8;
+    const edges: Record<string, { x: number; y: number }> = {
+      오른쪽_끝: { x: view.width - 3, y: 300 },
+      아래_끝: { x: 300, y: view.height - 3 },
+      오른쪽_아래_구석: { x: view.width - 3, y: view.height - 3 },
+    };
+    const boxes: Record<string, { x: number; y: number; w: number; h: number }> = {};
+    for (const [name, point] of Object.entries(edges)) {
+      // 실제 마우스는 클립이 있는 곳밖에 못 누르므로, 우클릭 이벤트의 좌표를 화면 끝으로 정해 클립에 보낸다.
+      await page.locator(S.clip).first().evaluate((element, at) => {
+        element.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: at.x, clientY: at.y }));
+      }, point);
+      await expect(menu(page)).toBeVisible();
+      const box = (await menu(page).boundingBox())!;
+      expect(box.x, `${name} 왼쪽`).toBeGreaterThanOrEqual(margin - 0.5);
+      expect(box.y, `${name} 위`).toBeGreaterThanOrEqual(margin - 0.5);
+      expect(box.x + box.width, `${name} 오른쪽`).toBeLessThanOrEqual(view.width - margin + 0.5);
+      expect(box.y + box.height, `${name} 아래`).toBeLessThanOrEqual(view.height - margin + 0.5);
+      boxes[name] = { x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.width), h: Math.round(box.height) };
+      await page.keyboard.press("Escape");
+      await expect(menu(page)).toHaveCount(0);
+    }
+    measuredP54("화면 끝 메뉴 위치", { 화면: [view.width, view.height], 메뉴: boxes });
+  });
+
+  test("트랙 머리를 우클릭하면 이름 바꾸기·위로·아래로·삭제 메뉴가 뜨고, 위·아래 단추와 같은 규칙을 따른다", async ({ page }) => {
+    await openApp(page);
+    await page.locator('button[title="트랙 추가"]').click();
+    await expect(page.locator(S.trackHeader)).toHaveCount(2);
+    const [first, second] = await trackNames(page);
+
+    await openTrackMenu(page, 0);
+    await expect(menu(page)).toHaveAttribute("aria-label", "트랙 메뉴");
+    expect(await menuLabels(page)).toEqual(["이름 바꾸기", "위로", "아래로", "삭제"]);
+    await expect(item(page, "up")).toBeDisabled(); // 맨 위
+    await expect(item(page, "down")).toBeEnabled();
+    await expect(item(page, "delete")).toHaveClass(/danger/);
+    await item(page, "down").click();
+    await expect.poll(() => trackNames(page)).toEqual([second, first]);
+
+    await openTrackMenu(page, 1); // 이제 아래 칸이 처음 트랙
+    await expect(item(page, "down")).toBeDisabled(); // 맨 아래
+    await item(page, "up").click();
+    await expect.poll(() => trackNames(page)).toEqual([first, second]);
+
+    await page.keyboard.press("Control+z"); // 위로 옮긴 것을 되돌리면 다시 아래로 간 순서
+    await expect.poll(() => trackNames(page)).toEqual([second, first]);
+    measuredP54("트랙 메뉴", { 항목: ["이름 바꾸기", "위로", "아래로", "삭제"], 순서_바꾸기: "메뉴와 단추가 같은 동작" });
+  });
+
+  test("트랙 메뉴의 이름 바꾸기는 이름 칸에 초점을 주고 글자를 모두 고른다. 이름 칸 자체의 우클릭은 기본 메뉴 그대로다", async ({ page }) => {
+    await openApp(page);
+    const input = page.locator(S.trackName).first();
+    await input.click({ button: "right" });
+    await expect(menu(page)).toHaveCount(0); // 글자 칸의 우클릭은 우리 메뉴가 아니다
+
+    await openTrackMenu(page, 0);
+    await item(page, "rename").click();
+    await expect(input).toBeFocused();
+    await page.keyboard.type("드럼 p");
+    await expect(input).toHaveValue("드럼 p"); // 고른 글자가 바뀌었고, P·Space는 글자로 들어갔다
+    await expect(tool(page, "이동")).toHaveClass(/active/);
+  });
+
+  test("트랙 메뉴의 삭제: 빈 트랙은 확인창 없이 바로 지우고 Ctrl+Z로 돌아오며, 클립이 든 트랙은 확인창을 거친다", async ({ page }) => {
+    await openApp(page);
+    await upload(page); // 첫 트랙에 클립 하나
+    await page.locator('button[title="트랙 추가"]').click(); // 둘째 트랙은 비어 있다
+    await expect(page.locator(S.trackHeader)).toHaveCount(2);
+
+    await openTrackMenu(page, 1);
+    await item(page, "delete").click();
+    await expect(page.locator(S.confirmDialog)).toBeHidden(); // 빈 트랙은 묻지 않는다
+    await expect(page.locator(S.trackHeader)).toHaveCount(1);
+    await expect(page.locator(S.status)).toContainText("트랙 2 트랙이 삭제되었습니다");
+    await page.keyboard.press("Control+z");
+    await expect(page.locator(S.trackHeader)).toHaveCount(2);
+
+    await openTrackMenu(page, 0);
+    await item(page, "delete").click();
+    await expect(menu(page)).toHaveCount(0); // 확인창이 뜰 때 메뉴는 이미 닫혀 있다
+    const dialog = page.locator(S.confirmDialog);
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText("클립 1개");
+    await page.locator(S.confirmCancel).click();
+    await expect(page.locator(S.trackHeader)).toHaveCount(2);
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    measuredP54("트랙 삭제 확인", { 빈_트랙: "확인창 없음·실행 취소로 복원", 클립이_든_트랙: "확인창" });
+  });
+
+  test("트랙이 하나뿐이면 트랙 메뉴의 삭제·위로·아래로는 쓸 수 없고 이름 바꾸기만 쓸 수 있다", async ({ page }) => {
+    await openApp(page);
+    await openTrackMenu(page, 0);
+    for (const id of ["up", "down", "delete"]) await expect(item(page, id)).toBeDisabled();
+    await expect(item(page, "rename")).toBeEnabled();
+  });
+
+  test("클립 메뉴의 이름 바꾸기: Enter로 바꾸고 Esc로 취소하며, 칸 안의 P·Space는 단축키가 아니라 글자다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    const original = await clipName(page);
+    const base = await starts(page);
+
+    await openClipMenu(page);
+    await item(page, "rename").click();
+    const editor = page.locator(S.clipNameEditor);
+    await expect(editor).toBeFocused();
+    await page.keyboard.type("후렴 p b");
+    await expect(editor).toHaveValue("후렴 p b");
+    await expect(tool(page, "이동")).toHaveClass(/active/); // P·B가 도구를 바꾸지 않았다
+    expect(await starts(page)).toBe(base); // Space가 재생을 시작하지 않았다
+    await page.keyboard.press("Enter");
+    await expect(editor).toHaveCount(0);
+    expect(await clipName(page)).toBe("후렴 p b 클립");
+    await page.keyboard.press("Control+z");
+    expect(await clipName(page)).toBe(original); // 한 번의 실행 취소로 원래 이름
+
+    await openClipMenu(page); // Esc는 취소
+    await item(page, "rename").click();
+    await page.keyboard.type("취소할 이름");
+    await page.keyboard.press("Escape");
+    await expect(editor).toHaveCount(0);
+    expect(await clipName(page)).toBe(original);
+
+    await openClipMenu(page); // 빈 이름은 받지 않는다
+    await item(page, "rename").click();
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Enter");
+    await expect(editor).toHaveCount(0);
+    expect(await clipName(page)).toBe(original);
+    await expect(page.locator(S.status)).toContainText("클립 이름은 비워 둘 수 없습니다.");
+  });
+
+  test("메뉴가 열려 있는 동안 P·Delete·Ctrl+A 같은 단축키는 뒤의 화면에 작용하지 않고, 닫히면 다시 듣는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await upload(page);
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    await expect(tool(page, "이동")).toHaveClass(/active/);
+
+    await openClipMenu(page, 0);
+    for (const key of ["p", "Delete", "Control+a"]) await page.keyboard.press(key);
+    await expect(menu(page)).toBeVisible();
+    await expect(tool(page, "그리기")).not.toHaveClass(/active/);
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    await expect(page.locator(`${S.clip}.selected`)).toHaveCount(1); // Ctrl+A가 전체를 고르지 않았다
+
+    await page.keyboard.press("Escape");
+    await expect(menu(page)).toHaveCount(0);
+    await page.keyboard.press("p");
+    await expect(tool(page, "그리기")).toHaveClass(/active/);
+  });
+
+  test("터치로 500 ms 길게 누르면 메뉴가 열리고(지워지거나 움직이지 않는다), 짧게 누르거나 움직이면 열리지 않으며, 마우스는 오래 눌러도 열리지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    // 합성 포인터는 활성 포인터가 아니라 setPointerCapture가 실패하므로 비워 둔다(시험 환경 보정).
+    await page.evaluate(() => {
+      Element.prototype.setPointerCapture = () => {};
+      Element.prototype.releasePointerCapture = () => {};
+    });
+    const lefts = await clipLefts(page);
+    const touch = (type: "pointerdown" | "pointermove" | "pointerup", shift = 0) =>
+      page.locator(S.clip).first().evaluate(
+        (element, args) => {
+          const rect = element.getBoundingClientRect();
+          element.dispatchEvent(
+            new PointerEvent(args.type, {
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+              pointerId: 41,
+              pointerType: "touch",
+              isPrimary: true,
+              button: 0,
+              buttons: args.type === "pointerup" ? 0 : 1,
+              clientX: rect.left + rect.width / 2 + args.shift,
+              clientY: rect.top + rect.height / 2,
+            }),
+          );
+        },
+        { type, shift },
+      );
+
+    await touch("pointerdown"); // 짧게 누르고 뗀다
+    await page.waitForTimeout(200);
+    await touch("pointerup");
+    await page.waitForTimeout(700);
+    await expect(menu(page)).toHaveCount(0);
+
+    await touch("pointerdown"); // 누른 채 멀리 움직인다: 메뉴 신호는 취소되고, 클립 끌기는 평소처럼 이어진다
+    await touch("pointermove", 30);
+    await page.waitForTimeout(700);
+    await expect(menu(page)).toHaveCount(0);
+    await touch("pointerup", 30);
+    const dragged = await clipLefts(page);
+    expect(dragged[0]).toBeGreaterThan(lefts[0]);
+
+    const box = (await page.locator(S.clip).first().boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); // 마우스로 오래 누른다
+    await page.mouse.down();
+    await page.waitForTimeout(700);
+    await expect(menu(page)).toHaveCount(0);
+    await page.mouse.up();
+
+    await touch("pointerdown"); // 가만히 오래 누른다
+    await page.waitForTimeout(300);
+    await expect(menu(page)).toHaveCount(0); // 아직 500 ms 전
+    await expect(menu(page)).toBeVisible({ timeout: 1500 });
+    await touch("pointerup");
+    await expect(menu(page)).toBeVisible(); // 손을 떼도 메뉴는 남는다
+    await expect(menu(page)).toHaveAttribute("aria-label", "클립 메뉴");
+    await expect(page.locator(S.clip)).toHaveCount(1); // 삭제가 아니라 메뉴
+    expect(await clipLefts(page)).toEqual(dragged); // 길게 누르는 동안 클립이 움직이지도 않았다
+    measuredP54("길게 누르기", { 터치_500ms: "메뉴", 짧게_누름: "없음", 움직임: "없음", 마우스: "없음" });
+  });
+
+  test("메뉴의 복제·음소거 전환·재생선에서 자르기·복사가 각각 해당 일을 하고 실행 취소로 한 번에 되돌아간다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+
+    await openClipMenu(page); // 복제
+    await item(page, "duplicate").click();
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    await expect(page.locator(S.status)).toContainText("클립을 복제했습니다.");
+    await page.keyboard.press("Control+z");
+    await expect(page.locator(S.clip)).toHaveCount(1);
+
+    await openClipMenu(page); // 음소거 전환
+    await item(page, "mute").click();
+    await expect(page.locator(`${S.clip}.muted`)).toHaveCount(1);
+    await page.keyboard.press("Control+z");
+    await expect(page.locator(`${S.clip}.muted`)).toHaveCount(0);
+
+    await page.locator(S.ruler).click({ position: { x: 240, y: 8 } }); // 재생선을 클립 가운데(2.5초)로
+    await openClipMenu(page); // 재생선에서 자르기
+    await expect(item(page, "slice")).toBeEnabled();
+    await item(page, "slice").click();
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    await expect(page.locator(S.status)).toContainText("클립 자르기 완료");
+    await page.keyboard.press("Control+z");
+    await expect(page.locator(S.clip)).toHaveCount(1);
+
+    await openClipMenu(page); // 복사 → 붙여넣기
+    await item(page, "copy").click();
+    await expect(page.locator(S.status)).toContainText("클립 1개 복사됨");
+    await page.keyboard.press("Control+v");
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    measuredP54("메뉴 동작", { 복제: "+1", 음소거_전환: "한 단계", 자르기: "2조각", 복사: "Ctrl+V로 붙음" });
   });
 });

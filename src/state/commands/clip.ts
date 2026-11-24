@@ -1,4 +1,5 @@
 /** 클립에 대한 문서 변경 함수. 선택(selection) 같은 화면 상태는 다루지 않는다 — 부르는 쪽이 정해서 넘긴다. */
+import { canSliceAt } from "../../domain/timeline/clipMath";
 import type { Clip, ProjectDoc } from "../../domain/types";
 import { clamp, createId, findClip, getClipPlaybackRate, getClipTimelineDuration, snapTime } from "../../utils/audioMath";
 import { fail, ok, type CommandResult } from "../commandResult";
@@ -163,9 +164,8 @@ export function sliceClipAt(clipId: string, splitTime: number, options?: EditOpt
   if (!location) return fail("not-found");
   const clip = doc.tracks[location.trackIndex].clips[location.clipIndex];
   const playbackRate = getClipPlaybackRate(doc.bpm, clip);
-  const timelineDuration = getClipTimelineDuration(doc.bpm, clip);
+  if (!canSliceAt(clip, doc.bpm, splitTime)) return fail("outside-clip");
   const localTime = splitTime - clip.startTime;
-  if (localTime <= 0.03 || localTime >= timelineDuration - 0.03) return fail("outside-clip");
 
   const sourceDelta = localTime * playbackRate;
   const leftDuration = clamp(sourceDelta, 0.03, clip.duration - 0.03);
