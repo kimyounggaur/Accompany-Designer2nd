@@ -196,7 +196,7 @@ export class AudioEngineV2 extends BrowserAudioEngine {
   }
 
   /** 트랙의 컴프레서가 지금 걸고 있는 압축량(dB, 0 이하). 재생 중이 아니거나 컴프레서가 꺼져 있으면 0. */
-  getCompressorReduction(trackId: string): number {
+  override getCompressorReduction(trackId: string): number {
     return this.strips.get(trackId)?.compressorReduction() ?? 0;
   }
 

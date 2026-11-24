@@ -186,6 +186,11 @@ export class BrowserAudioEngine {
     return 0;
   }
 
+  /** 트랙의 컴프레서가 지금 줄이고 있는 음량(dB, 0 이하). 옛 소리 길은 알 수 없어 늘 0이다. */
+  getCompressorReduction(_trackId: string): number {
+    return 0;
+  }
+
   /** 마스터 길이 소리를 늦추는 시간(초). 새 엔진의 선읽기 리미터가 5 ms다. */
   getMasterLatency(): number {
     return 0;

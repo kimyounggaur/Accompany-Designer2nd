@@ -64,9 +64,17 @@ export function clicksPerBar(signature: TimeSignature = COMMON_TIME): number {
 }
 
 /**
+ * 스냅 선택지(설계서 P5-6): 화면에 보이는 순서대로 다섯 개. 로컬·글로벌 구분과 "메인"·"라인"은 없다.
+ * 마디(박자표를 따름) → 박 → 1/2박 → 1/4박 순으로 촘촘해지고, "없음"은 잡지 않는다. 다섯 개의 간격이 모두 다르다.
+ */
+export const PLAYLIST_SNAPS: readonly PlaylistSnap[] = ["bar", "beat", "halfBeat", "quarterBeat", "none"];
+
+/** 처음 스냅이자 상단 바 스냅 단추를 켤 때의 값: 1/2박. 옛 "라인"과 같은 간격이라 쓰던 사람이 느끼는 변화가 없다. */
+export const DEFAULT_SNAP: PlaylistSnap = "halfBeat";
+
+/**
  * 스냅 값 → 격자 분할 수(4분음표 하나를 몇 칸으로 나눌지). 한 칸의 길이는 `박 길이 ÷ 분할 수`다.
  * 마디는 한 칸이 한 마디라서 1보다 작다(4/4는 1/4, 3/4와 6/8은 1/3, 2/4는 1/2).
- * "메인"은 전체 스냅을 따라야 하므로 부르기 전에 `resolveSnap`으로 풀어야 한다(여기서는 기본 간격으로 본다).
  */
 export function snapDivisionOf(snap: PlaylistSnap, signature: TimeSignature = COMMON_TIME): number {
   switch (snap) {
@@ -76,9 +84,18 @@ export function snapDivisionOf(snap: PlaylistSnap, signature: TimeSignature = CO
       return 1;
     case "quarterBeat":
       return 4;
-    default:
-      return 2; // 라인·1/2박·없음(없음은 스냅을 쓰지 않지만 격자는 반 박 간격으로 그린다)
+    case "halfBeat":
+    case "none":
+      return 2; // 없음은 스냅을 쓰지 않지만 눈금 격자는 반 박 간격으로 그린다
   }
+}
+
+/** 스냅 선택이 화면에 주는 설정: 잡을지(`enabled`)와 격자 분할 수(`division`). 스토어·눈금자·끌어다 놓기가 이 값 하나를 따른다. */
+export function snapSettings(
+  snap: PlaylistSnap,
+  signature: TimeSignature = COMMON_TIME,
+): { enabled: boolean; division: number } {
+  return { enabled: snap !== "none", division: snapDivisionOf(snap, signature) };
 }
 
 // ───────── 녹음 카운트인 ─────────

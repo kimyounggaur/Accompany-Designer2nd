@@ -4881,3 +4881,133 @@ test.describe("P5-5 기본 편집 기능", () => {
     measuredP55("박자표 메트로놈", { "3/4": strongs(waltz.slice(0, 6)), "6/8": strongs(compound.slice(0, 7)) });
   });
 });
+
+// ───────────────────────── P5-6 동작하지 않는 조작부 정리 ─────────────────────────
+
+const measuredP56 = (name: string, value: unknown) => console.log(`P5-6 측정 ${name}: ${JSON.stringify(value)}`);
+
+test.describe("P5-6 동작하지 않는 조작부 정리", () => {
+  const knob = (page: Page, name: string) => page.locator(`[role=slider][aria-label="${name}"]`);
+  const needle = (page: Page) => page.locator('[data-testid="comp-needle"]');
+  const reduction = async (page: Page) => Number(await needle(page).getAttribute("data-reduction"));
+  /** 바늘이 가리키는 각도(도): 요소에 적힌 목표 각도. 움직임(0.15초 transition)이 끝나기를 기다릴 필요가 없다. */
+  const angle = (page: Page) =>
+    needle(page).evaluate((element) => Number(/rotate\((-?[\d.]+)deg\)/.exec((element as HTMLElement).style.transform)?.[1]));
+  const power = (page: Page) => page.getByRole("button", { name: "컴프레서 켜기", exact: true });
+
+  test("컴프레서 바늘: 노브만 돌려서는 안 움직이고, 재생 중 세게 걸면 소리 크기에 따라 움직이며(reduction < −3 dB), 멈추거나 끄면 제자리로 돌아온다", async ({ page }) => {
+    test.skip(!onNewEngine, "압축량은 새 엔진만 알려 준다");
+    await openApp(page, { query: P32_QUERY });
+    await upload(page); // 앞 4초는 작게(−26 dBFS), 뒤 4초는 크게(−2 dBFS)
+
+    await power(page).scrollIntoViewIfNeeded();
+    await expect(needle(page)).toHaveAttribute("data-reduction", "0");
+    expect(await angle(page), "쉬는 자리는 오른쪽 끝(0)").toBe(80);
+
+    // 켜고 세게 건다: 기준 음량 −24 dB(작은 앞부분은 아래, 큰 뒷부분은 위), 압축 비율 20:1
+    await power(page).click();
+    await expect(power(page)).toHaveAttribute("aria-pressed", "true");
+    await page.locator('button[aria-label="기준 음량 값(dB) 입력"]').click();
+    await page.locator('input[aria-label="기준 음량 값(dB)"]').fill("-24");
+    await page.keyboard.press("Enter");
+    const threshold = knob(page, "기준 음량 컴프레서");
+    await expect(threshold).toHaveAttribute("aria-valuenow", "-24");
+    const ratio = knob(page, "압축 비율 컴프레서");
+    await ratio.focus();
+    await page.keyboard.press("End");
+    await expect(ratio).toHaveAttribute("aria-valuenow", "20");
+
+    // 옛 바늘은 기준 음량 노브를 따라 움직였다(소리와 상관없이). 재생하지 않으면 노브를 어디로 돌려도 그대로다.
+    for (const key of ["Home", "End"]) {
+      await threshold.focus();
+      await page.keyboard.press(key);
+      expect(await angle(page), `노브 ${key} 뒤에도 재생 전에는 쉬는 자리`).toBe(80);
+      expect(await reduction(page)).toBe(0);
+    }
+    await page.locator('button[aria-label="기준 음량 값(dB) 입력"]').click();
+    await page.locator('input[aria-label="기준 음량 값(dB)"]').fill("-24");
+    await page.keyboard.press("Enter");
+    await expect(threshold).toHaveAttribute("aria-valuenow", "-24");
+
+    // 작은 소리 구간(앞 4초)을 재생: 기준 음량 아래라 거의 줄이지 않는다
+    await clickRuler(page, 0.5, 96);
+    await page.click(S.play);
+    await page.waitForTimeout(1200);
+    const quiet = await reduction(page);
+    const quietAngle = await angle(page);
+    await page.click(S.stop);
+    await expect(needle(page)).toHaveAttribute("data-reduction", "0"); // 멈추면 제자리
+    expect(await angle(page)).toBe(80);
+
+    // 큰 소리 구간(뒤 4초)을 재생: 세게 눌러 바늘이 왼쪽으로 간다
+    await clickRuler(page, 4.5, 96);
+    await page.click(S.play);
+    await expect.poll(() => reduction(page), { timeout: 4000 }).toBeLessThan(-3);
+    await page.waitForTimeout(500);
+    const loud = await reduction(page);
+    const loudAngle = await angle(page);
+    // 소리 크기에 따라: 같은 설정에서 큰 소리가 작은 소리보다 3 dB 넘게 더 눌린다
+    expect(loud, `작은 구간 ${quiet} dB · 큰 구간 ${loud} dB`).toBeLessThan(quiet - 3);
+    expect(quiet).toBeGreaterThan(-1.5);
+    expect(quietAngle).toBeGreaterThan(60);
+    expect(loudAngle).toBeLessThan(35); // −3 dB 눈금(34.3°)보다 왼쪽
+    expect(loudAngle).toBeGreaterThanOrEqual(-80);
+
+    // 재생 중에 컴프레서를 끄면 곧바로 제자리로 돌아온다
+    await power(page).click();
+    await expect(needle(page)).toHaveAttribute("data-reduction", "0");
+    expect(await angle(page)).toBe(80);
+    await page.click(S.stop);
+    measuredP56("컴프레서 바늘", { 작은_구간_dB: quiet, 큰_구간_dB: loud, 작은_구간_각도: quietAngle, 큰_구간_각도: loudAngle, 멈춘_뒤: "0 dB · 80°" });
+  });
+
+  test("스냅 메뉴: 마디·박·1/2박·1/4박·없음 다섯 개뿐이고(메인·라인·로컬·글로벌 없음) 처음은 1/2박이며, 다섯 개가 모두 다른 간격으로 붙는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    const tool = page.locator(".snap-tool");
+    const items = page.locator(".snap-dropdown button");
+    await expect(tool).toHaveAttribute("title", "스냅: 1/2박");
+
+    await tool.click();
+    expect(await items.allInnerTexts()).toEqual(["마디", "박", "1/2박", "1/4박", "없음"]);
+    await expect(page.locator(".snap-dropdown .toolbar-dropdown-label")).toHaveCount(0); // "로컬 스냅"·"글로벌 스냅" 제목이 없다
+    await expect(page.locator(".snap-dropdown button.selected")).toHaveText("1/2박");
+    await tool.click(); // 닫기
+
+    const left = () => page.locator(S.clip).first().evaluate((element) => Math.round(parseFloat((element as HTMLElement).style.left)));
+    /** 첫 클립을 끌어 시작이 raw px(스냅 전)에 오게 한다 */
+    async function dragTo(raw: number) {
+      const now = await left();
+      const box = (await page.locator(S.clip).first().boundingBox())!;
+      const x = box.x + 100;
+      const y = box.y + 40;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + (raw - now), y, { steps: 8 });
+      await page.mouse.up();
+    }
+    // 120 BPM(박 0.5초)·4/4·96 px/초: 마디 192px · 박 48px · 1/2박 24px · 1/4박 12px. 130px(1.354초)은 어느 격자에도 정확히 놓이지 않는다.
+    const expected: Array<[string, number]> = [["마디", 192], ["박", 144], ["1/2박", 120], ["1/4박", 132], ["없음", 130]];
+    const found: Record<string, number> = {};
+    for (const [label, px] of expected) {
+      await tool.click();
+      await page.locator(".snap-dropdown").getByRole("button", { name: label, exact: true }).click();
+      await expect(tool).toHaveAttribute("title", `스냅: ${label}`);
+      await dragTo(130);
+      found[label] = await left();
+      if (label === "없음") expect(Math.abs(found[label] - px)).toBeLessThanOrEqual(2);
+      else expect(found[label], label).toBe(px);
+    }
+    expect(new Set(Object.values(found)).size, "다섯 선택지의 결과가 모두 다르다").toBe(5);
+    await expect(tool).not.toHaveClass(/active/); // 없음이면 스냅 단추가 꺼진 모양
+
+    // 상단 바의 자석 단추: 켜면 처음 값(1/2박)으로 돌아오고 끄면 없음이 된다
+    const magnet = page.locator('button[title="스냅"]');
+    await magnet.click();
+    await expect(tool).toHaveAttribute("title", "스냅: 1/2박");
+    await expect(magnet).toHaveAttribute("aria-pressed", "true");
+    await magnet.click();
+    await expect(tool).toHaveAttribute("title", "스냅: 없음");
+    measuredP56("스냅 메뉴", { 선택지: ["마디", "박", "1/2박", "1/4박", "없음"], 처음: "1/2박", "130px을 끌었을 때 놓인 자리(px)": found });
+  });
+});

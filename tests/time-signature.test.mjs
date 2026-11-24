@@ -21,7 +21,6 @@ import {
   timeSignatureLabel,
 } from "../src/domain/timeline/snap.ts";
 import { planRulerTicks } from "../src/domain/timeline/ruler.ts";
-import { getSnapDivision, resolveSnap } from "../src/state/snap.ts";
 import { snapTime } from "../src/utils/audioMath.ts";
 
 const near = (actual, expected, epsilon = 1e-9) => assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} ≈ ${expected}`);
@@ -94,15 +93,9 @@ test("스냅 값 → 격자 분할: 마디는 박자표를 따르고 나머지�
     assert.equal(snapDivisionOf("beat", signature), 1);
     assert.equal(snapDivisionOf("halfBeat", signature), 2);
     assert.equal(snapDivisionOf("quarterBeat", signature), 4);
-    assert.equal(snapDivisionOf("line", signature), 2);
+    assert.equal(snapDivisionOf("none", signature), 2, "없음은 잡지 않지만 눈금 격자는 반 박 간격");
   }
-  assert.equal(getSnapDivision("bar", sig(3, 4)), snapDivisionOf("bar", sig(3, 4)));
-  assert.equal(getSnapDivision("beat"), 1);
-});
-
-test("'메인' 스냅이 전체 스냅 '마디'를 따르면 마디 간격이 된다", () => {
-  assert.equal(resolveSnap("main", "bar"), "bar");
-  assert.equal(getSnapDivision(resolveSnap("main", "bar"), sig(2, 4)), 0.5);
+  assert.equal(snapDivisionOf("beat"), 1, "박자표를 주지 않아도 박은 1");
 });
 
 test("마디 스냅: 가까운 마디 시작에 붙는다(4/4 2초, 3/4·6/8 1.5초, 2/4 1초 — 120 BPM)", () => {

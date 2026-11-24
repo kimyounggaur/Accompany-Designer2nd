@@ -2403,7 +2403,7 @@ input[type="range"] {
   height: 22px;
   background: #c0392b;
   transform-origin: bottom center;
-  transform: rotate(-80deg);
+  transform: rotate(80deg); /* 쉬는 자리: 오른쪽 끝(0). 재생 중에는 실제 압축량으로 돌아간다(P5-6) */
   transition: transform 0.15s ease-out;
   margin-left: -0.75px;
   border-radius: 1px 1px 0 0;
