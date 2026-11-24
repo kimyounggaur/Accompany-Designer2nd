@@ -7,7 +7,7 @@
  * - '수정 키'는 Shift 또는 Ctrl이 눌린 것이다(지금 코드가 보는 키는 이 둘뿐이다).
  * - 눈금자는 도구와 관계없다: 클릭 = 재생 위치 이동, 좌우로 끌기 = 확대·축소(`Timeline`의 `beginRulerDrag`).
  * - 클립의 페이드 손잡이도 도구와 관계없이 늘 페이드 조절이다. 오른쪽 클릭(메뉴)도 표 밖이다.
- * - 도구를 바꾸는 키(V·P·B·D·T·S·C·E·Z·Y)는 표에 없다. 단축키는 P5-2(단축키 관리자)에서 한꺼번에 다룬다.
+ * - 도구를 바꾸는 키(V·P·B·D·T·S·C·E·Z·Y)는 이 표가 아니라 단축키 표(`services/shortcuts.ts`, P5-2)에 있다.
  */
 import type { PlaylistTool } from "../types";
 
