@@ -6,6 +6,7 @@ import { confirmAction } from "../services/confirm";
 import { notify, notifyError } from "../services/notify";
 import { exportProjectFile, PROJECT_FILE_EXTENSION, readProjectFile, restoreAudio } from "../services/persistence/projectFile";
 import { useDawStore } from "../store/useDawStore";
+import { resetBpmDetection } from "./bpmDetection";
 import { cancelAllPeaks, ensurePeaksForAssets } from "./peaks";
 import { cancelRecording } from "./recording";
 import { openRelinkDialog } from "./relinking";
@@ -58,6 +59,7 @@ export async function loadProjectFile(file: File): Promise<void> {
     cancelRecording();
     audioEngine.stop();
     cancelAllPeaks();
+    resetBpmDetection();
     audioEngine.clearBuffers();
     restored.commit();
     useDawStore.getState().importProject(restored.doc);

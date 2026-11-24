@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { audioEngine } from "../../audio/currentEngine";
+import { CommittedNumberInput } from "../../components/CommittedNumberInput";
 import {
   MASTER_VOLUME_DEFAULT_DB,
   MASTER_VOLUME_MAX_DB,
@@ -35,7 +36,7 @@ function useLimiterReduction(active: boolean): number {
 
 /**
  * 마스터 칸: 마스터 볼륨(−60 ~ +6 dB, 문서에 저장되고 실행 취소 대상)과 리미터가 누르는 양.
- * 마스터 미터(레벨 미터 칸) 바로 위에 둔다.
+ * 볼륨은 슬라이더와 숫자 칸으로 정한다(설계서 §P4-4). 마스터 미터(레벨 미터 칸) 바로 위에 둔다.
  */
 export function MasterPanel() {
   const volumeDb = useProject((state) => state.doc.master?.volumeDb ?? MASTER_VOLUME_DEFAULT_DB);
@@ -68,6 +69,16 @@ export function MasterPanel() {
           data-testid="master-volume"
           onChange={(event) => setMasterVolumeDb(Number(event.target.value))}
           onDoubleClick={() => setMasterVolumeDb(MASTER_VOLUME_DEFAULT_DB)}
+        />
+        <CommittedNumberInput
+          className="master-number"
+          label={text.volumeInput}
+          testId="master-volume-input"
+          min={MASTER_VOLUME_MIN_DB}
+          max={MASTER_VOLUME_MAX_DB}
+          step={MASTER_VOLUME_STEP_DB}
+          value={volumeDb}
+          onCommit={(value) => setMasterVolumeDb(value)}
         />
         <button
           type="button"

@@ -5,7 +5,7 @@
  *  - 문구를 바꿀 일이 생기면 이 파일만 고친다. 동작 코드(app/·store/·services/)에는 문장을 새로 쓰지 않는다.
  *  - 화면 부품에 이미 한국어로 적혀 있는 정적 글자(단추 이름 등)는 그대로 두었다.
  *    영어가 다시 들어오지 못하게 `scripts/check-ui-strings.mjs`가 `npm run check`에서 검사한다.
- *    (업계에서 그대로 쓰는 약어만 허용: EQ, BPM, WAV, MP3, RMS, WARP)
+ *    (업계에서 그대로 쓰는 약어만 허용: EQ, BPM, WAV, MP3, RMS, kHz)
  */
 export const ko = {
   // ───── 화면 부품의 라벨 ─────
@@ -97,6 +97,8 @@ export const ko = {
     heading: "마스터",
     volumeLabel: "마스터 볼륨",
     volumeValue: (db: number) => `${db > 0 ? "+" : ""}${db.toFixed(1)} dB`,
+    /** 숫자로 바로 입력하는 칸(dB). 범위는 −60 ~ +6 */
+    volumeInput: "마스터 볼륨 값(dB)",
     resetLabel: "0 dB",
     resetTitle: "마스터 볼륨을 0 dB로 되돌립니다",
     limiterLabel: "리미터",
@@ -105,7 +107,48 @@ export const ko = {
     limiterHint: "순간적으로 큰 소리가 −1 dB를 넘지 않도록 누르는 양입니다. 0이면 건드리지 않는 것입니다.",
   },
 
-  clip: { noWavData: "이 세션에는 WAV 원본 데이터가 없습니다." },
+  clip: {
+    noWavData: "이 세션에는 WAV 원본 데이터가 없습니다.",
+
+    /**
+     * 템포 맞춤(예전 이름 WARP, 설계서 §P4-4·보고서 B4): 프로젝트 템포에 맞춰 재생 속도를 바꾼다.
+     * 지금은 속도를 바꾸는 만큼 음정도 함께 바뀐다. 이름에 그 사실을 적는다.
+     */
+    tempoMatch: "템포 맞춤",
+    tempoMatchSuffix: "(음정도 바뀜)",
+    tempoMatchOnTitle: "템포 맞춤 끄기",
+    tempoMatchOffTitle: "템포 맞춤 켜기. 프로젝트 템포에 맞춰 속도를 바꾸며, 음정도 함께 바뀝니다.",
+    /** 처음 켤 때 한 번만 보이는 안내(토스트) */
+    tempoMatchPitchNotice: "지금은 속도와 음정이 함께 바뀝니다. 음정을 유지하는 방식은 나중에 추가합니다.",
+    sourceBpm: "원본 BPM",
+    rate: "배속",
+    rateTitle: "현재 재생 배속과 그에 따른 음정 변화(반음)",
+    gain: "게인",
+    gainValue: "게인 값",
+
+    /** BPM 감지(설계서 §P4-4·보고서 B5) */
+    bpm: {
+      detect: "BPM 감지",
+      detectTitle: "클립 앞부분(최대 3분)의 박자를 분석해 BPM을 추정합니다. 분석하는 동안에도 다른 작업을 할 수 있습니다.",
+      progressLabel: "BPM 분석 진행률",
+      progress: (percent: number) => `BPM 분석 중… ${percent}%`,
+      cancel: "취소",
+      cancelTitle: "BPM 분석을 그만둡니다",
+      result: (value: number) => `추정 BPM ${value} · 곡에 따라 절반이나 두 배로 감지될 수 있습니다.`,
+      half: "×½",
+      double: "×2",
+      halfTitle: "추정값을 절반으로 고칩니다(예: 240 → 120)",
+      doubleTitle: "추정값을 두 배로 고칩니다(예: 60 → 120)",
+      applyToClip: "클립 원본 BPM에 적용",
+      applyToProject: "프로젝트 템포에 적용",
+      appliedToClip: (value: number) => `클립 원본 BPM을 ${value}(으)로 설정했습니다.`,
+      appliedToProject: (value: number) => `프로젝트 템포를 ${value}(으)로 설정했습니다.`,
+      cancelled: "BPM 분석을 취소했습니다.",
+      noBuffer: "오디오 버퍼가 없어 BPM을 분석할 수 없습니다.",
+      unstable: "BPM을 안정적으로 추정하지 못했습니다.",
+      failed: "BPM을 분석하지 못했습니다.",
+    },
+  },
 
   playlist: { snapFallback: "라인" },
 

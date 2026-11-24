@@ -278,10 +278,13 @@
   margin-top: 0;
 }
 
-/* 클립 칸의 WARP 묶음 */
+/* 클립 칸의 템포 맞춤 묶음: 윗줄은 켜고 끄는 단추(이름이 길어 한 줄을 다 쓴다), 아랫줄은 원본 BPM과 배속·음정 */
 .warp-block {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "toggle toggle"
+    "field rate";
   align-items: end;
   gap: var(--space-2);
   padding: var(--space-2);
@@ -290,18 +293,18 @@
 }
 
 .warp-block__toggle {
+  grid-area: toggle;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
-  height: 32px;
+  min-height: 32px;
   padding: 0 10px;
   border: 1px solid var(--line);
   background: #ffffff;
   color: var(--mistral-black);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.04em;
   cursor: pointer;
 }
 
@@ -310,9 +313,16 @@
   background: var(--mistral-gold);
 }
 
+.warp-block__suffix {
+  font-size: 11px;
+  font-weight: 500;
+  color: hsl(0, 0%, 28%);
+}
+
 .warp-block__led {
   width: 7px;
   height: 7px;
+  flex: 0 0 auto;
   border-radius: 50%;
   background: #b9b09a;
 }
@@ -320,6 +330,14 @@
 .warp-block__toggle.on .warp-block__led {
   background: var(--mistral-orange);
   box-shadow: 0 0 6px rgba(250, 82, 15, 0.6);
+}
+
+.warp-block__field {
+  grid-area: field;
+}
+
+.warp-block__rate {
+  grid-area: rate;
 }
 
 .warp-block__field,
@@ -344,6 +362,15 @@
   min-width: 0;
 }
 
+/* 배속과 그에 따른 음정(반음)을 한 줄에: 1.025×  +0.43반음 */
+.warp-block__rate-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  height: 32px;
+  white-space: nowrap;
+}
+
 .warp-block__rate-value {
   display: inline-flex;
   align-items: center;
@@ -354,8 +381,100 @@
   white-space: nowrap;
 }
 
-.warp-block__rate-value.active {
+.warp-block__rate-value.active,
+.warp-block__pitch.active {
   color: var(--mistral-orange);
+}
+
+.warp-block__pitch {
+  align-self: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: hsl(0, 0%, 28%);
+}
+
+/* 클립 게인: 슬라이더 옆에 숫자 칸 */
+.clip-gain {
+  display: grid;
+  gap: 6px;
+}
+
+.clip-gain > label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.clip-gain__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.clip-gain__row input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.control-stack .clip-gain__number,
+.master-number {
+  flex: 0 0 auto;
+  width: 64px;
+  min-width: 0;
+  padding: 4px 6px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* BPM 감지: 진행률(취소 단추와 함께)과 결과(×½·×2 고침, 적용 단추) */
+.bpm-detect {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.bpm-detect__progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "bar cancel"
+    "percent cancel";
+  align-items: center;
+  gap: 4px var(--space-2);
+}
+
+.bpm-detect__progress progress {
+  grid-area: bar;
+  width: 100%;
+  height: 8px;
+  accent-color: var(--mistral-orange);
+}
+
+.bpm-detect__percent {
+  grid-area: percent;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.bpm-detect__progress .text-button {
+  grid-area: cancel;
+}
+
+.bpm-detect__result {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.bpm-detect__result .asset-meta {
+  margin: 0;
+}
+
+.bpm-detect__scale {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
 }
 
 /* ───────── 타임라인 트랙 머리: 한국어 이름표(녹음 대기·음소거·솔로)가 한 줄에 들어가게 ───────── */

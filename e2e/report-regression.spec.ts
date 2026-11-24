@@ -5,7 +5,7 @@
  *   실패하므로, 그때 test.fail 줄을 지우면 된다(=해결 확인).
  * - 선택자는 S 한 곳에만 둔다. 화면 부품에는 data-testid를 붙여 두었으므로 CSS 이름이 바뀌어도(6단계) 깨지지 않는다.
  */
-import { expect, test, type Download, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Download, type Locator, type Page, type TestInfo } from "@playwright/test";
 import { strToU8, unzipSync, zipSync } from "fflate";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -18,6 +18,7 @@ const WAV = path.join(here, "fixtures", "quiet-loud-8s.wav"); // 앞 4초 작게
 const NOT_AUDIO = path.join(here, "fixtures", "not-audio.txt");
 const STEADY = path.join(here, "fixtures", "steady-220hz-12s.wav"); // 12초 내내 같은 크기(0.5)의 220Hz — 엔진이 만드는 클릭만 재기 위한 음원
 const HOUR = path.join(here, "fixtures", "loud-quiet-220hz-1h.wav"); // 1시간, 앞 30분 0.8 · 뒤 30분 0.2의 220Hz(8kHz 모노라 57.6 MB) — P4-3 긴 음원 시험
+const CLICK_10MIN = path.join(here, "fixtures", "click-120bpm-10min.wav"); // 10분, 120 BPM 클릭 곡(8kHz 모노라 9.6 MB) — P4-4 BPM 감지 시험
 
 /** 모든 시험을 한 엔진으로 돌려 비교할 때: E2E_ENGINE=v1|v2. 비우면 앱의 기본 엔진(v2, P3 기본 전환 이후). 옛 엔진 전체 돌리기는 E2E_ENGINE=v1. 주소에 engine이 이미 있으면 그대로 둔다. */
 const ENGINE = process.env.E2E_ENGINE;
@@ -76,6 +77,24 @@ const S = {
   zoomFit: '[data-testid="zoom-fit"]',
   waveform: '[data-testid="clip-waveform"]',
   timelineScroll: ".timeline-scroll",
+  sourceBpm: '[data-testid="source-bpm-input"]',
+  warpRate: '[data-testid="warp-rate"]',
+  warpPitch: '[data-testid="warp-pitch"]',
+  clipGain: '[data-testid="clip-gain"]',
+  clipGainInput: '[data-testid="clip-gain-input"]',
+  masterVolume: '[data-testid="master-volume"]',
+  masterVolumeInput: '[data-testid="master-volume-input"]',
+  masterVolumeValue: '[data-testid="master-volume-value"]',
+  bpmDetect: '[data-testid="bpm-detect"]',
+  bpmProgress: '[data-testid="bpm-progress"]',
+  bpmCancel: '[data-testid="bpm-cancel"]',
+  bpmResult: '[data-testid="bpm-result"]',
+  bpmResultText: '[data-testid="bpm-result-text"]',
+  bpmHalf: '[data-testid="bpm-half"]',
+  bpmDouble: '[data-testid="bpm-double"]',
+  bpmApplyClip: '[data-testid="bpm-apply-clip"]',
+  bpmApplyProject: '[data-testid="bpm-apply-project"]',
+  bpmStatus: '[data-testid="bpm-status"]',
 };
 
 /** 소리 소스 시작 횟수, rAF 호출 수, 최종 출력 분석기를 잡아 두는 측정 훅 */
@@ -227,9 +246,10 @@ test.describe("P2-1 화면 틀", () => {
     await expect(trigger).toBeFocused();
   });
 
-  test("WARP는 상단 바가 아니라 오른쪽 '클립' 칸에 있고, 처음에는 꺼져 있다", async ({ page }) => {
+  test("템포 맞춤은 상단 바가 아니라 오른쪽 '클립' 칸에 있고, 처음에는 꺼져 있다", async ({ page }) => {
     await openApp(page);
     await expect(page.locator(S.transport)).not.toContainText("WARP");
+    await expect(page.locator(S.transport)).not.toContainText("템포 맞춤");
     await upload(page);
     await page.locator(S.clip).first().click({ position: { x: 60, y: 40 } });
     const toggle = page.locator(`${S.inspector} ${S.warpToggle}`);
@@ -2536,3 +2556,286 @@ test.describe("P4-3 다단계 파형과 확대 범위", () => {
 const STEADY_3MIN = path.join(here, "fixtures", "steady-220hz-180s.wav");
 /** 측정값은 한 줄로 남긴다: 병합 기록의 이전/이후 표에 그대로 옮긴다. */
 const measuredP43 = (name: string, value: unknown) => console.log(`P4-3 측정 ${name}: ${JSON.stringify(value)}`);
+
+/** P4-4 측정값도 한 줄로 남긴다: 병합 기록의 이전/이후 표에 그대로 옮긴다. */
+const measuredP44 = (name: string, value: unknown) => console.log(`P4-4 측정 ${name}: ${JSON.stringify(value)}`);
+
+test.describe("P4-4 템포 맞춤·BPM 감지·숫자 칸", () => {
+  const PITCH_NOTICE = "지금은 속도와 음정이 함께 바뀝니다. 음정을 유지하는 방식은 나중에 추가합니다.";
+
+  /** 긴 작업(50 ms 이상)의 길이와 시작 시각을 모은다 */
+  const LONG_TASKS = `(() => {
+    window.__longTasks = [];
+    window.__longTaskStarts = [];
+    try {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          window.__longTasks.push(Math.round(entry.duration));
+          window.__longTaskStarts.push(Math.round(entry.startTime));
+        }
+      }).observe({ type: "longtask", buffered: true });
+    } catch (error) { /* 긴 작업 관찰을 못 하는 환경 */ }
+  })();`;
+
+  /**
+   * BPM Worker를 센다. delayMs > 0이면 Worker로 가는 메시지를 처음 보낸 때부터 그만큼 모아 두었다가 순서대로 한꺼번에 보내
+   * ("분석 중" 화면과 취소를 안정적으로 볼 수 있게), 그 뒤로는 그대로 보낸다.
+   */
+  const BPM_WORKER_PROBE = (delayMs: number) => `(() => {
+    window.__bpmWorkers = 0;
+    window.__bpmTerminated = 0;
+    const Native = window.Worker;
+    window.Worker = class extends Native {
+      constructor(url, options) {
+        super(url, options);
+        this.__bpm = String(url).includes("bpm");
+        this.__held = [];
+        this.__released = ${delayMs} <= 0;
+        if (this.__bpm) window.__bpmWorkers++;
+      }
+      postMessage(message, transfer) {
+        if (!this.__bpm || this.__released) return super.postMessage(message, transfer);
+        this.__held.push([message, transfer]);
+        if (this.__held.length === 1) {
+          setTimeout(() => {
+            this.__released = true;
+            for (const [held, heldTransfer] of this.__held) super.postMessage(held, heldTransfer);
+            this.__held = [];
+          }, ${delayMs});
+        }
+      }
+      terminate() {
+        if (this.__bpm) window.__bpmTerminated++;
+        super.terminate();
+      }
+    };
+  })();`;
+  const bpmWorkers = (page: Page) => page.evaluate(() => ({ created: (window as any).__bpmWorkers as number, terminated: (window as any).__bpmTerminated as number }));
+
+  /** 숫자 칸에 값을 넣고 확정(Enter)한다 */
+  async function typeInto(field: Locator, value: string) {
+    await field.click();
+    await field.press("Control+a");
+    await field.pressSequentially(value);
+    await field.press("Enter");
+  }
+
+  const selectFirstClip = (page: Page) => page.locator(S.clip).first().click({ position: { x: 60, y: 40 } });
+
+  /** 10분 곡을 올리고 그 클립을 고른다 */
+  async function uploadClickSong(page: Page) {
+    await page.setInputFiles(S.upload, CLICK_10MIN);
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 60_000 });
+    await selectFirstClip(page);
+    await expect(page.locator(S.bpmDetect)).toBeVisible();
+  }
+
+  const pitchToast = (page: Page) => page.locator(S.toast).filter({ hasText: PITCH_NOTICE });
+
+  test("B4 이름은 '템포 맞춤(음정도 바뀜)'이고, 처음 켤 때 한 번만 속도와 음정이 함께 바뀐다고 알린다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await selectFirstClip(page);
+    const toggle = page.locator(`${S.inspector} ${S.warpToggle}`);
+    await expect(toggle).toContainText("템포 맞춤(음정도 바뀜)");
+    await expect(page.locator(S.inspector)).not.toContainText("WARP");
+    await expect(pitchToast(page)).toHaveCount(0); // 켜기 전에는 알리지 않는다
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(pitchToast(page)).toHaveCount(1);
+    await expect(pitchToast(page)).toHaveClass(/toast--warning/);
+    expect(await page.evaluate(() => window.localStorage.getItem("ad.tempoMatchPitchNoticeSeen"))).toBe("1");
+
+    // 껐다 켜도 다시 알리지 않는다(같은 안내가 한 번 더 왔다면 ×2로 횟수가 오른다)
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect(pitchToast(page)).toHaveCount(1);
+    await expect(pitchToast(page)).not.toContainText("×2");
+
+    // 새로고침해도(이 브라우저에서 이미 본 안내) 처음 켜는 것으로는 다시 알리지 않는다.
+    await page.reload();
+    await page.locator(S.inspector).waitFor();
+    await page.waitForTimeout(1200);
+    if ((await page.locator(S.clip).count()) === 0) await upload(page);
+    await selectFirstClip(page);
+    if ((await toggle.getAttribute("aria-pressed")) === "true") await toggle.click();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await page.waitForTimeout(600);
+    await expect(pitchToast(page)).toHaveCount(0);
+  });
+
+  test("B4 템포 123·원본 BPM 120이면 배속 1.025×와 +0.43반음이 보이고, 템포를 바꾸면 따라간다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await selectFirstClip(page);
+    const rate = page.locator(`${S.inspector} ${S.warpRate}`);
+    const pitch = page.locator(`${S.inspector} ${S.warpPitch}`);
+    await typeInto(page.locator(S.tempo), "123");
+    await typeInto(page.locator(`${S.inspector} ${S.sourceBpm}`), "120");
+
+    // 꺼져 있으면 속도도 음정도 그대로
+    await expect(rate).toHaveText("1.00×");
+    await expect(pitch).toHaveText("0반음");
+
+    await page.locator(`${S.inspector} ${S.warpToggle}`).click();
+    await expect(rate).toHaveText("1.025×");
+    await expect(pitch).toHaveText("+0.43반음");
+    measuredP44("B4 템포 123 / 원본 120", { 배속: await rate.innerText(), 음정: await pitch.innerText() });
+
+    await typeInto(page.locator(S.tempo), "108");
+    await expect(rate).toHaveText("0.90×");
+    await expect(pitch).toHaveText("-1.82반음");
+
+    await page.locator(`${S.inspector} ${S.warpToggle}`).click(); // 끄면 다시 그대로
+    await expect(rate).toHaveText("1.00×");
+    await expect(pitch).toHaveText("0반음");
+  });
+
+  test("B5 10분짜리 곡의 BPM을 감지하는 동안 화면 스레드는 200 ms 넘게 멈추지 않고, 결과는 120 안팎이다", async ({ page }) => {
+    test.setTimeout(180_000);
+    await page.addInitScript(LONG_TASKS);
+    await page.addInitScript(BPM_WORKER_PROBE(0));
+    await openApp(page);
+    await uploadClickSong(page);
+
+    const startedAt = await page.evaluate(() => performance.now());
+    const clickedAt = Date.now();
+    await page.locator(S.bpmDetect).click();
+    await expect(page.locator(S.bpmResult)).toBeVisible({ timeout: 90_000 });
+    const tookMs = Date.now() - clickedAt;
+    const finishedAt = await page.evaluate(() => performance.now());
+
+    const detected = Number(await page.locator(S.bpmResultText).getAttribute("data-value"));
+    expect(Math.abs(detected - 120), `감지값 ${detected}`).toBeLessThanOrEqual(1);
+    await expect(page.locator(S.bpmResultText)).toContainText(`추정 BPM ${detected}`);
+    expect(await bpmWorkers(page)).toEqual({ created: 1, terminated: 1 }); // 분석은 Worker가 했고, 끝나면 Worker를 끝낸다
+
+    const { durations, starts } = await page.evaluate(() => ({
+      durations: (window as any).__longTasks as number[],
+      starts: (window as any).__longTaskStarts as number[],
+    }));
+    const during = durations.filter((_, i) => starts[i] >= startedAt && starts[i] <= finishedAt);
+    measuredP44("B5 10분 곡 감지", { 감지값: detected, 걸린_ms: tookMs, 긴작업_감지_중_ms: during });
+    expect(during.filter((ms) => ms >= 200), `감지 중 200 ms 넘게 멈춘 작업: ${during.join(", ")}`).toEqual([]);
+  });
+
+  test("B5 CPU를 10배 늦춘 느린 기기에서도 감지 중 화면 스레드는 200 ms 넘게 멈추지 않는다(소리를 작은 덩어리로 나눠 보내므로)", async ({ page }) => {
+    test.setTimeout(180_000);
+    await page.addInitScript(LONG_TASKS);
+    await openApp(page);
+    await uploadClickSong(page);
+    await page.waitForTimeout(2500); // 올린 직후의 파형 계산 등이 가라앉은 뒤에 잰다
+
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 10 });
+    const startedAt = await page.evaluate(() => performance.now());
+    const clickedAt = Date.now();
+    await page.locator(S.bpmDetect).click();
+    await expect(page.locator(S.bpmResult)).toBeVisible({ timeout: 120_000 });
+    const tookMs = Date.now() - clickedAt;
+    const finishedAt = await page.evaluate(() => performance.now());
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+
+    expect(Math.abs(Number(await page.locator(S.bpmResultText).getAttribute("data-value")) - 120)).toBeLessThanOrEqual(1);
+    const { durations, starts } = await page.evaluate(() => ({
+      durations: (window as any).__longTasks as number[],
+      starts: (window as any).__longTaskStarts as number[],
+    }));
+    const during = durations.filter((_, i) => starts[i] >= startedAt && starts[i] <= finishedAt);
+    measuredP44("B5 10분 곡 감지(CPU 10배 느리게)", { 걸린_ms: tookMs, 긴작업_감지_중_ms: during });
+    expect(during.filter((ms) => ms >= 200), `감지 중 200 ms 넘게 멈춘 작업: ${during.join(", ")}`).toEqual([]);
+  });
+
+  test("B5 결과의 ×½·×2로 값을 고치고, 클립 원본 BPM·프로젝트 템포에 적용한다", async ({ page }) => {
+    test.setTimeout(120_000);
+    await openApp(page);
+    await uploadClickSong(page);
+    await page.locator(S.bpmDetect).click();
+    await expect(page.locator(S.bpmResult)).toBeVisible({ timeout: 90_000 });
+
+    const text = page.locator(S.bpmResultText);
+    const detected = Number(await text.getAttribute("data-value"));
+    await expect(text).toContainText("곡에 따라 절반이나 두 배로 감지될 수 있습니다");
+    const doubled = Math.round(detected * 2 * 10) / 10;
+    await page.locator(S.bpmDouble).click();
+    await expect(text).toHaveAttribute("data-value", String(doubled));
+    await expect(text).toContainText(`추정 BPM ${doubled}`);
+    await expect(page.locator(S.bpmDouble)).toBeDisabled(); // 한 번 더 곱하면 300을 넘는다
+
+    await page.locator(S.bpmHalf).click();
+    await expect(text).toHaveAttribute("data-value", String(detected));
+    await page.locator(S.bpmHalf).click();
+    const halved = Math.round(detected * 0.5 * 10) / 10;
+    await expect(text).toHaveAttribute("data-value", String(halved));
+    await expect(text).toContainText(`추정 BPM ${halved}`);
+
+    await page.locator(S.bpmApplyClip).click();
+    await expect(page.locator(`${S.inspector} ${S.sourceBpm}`)).toHaveValue(String(halved));
+    await expect(page.locator(S.status)).toContainText(`클립 원본 BPM을 ${halved}(으)로 설정했습니다.`);
+    await page.locator(S.bpmApplyProject).click();
+    await expect(page.locator(S.tempo)).toHaveValue(String(halved));
+    await expect(page.locator(S.status)).toContainText(`프로젝트 템포를 ${halved}(으)로 설정했습니다.`);
+  });
+
+  test("B5 분석하는 동안 진행 표시와 [취소]가 보이고, 취소하면 Worker를 끝내며 결과는 나오지 않는다", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.addInitScript(BPM_WORKER_PROBE(2500)); // 분석 요청을 2.5초 늦춰 "분석 중"을 안정적으로 본다
+    await openApp(page);
+    await uploadClickSong(page);
+
+    await page.locator(S.bpmDetect).click();
+    const progress = page.locator(S.bpmProgress);
+    await expect(progress).toBeVisible();
+    await expect(progress).toContainText("BPM 분석 중");
+    await expect(progress.locator("progress")).toHaveAttribute("aria-label", "BPM 분석 진행률");
+    await expect(page.locator(S.bpmDetect)).toBeDisabled(); // 돌고 있는 동안 또 시작하지 못한다
+
+    await page.locator(S.bpmCancel).click();
+    await expect(progress).toHaveCount(0);
+    await expect(page.locator(S.bpmStatus)).toHaveText("BPM 분석을 취소했습니다.");
+    await expect(page.locator(S.bpmDetect)).toBeEnabled();
+    expect((await bpmWorkers(page)).terminated).toBe(1);
+
+    await page.waitForTimeout(3500); // 늦춘 요청이 보내졌어도(Worker는 이미 끝났다) 결과는 나오지 않는다
+    await expect(page.locator(S.bpmResult)).toHaveCount(0);
+
+    // 취소한 뒤 다시 감지하면 처음부터 돌아 결과가 나온다
+    await page.locator(S.bpmDetect).click();
+    await expect(page.locator(S.bpmResult)).toBeVisible({ timeout: 60_000 });
+    expect(Math.abs(Number(await page.locator(S.bpmResultText).getAttribute("data-value")) - 120)).toBeLessThanOrEqual(1);
+  });
+
+  test("클립 게인과 마스터 볼륨은 숫자 칸으로도 입력하고, 범위를 넘는 값은 끝값으로 맞춘다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await selectFirstClip(page);
+
+    const gain = page.locator(S.clipGainInput);
+    const gainSlider = page.locator(S.clipGain);
+    await expect(gain).toHaveValue("1");
+    await typeInto(gain, "1.5");
+    await expect(gainSlider).toHaveValue("1.5");
+    await typeInto(gain, "9");
+    await expect(gain).toHaveValue("2");
+    await expect(gainSlider).toHaveValue("2");
+    await typeInto(gain, "-3");
+    await expect(gain).toHaveValue("0");
+    await setRange(page, S.clipGain, 0.75); // 슬라이더를 움직이면 숫자 칸이 따라온다
+    await expect(gain).toHaveValue("0.75");
+
+    const master = page.locator(S.masterVolumeInput);
+    await typeInto(master, "-12");
+    await expect(page.locator(S.masterVolumeValue)).toHaveText("-12.0 dB");
+    await expect(page.locator(S.masterVolume)).toHaveValue("-12");
+    await typeInto(master, "20");
+    await expect(page.locator(S.masterVolumeValue)).toHaveText("+6.0 dB");
+    await typeInto(master, "-99");
+    await expect(page.locator(S.masterVolumeValue)).toHaveText("-60.0 dB");
+    await typeInto(master, "0");
+    await expect(page.locator(S.masterVolumeValue)).toHaveText("0.0 dB");
+  });
+});
