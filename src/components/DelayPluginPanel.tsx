@@ -1,7 +1,12 @@
-import { useRef } from "react";
 import { ko } from "../i18n/ko";
+import { DEFAULT_DELAY_SETTINGS } from "../domain/project/defaults";
+import { DELAY_FEEDBACK_RANGE, DELAY_HIGH_CUT_RANGE, DELAY_TIME_RANGE } from "../domain/project/ranges";
 import type { DelaySettings } from "../domain/types";
 import { DELAY_SYNC_OPTIONS, getDelayTimeMs } from "../utils/delay";
+import { plainEntry, scaledEntry } from "../ui/controls/entries";
+import { Knob } from "../ui/controls/Knob";
+import { Toggle } from "../ui/controls/Toggle";
+import { useHistoryGesture } from "../ui/inspector/useHistoryGesture";
 
 interface DelayPluginPanelProps {
   bpm: number;
@@ -13,137 +18,16 @@ function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`;
 }
 
-// ── SVG Rotary Knob ──────────────────────────────────────────────────────────
-interface KnobProps {
-  value: number;      // 0–1 normalized
-  label: string;
-  display: string;
-  color?: string;
-  size?: number;
-  onChange: (v: number) => void;
-  disabled?: boolean;
-}
-
-function DelayKnob({ value, label, display, color = "#d97a30", size = 56, onChange, disabled = false }: KnobProps) {
-  const dragging = useRef(false);
-  const startY = useRef(0);
-  const startV = useRef(0);
-
-  const MIN_ANGLE = -145;
-  const MAX_ANGLE = 145;
-  const angle = MIN_ANGLE + value * (MAX_ANGLE - MIN_ANGLE);
-
-  const r = size / 2 - 4;
-  const cx = size / 2;
-  const cy = size / 2;
-
-  // Arc path
-  const toRad = (deg: number) => (deg - 90) * (Math.PI / 180);
-  const arcX1 = cx + r * Math.cos(toRad(MIN_ANGLE));
-  const arcY1 = cy + r * Math.sin(toRad(MIN_ANGLE));
-  const arcX2 = cx + r * Math.cos(toRad(angle));
-  const arcY2 = cy + r * Math.sin(toRad(angle));
-  const largeArc = angle - MIN_ANGLE > 180 ? 1 : 0;
-
-  // Indicator dot position
-  const iR = r - 5;
-  const iX = cx + iR * Math.cos(toRad(angle));
-  const iY = cy + iR * Math.sin(toRad(angle));
-
-  const onPointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (disabled) return;
-    event.preventDefault();
-    event.currentTarget.focus();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragging.current = true;
-    startY.current = event.clientY;
-    startV.current = value;
-  };
-  const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
-    if (!dragging.current || disabled) return;
-    onChange(Math.max(0, Math.min(1, startV.current + (startY.current - event.clientY) / 180)));
-  };
-  const onKeyDown = (event: React.KeyboardEvent<SVGSVGElement>) => {
-    if (disabled) return;
-    let next = value;
-    if (event.key === "ArrowUp" || event.key === "ArrowRight") next += 0.01;
-    else if (event.key === "ArrowDown" || event.key === "ArrowLeft") next -= 0.01;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = 1;
-    else return;
-    event.preventDefault();
-    onChange(Math.max(0, Math.min(1, next)));
-  };
-
-  return (
-    <div className="dly-knob-wrap" style={{ width: size }}>
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        style={{ cursor: disabled ? "not-allowed" : "ns-resize", display: "block", userSelect: "none", touchAction: "none", opacity: disabled ? 0.5 : 1 }}
-        role="slider"
-        tabIndex={disabled ? -1 : 0}
-        aria-label={`${label} 딜레이`}
-        aria-disabled={disabled}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(value * 100)}
-        aria-valuetext={display}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={() => { dragging.current = false; }}
-        onPointerCancel={() => { dragging.current = false; }}
-        onLostPointerCapture={() => { dragging.current = false; }}
-        onKeyDown={onKeyDown}
-      >
-        {/* Outer ring */}
-        <circle cx={cx} cy={cy} r={r + 3} fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth={1.5} />
-        {/* Body gradient */}
-        <defs>
-          <radialGradient id={`dkg-${label}`} cx="40%" cy="35%" r="65%">
-            <stop offset="0%" stopColor="#5a4535" />
-            <stop offset="100%" stopColor="#1e1208" />
-          </radialGradient>
-        </defs>
-        <circle cx={cx} cy={cy} r={r} fill={`url(#dkg-${label})`} />
-        {/* Track arc (background) */}
-        <path
-          d={`M ${arcX1} ${arcY1} A ${r} ${r} 0 1 1 ${cx + r * Math.cos(toRad(MAX_ANGLE))} ${cy + r * Math.sin(toRad(MAX_ANGLE))}`}
-          fill="none"
-          stroke="rgba(0,0,0,0.4)"
-          strokeWidth={3}
-          strokeLinecap="round"
-        />
-        {/* Value arc */}
-        {value > 0 && (
-          <path
-            d={`M ${arcX1} ${arcY1} A ${r} ${r} 0 ${largeArc} 1 ${arcX2} ${arcY2}`}
-            fill="none"
-            stroke={color}
-            strokeWidth={3}
-            strokeLinecap="round"
-          />
-        )}
-        {/* Indicator dot */}
-        <circle cx={iX} cy={iY} r={3} fill={color} />
-      </svg>
-      <div className="dly-knob-label">{label}</div>
-      <div className="dly-knob-value">{display}</div>
-    </div>
-  );
-}
+const TIME_ENTRY = plainEntry("시간 딜레이 값(ms)", DELAY_TIME_RANGE[0], DELAY_TIME_RANGE[1], 1);
+const FEEDBACK_ENTRY = scaledEntry("반복 딜레이 값(%)", 100, 0, DELAY_FEEDBACK_RANGE[1] * 100, 1);
+const HIGH_CUT_ENTRY = plainEntry("고음 컷 딜레이 값(Hz)", DELAY_HIGH_CUT_RANGE[0], DELAY_HIGH_CUT_RANGE[1], 100);
+const DRY_ENTRY = scaledEntry("원음 딜레이 값(%)", 100, 0, 100, 1);
+const WET_ENTRY = scaledEntry("효과음 딜레이 값(%)", 100, 0, 100, 1);
 
 // ── Panel ────────────────────────────────────────────────────────────────────
 export function DelayPluginPanel({ bpm, delay, onChange }: DelayPluginPanelProps) {
   const effectiveTimeMs = getDelayTimeMs(delay, bpm);
-
-  // Normalizers
-  const timeNorm = (delay.delayTimeMs - 1) / (2000 - 1);
-  const fbNorm = delay.feedback / 0.95;
-  const hcNorm = (delay.highCutHz - 1000) / (20000 - 1000);
-  const dryNorm = delay.dry;
-  const wetNorm = delay.wet;
+  const gesture = useHistoryGesture();
 
   return (
     <div className={`dly-rack ${delay.enabled ? "on" : ""}`}>
@@ -158,55 +42,95 @@ export function DelayPluginPanel({ bpm, delay, onChange }: DelayPluginPanelProps
               <span className="dly-brand">공간 딜레이</span>
               <span className="dly-sub">{ko.delay.subtitle}</span>
             </div>
-            <button
+            <Toggle
               className={`dly-power ${delay.enabled ? "on" : ""}`}
-              onClick={() => onChange({ enabled: !delay.enabled })}
-              type="button"
-              aria-label="딜레이 켜기"
-              aria-pressed={delay.enabled}
+              label="딜레이 켜기"
+              pressed={delay.enabled}
+              onChange={(enabled) => onChange({ enabled })}
             >
               <span className="dly-led" />
               <span>{delay.enabled ? "켜짐" : "꺼짐"}</span>
-            </button>
+            </Toggle>
           </div>
 
           {/* ── Knobs row ── */}
           <div className="dly-knobs-row">
-            <DelayKnob
-              value={timeNorm}
-              label="시간"
-              disabled={delay.syncEnabled}
-              display={`${Math.round(effectiveTimeMs)} ms`}
+            <Knob
+              face="arc"
+              label="시간 딜레이"
+              caption="시간"
               color="#d97a30"
-              onChange={(v) => onChange({ delayTimeMs: Math.round(1 + v * (2000 - 1)) })}
+              value={delay.delayTimeMs}
+              min={DELAY_TIME_RANGE[0]}
+              max={DELAY_TIME_RANGE[1]}
+              step={1}
+              defaultValue={DEFAULT_DELAY_SETTINGS.delayTimeMs}
+              disabled={delay.syncEnabled}
+              valueText={`${Math.round(effectiveTimeMs)} ms`}
+              entry={TIME_ENTRY}
+              onChange={(delayTimeMs) => onChange({ delayTimeMs })}
+              {...gesture}
             />
-            <DelayKnob
-              value={fbNorm}
-              label="반복"
-              display={formatPercent(delay.feedback)}
+            <Knob
+              face="arc"
+              label="반복 딜레이"
+              caption="반복"
               color="#e0a040"
-              onChange={(v) => onChange({ feedback: Math.round(v * 0.95 * 100) / 100 })}
+              value={delay.feedback}
+              min={DELAY_FEEDBACK_RANGE[0]}
+              max={DELAY_FEEDBACK_RANGE[1]}
+              step={0.01}
+              defaultValue={DEFAULT_DELAY_SETTINGS.feedback}
+              format={formatPercent}
+              entry={FEEDBACK_ENTRY}
+              onChange={(feedback) => onChange({ feedback })}
+              {...gesture}
             />
-            <DelayKnob
-              value={hcNorm}
-              label="고음 컷"
-              display={`${Math.round(delay.highCutHz / 100) * 100} Hz`}
+            <Knob
+              face="arc"
+              label="고음 컷 딜레이"
+              caption="고음 컷"
               color="#c86822"
-              onChange={(v) => onChange({ highCutHz: Math.round((1000 + v * (20000 - 1000)) / 100) * 100 })}
+              curve="log"
+              value={delay.highCutHz}
+              min={DELAY_HIGH_CUT_RANGE[0]}
+              max={DELAY_HIGH_CUT_RANGE[1]}
+              step={100}
+              defaultValue={DEFAULT_DELAY_SETTINGS.highCutHz}
+              format={(hz) => `${Math.round(hz / 100) * 100} Hz`}
+              entry={HIGH_CUT_ENTRY}
+              onChange={(highCutHz) => onChange({ highCutHz })}
+              {...gesture}
             />
-            <DelayKnob
-              value={dryNorm}
-              label="원음"
-              display={formatPercent(delay.dry)}
+            <Knob
+              face="arc"
+              label="원음 딜레이"
+              caption="원음"
               color="#8ab8d8"
-              onChange={(v) => onChange({ dry: Math.round(v * 100) / 100 })}
+              value={delay.dry}
+              min={0}
+              max={1}
+              step={0.01}
+              defaultValue={DEFAULT_DELAY_SETTINGS.dry}
+              format={formatPercent}
+              entry={DRY_ENTRY}
+              onChange={(dry) => onChange({ dry })}
+              {...gesture}
             />
-            <DelayKnob
-              value={wetNorm}
-              label="효과음"
-              display={formatPercent(delay.wet)}
+            <Knob
+              face="arc"
+              label="효과음 딜레이"
+              caption="효과음"
               color="#58c878"
-              onChange={(v) => onChange({ wet: Math.round(v * 100) / 100 })}
+              value={delay.wet}
+              min={0}
+              max={1}
+              step={0.01}
+              defaultValue={DEFAULT_DELAY_SETTINGS.wet}
+              format={formatPercent}
+              entry={WET_ENTRY}
+              onChange={(wet) => onChange({ wet })}
+              {...gesture}
             />
           </div>
 

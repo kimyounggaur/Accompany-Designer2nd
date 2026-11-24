@@ -1,12 +1,22 @@
 import { Headphones, Mic, Music2, Timer, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { audioEngine } from "../../audio/currentEngine";
-import { CommittedNumberInput } from "../../components/CommittedNumberInput";
+import { MONITOR_VOLUME_DEFAULT } from "../../audio/engine/MonitorBus";
+import { CommittedNumberInput } from "../controls/CommittedNumberInput";
+import { plainEntry } from "../controls/entries";
+import { Slider, type SliderEntry } from "../controls/Slider";
 import { LATENCY_OFFSET_MAX_MS, LATENCY_OFFSET_MIN_MS } from "../../domain/recording/latency";
 import { ko } from "../../i18n/ko";
 import { readMonitorVolume, writeMonitorVolume } from "../../services/monitorVolume";
 import { useRecordingStore } from "../../state/recordingStore";
 import { useDismiss } from "../useDismiss";
+
+/** 모니터 볼륨 숫자 칸: 슬라이더와 같은 단위(퍼센트, 5씩) */
+const MONITOR_ENTRY: SliderEntry = {
+  ...plainEntry(ko.monitor.volumeInput, 0, 100, 5),
+  className: "monitor-volume-number",
+  testId: "monitor-volume-input",
+};
 
 interface RecordOptionsProps {
   isRecording: boolean;
@@ -82,17 +92,18 @@ export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
       </button>
       <label className="monitor-volume-control" title={ko.monitor.volumeTitle}>
         <Volume2 size={14} aria-hidden="true" />
-        <input
-          type="range"
+        <Slider
+          label={ko.monitor.volumeLabel}
           min={0}
           max={100}
           step={5}
           value={monitorPercent}
-          aria-label={ko.monitor.volumeLabel}
-          aria-valuetext={ko.monitor.volumeValue(monitorPercent)}
-          data-testid="monitor-volume"
-          onChange={(event) => {
-            const next = Number(event.target.value) / 100;
+          defaultValue={Math.round(MONITOR_VOLUME_DEFAULT * 100)}
+          format={ko.monitor.volumeValue}
+          testId="monitor-volume"
+          entry={MONITOR_ENTRY}
+          onChange={(percent) => {
+            const next = percent / 100;
             setMonitorVolume(next);
             writeMonitorVolume(next);
           }}

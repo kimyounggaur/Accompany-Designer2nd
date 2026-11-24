@@ -6,7 +6,10 @@ import { notify } from "../services/notify";
 import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
 import { useDawStore } from "../store/useDawStore";
 import { addClipFromSource, deleteTrackWithConfirm, setSelectedClips, toggleRecordingArm } from "../app/actions";
+import { DEFAULT_TRACK_VOLUME } from "../domain/project/defaults";
 import type { PlaylistTool } from "../domain/types";
+import { scaledEntry } from "../ui/controls/entries";
+import { Slider } from "../ui/controls/Slider";
 import {
   clamp,
   getBeatSeconds,
@@ -548,19 +551,26 @@ export function Timeline() {
             </div>
             <label>
               {ko.trackHeader.volume}
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={track.volume}
-                aria-label={`${track.name} 볼륨`}
-                data-testid="track-volume"
-                onPointerDown={beginHistoryGroup}
-                onChange={(event) =>
-                  updateTrack(track.id, { volume: Number(event.target.value) })
-                }
-              />
+              <span className="track-volume-row">
+                <Slider
+                  label={`${track.name} 볼륨`}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={track.volume}
+                  defaultValue={DEFAULT_TRACK_VOLUME}
+                  format={(volume) => `${Math.round(volume * 100)}%`}
+                  testId="track-volume"
+                  entry={{
+                    ...scaledEntry(ko.trackHeader.volumeInput(track.name), 100, 0, 100, 1),
+                    className: "track-volume-number",
+                    testId: "track-volume-input",
+                  }}
+                  onChangeStart={beginHistoryGroup}
+                  onChange={(volume) => updateTrack(track.id, { volume })}
+                  onChangeEnd={endHistoryGroup}
+                />
+              </span>
             </label>
           </div>
         ))}

@@ -68,6 +68,8 @@ export const DEFAULT_REVERB_SETTINGS: ReverbSettings = {
 };
 
 export const DEFAULT_TRACK_VOLUME = 0.86;
+/** 새 클립의 게인(원본 음량 그대로). 클립 칸 슬라이더를 더블클릭하면 이 값으로 돌아간다 */
+export const DEFAULT_CLIP_GAIN = 1;
 export const DEFAULT_TIME_SIGNATURE: TimeSignature = { beats: 4, unit: 4 };
 
 type EffectSettings = Pick<Track, "eq" | "compressor" | "delay" | "reverb">;

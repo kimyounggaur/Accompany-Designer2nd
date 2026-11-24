@@ -2322,15 +2322,6 @@ input[type="range"] {
   height: 12px;
 }
 
-.reverb-knob input {
-  position: absolute;
-  inset: -6px;
-  width: calc(100% + 12px);
-  height: calc(100% + 12px);
-  opacity: 0;
-  cursor: ew-resize;
-}
-
 .reverb-knob strong {
   color: rgba(32, 27, 21, 0.86);
   font-size: 8px;

@@ -1,22 +1,26 @@
-import type { CSSProperties } from "react";
+import { useState } from "react";
 import { ko } from "../i18n/ko";
+import { DEFAULT_REVERB_SETTINGS } from "../domain/project/defaults";
+import {
+  REVERB_DECAY_RANGE,
+  REVERB_HIGH_PASS_RANGE,
+  REVERB_LOW_PASS_RANGE,
+  REVERB_PRE_DELAY_RANGE,
+  EQ_GAIN_RANGE,
+} from "../domain/project/ranges";
 import type { ReverbSettings } from "../domain/types";
 import { REVERB_MODE_OPTIONS } from "../utils/reverb";
+import { plainEntry, scaledEntry } from "../ui/controls/entries";
+import { clampValue, roundTo } from "../ui/controls/knobMath";
+import { Knob } from "../ui/controls/Knob";
+import { Slider } from "../ui/controls/Slider";
+import { Toggle } from "../ui/controls/Toggle";
+import { ValueEntry } from "../ui/controls/ValueEntry";
+import { useHistoryGesture } from "../ui/inspector/useHistoryGesture";
 
 interface ReverbPluginPanelProps {
   reverb: ReverbSettings;
   onChange: (patch: Partial<ReverbSettings>) => void;
-}
-
-interface KnobProps {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  display: string;
-  size?: "small" | "medium";
-  onChange: (value: number) => void;
 }
 
 function formatPercent(value: number) {
@@ -27,42 +31,54 @@ function formatDb(value: number) {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)} dB`;
 }
 
-function Knob({
-  label,
-  value,
-  min,
-  max,
-  step,
-  display,
-  size = "medium",
-  onChange,
-}: KnobProps) {
-  const normalized = (value - min) / (max - min);
-  const angle = -135 + Math.max(0, Math.min(1, normalized)) * 270;
+const formatMs = (value: number) => `${Math.round(value)} ms`;
+const formatHz = (value: number) => `${Math.round(value)} Hz`;
 
+const PERCENT_ENTRY = (label: string) => scaledEntry(label, 100, 0, 100, 1);
+const DB_ENTRY = (label: string) => plainEntry(label, EQ_GAIN_RANGE[0], EQ_GAIN_RANGE[1], 0.5);
+
+const DRIVE_ENTRY = PERCENT_ENTRY(`${ko.reverb.drive} 리버브 값(%)`);
+const BLEND_ENTRY = PERCENT_ENTRY(`${ko.reverb.blend} 리버브 값(%)`);
+const WIDTH_ENTRY = PERCENT_ENTRY(`${ko.reverb.width} 리버브 값(%)`);
+const PRE_DELAY_ENTRY = plainEntry(`${ko.reverb.preDelay} 리버브 값(ms)`, REVERB_PRE_DELAY_RANGE[0], REVERB_PRE_DELAY_RANGE[1], 1);
+const HIGH_PASS_ENTRY = plainEntry(`${ko.reverb.highPass} 리버브 값(Hz)`, REVERB_HIGH_PASS_RANGE[0], REVERB_HIGH_PASS_RANGE[1], 10);
+const LOW_PASS_ENTRY = plainEntry(`${ko.reverb.lowPass} 리버브 값(Hz)`, REVERB_LOW_PASS_RANGE[0], REVERB_LOW_PASS_RANGE[1], 100);
+const MOD_AMOUNT_ENTRY = PERCENT_ENTRY(`${ko.reverb.modulation} ${ko.reverb.amount} 값(%)`);
+const EQ_LOW_ENTRY = DB_ENTRY(`${ko.reverb.postEq} ${ko.reverb.low} 값(dB)`);
+const EQ_MID_ENTRY = DB_ENTRY(`${ko.reverb.postEq} ${ko.reverb.mid} 값(dB)`);
+const EQ_HIGH_ENTRY = DB_ENTRY(`${ko.reverb.postEq} ${ko.reverb.high} 값(dB)`);
+const DECAY_ENTRY = plainEntry("잔향 길이 값(초)", REVERB_DECAY_RANGE[0], REVERB_DECAY_RANGE[1], 0.1);
+
+/** 잔향 길이 값 글자. 누르면 숫자 칸으로 바뀐다(자기 열림 상태를 가지므로 따로 정의한다) */
+function DecayReadout({ decay, onCommit }: { decay: number; onCommit: (input: number) => void }) {
+  const [editing, setEditing] = useState(false);
   return (
-    <label className={`reverb-knob ${size}`}>
-      <span>{label}</span>
-      <span
-        className="reverb-knob-cap"
-        style={{ "--angle": `${angle}deg` } as CSSProperties}
-      >
-        <input
-          max={max}
-          min={min}
-          onChange={(event) => onChange(Number(event.target.value))}
-          step={step}
-          type="range"
-          value={value}
-        />
-      </span>
-      <strong>{display}</strong>
-    </label>
+    <strong>
+      <ValueEntry
+        text={`${decay.toFixed(1)} s`}
+        config={DECAY_ENTRY}
+        value={decay}
+        editing={editing}
+        onOpen={() => setEditing(true)}
+        onCommit={onCommit}
+        onClose={() => setEditing(false)}
+      />
+    </strong>
   );
 }
 
 export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) {
+  const gesture = useHistoryGesture();
   const wetBlend = reverb.wet / Math.max(0.01, reverb.dry + reverb.wet);
+  const defaults = DEFAULT_REVERB_SETTINGS;
+
+  function commitDecay(input: number) {
+    const next = clampValue(roundTo(DECAY_ENTRY.fromInput(input), 8), REVERB_DECAY_RANGE[0], REVERB_DECAY_RANGE[1]);
+    if (next === reverb.decay) return;
+    gesture.onChangeStart();
+    onChange({ decay: next });
+    gesture.onChangeEnd();
+  }
 
   return (
     <div className={`reverb-rack ${reverb.enabled ? "on" : ""}`}>
@@ -81,16 +97,15 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
                 <span className="reverb-brand">공간 리버브</span>
                 <span className="reverb-subtitle">{ko.reverb.subtitle}</span>
               </div>
-              <button
+              <Toggle
                 className={`reverb-power ${reverb.enabled ? "on" : ""}`}
-                onClick={() => onChange({ enabled: !reverb.enabled })}
-                type="button"
-                aria-label="리버브 켜기"
-                aria-pressed={reverb.enabled}
+                label="리버브 켜기"
+                pressed={reverb.enabled}
+                onChange={(enabled) => onChange({ enabled })}
               >
                 <span className="reverb-power-lamp" />
-                <span>{reverb.enabled ? "켜짐" : "꺼짐"}</span>
-              </button>
+                <span>{reverb.enabled ? ko.state.on : ko.state.off}</span>
+              </Toggle>
             </section>
 
             <section className="reverb-tube-module">
@@ -98,13 +113,18 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
                 <span />
               </div>
               <Knob
-                display={formatPercent(reverb.drive)}
-                label={ko.reverb.drive}
-                max={1}
-                min={0}
-                onChange={(drive) => onChange({ drive })}
-                step={0.01}
+                face="cap"
+                label={`${ko.reverb.drive} 리버브`}
+                caption={ko.reverb.drive}
                 value={reverb.drive}
+                min={0}
+                max={1}
+                step={0.01}
+                defaultValue={defaults.drive}
+                format={formatPercent}
+                entry={DRIVE_ENTRY}
+                onChange={(drive) => onChange({ drive })}
+                {...gesture}
               />
             </section>
 
@@ -128,14 +148,16 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
                 </select>
               </label>
               <div className="reverb-decay-fader">
-                <input
-                  aria-label="잔향 길이"
-                  max={12}
-                  min={0.2}
-                  onChange={(event) => onChange({ decay: Number(event.target.value) })}
-                  step={0.1}
-                  type="range"
+                <Slider
+                  label="잔향 길이"
                   value={reverb.decay}
+                  min={REVERB_DECAY_RANGE[0]}
+                  max={REVERB_DECAY_RANGE[1]}
+                  step={0.1}
+                  defaultValue={defaults.decay}
+                  format={(value) => `${value.toFixed(1)}초`}
+                  onChange={(decay) => onChange({ decay })}
+                  {...gesture}
                 />
                 <div className="reverb-decay-scale" aria-hidden="true">
                   <span>{ko.reverb.decayLong}</span>
@@ -145,32 +167,42 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
                   <span>{ko.reverb.decayShort}</span>
                 </div>
               </div>
-              <strong>{reverb.decay.toFixed(1)} s</strong>
+              <DecayReadout decay={reverb.decay} onCommit={commitDecay} />
             </section>
 
             <section className="reverb-blend-module">
+              {/* 섞는 비율은 원음·효과음 두 값에서 나온 값이라 더블클릭 기본값을 두지 않는다 */}
               <Knob
-                display={formatPercent(wetBlend)}
-                label={ko.reverb.blend}
-                max={1}
+                face="cap"
+                label={`${ko.reverb.blend} 리버브`}
+                caption={ko.reverb.blend}
+                value={wetBlend}
                 min={0}
+                max={1}
+                step={0.01}
+                format={formatPercent}
+                entry={BLEND_ENTRY}
                 onChange={(blend) =>
                   onChange({
                     dry: Number((1 - blend).toFixed(2)),
                     wet: Number(blend.toFixed(2)),
                   })
                 }
-                step={0.01}
-                value={wetBlend}
+                {...gesture}
               />
               <Knob
-                display={formatPercent(reverb.width)}
-                label={ko.reverb.width}
-                max={1}
-                min={0}
-                onChange={(width) => onChange({ width })}
-                step={0.01}
+                face="cap"
+                label={`${ko.reverb.width} 리버브`}
+                caption={ko.reverb.width}
                 value={reverb.width}
+                min={0}
+                max={1}
+                step={0.01}
+                defaultValue={defaults.width}
+                format={formatPercent}
+                entry={WIDTH_ENTRY}
+                onChange={(width) => onChange({ width })}
+                {...gesture}
               />
             </section>
           </div>
@@ -178,34 +210,51 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
           <div className="reverb-bottom-strip">
             <div className="reverb-arturia-mark" aria-label="반주 디자이너">RD</div>
             <Knob
-              display={`${Math.round(reverb.preDelayMs)} ms`}
-              label={ko.reverb.preDelay}
-              max={250}
-              min={0}
-              onChange={(preDelayMs) => onChange({ preDelayMs })}
+              face="cap"
               size="small"
-              step={1}
+              label={`${ko.reverb.preDelay} 리버브`}
+              caption={ko.reverb.preDelay}
               value={reverb.preDelayMs}
+              min={REVERB_PRE_DELAY_RANGE[0]}
+              max={REVERB_PRE_DELAY_RANGE[1]}
+              step={1}
+              defaultValue={defaults.preDelayMs}
+              format={formatMs}
+              entry={PRE_DELAY_ENTRY}
+              onChange={(preDelayMs) => onChange({ preDelayMs })}
+              {...gesture}
             />
             <Knob
-              display={`${Math.round(reverb.highPassHz)} Hz`}
-              label={ko.reverb.highPass}
-              max={2000}
-              min={20}
-              onChange={(highPassHz) => onChange({ highPassHz })}
+              face="cap"
               size="small"
-              step={10}
+              curve="log"
+              label={`${ko.reverb.highPass} 리버브`}
+              caption={ko.reverb.highPass}
               value={reverb.highPassHz}
+              min={REVERB_HIGH_PASS_RANGE[0]}
+              max={REVERB_HIGH_PASS_RANGE[1]}
+              step={10}
+              defaultValue={defaults.highPassHz}
+              format={formatHz}
+              entry={HIGH_PASS_ENTRY}
+              onChange={(highPassHz) => onChange({ highPassHz })}
+              {...gesture}
             />
             <Knob
-              display={`${Math.round(reverb.lowPassHz)} Hz`}
-              label={ko.reverb.lowPass}
-              max={20000}
-              min={1000}
-              onChange={(lowPassHz) => onChange({ lowPassHz })}
+              face="cap"
               size="small"
-              step={100}
+              curve="log"
+              label={`${ko.reverb.lowPass} 리버브`}
+              caption={ko.reverb.lowPass}
               value={reverb.lowPassHz}
+              min={REVERB_LOW_PASS_RANGE[0]}
+              max={REVERB_LOW_PASS_RANGE[1]}
+              step={100}
+              defaultValue={defaults.lowPassHz}
+              format={formatHz}
+              entry={LOW_PASS_ENTRY}
+              onChange={(lowPassHz) => onChange({ lowPassHz })}
+              {...gesture}
             />
 
             <section className="reverb-mod-section">
@@ -220,48 +269,68 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
                 사용
               </label>
               <Knob
-                display={formatPercent(reverb.modAmount)}
-                label={ko.reverb.amount}
-                max={1}
-                min={0}
-                onChange={(modAmount) => onChange({ modAmount })}
+                face="cap"
                 size="small"
-                step={0.01}
+                label={`${ko.reverb.modulation} ${ko.reverb.amount}`}
+                caption={ko.reverb.amount}
                 value={reverb.modAmount}
+                min={0}
+                max={1}
+                step={0.01}
+                defaultValue={defaults.modAmount}
+                format={formatPercent}
+                entry={MOD_AMOUNT_ENTRY}
+                onChange={(modAmount) => onChange({ modAmount })}
+                {...gesture}
               />
             </section>
 
             <section className="reverb-eq-section">
               <span>{ko.reverb.postEq}</span>
               <Knob
-                display={formatDb(reverb.postEqLowGain)}
-                label={ko.reverb.low}
-                max={12}
-                min={-12}
-                onChange={(postEqLowGain) => onChange({ postEqLowGain })}
+                face="cap"
                 size="small"
-                step={0.5}
+                label={`${ko.reverb.postEq} ${ko.reverb.low}`}
+                caption={ko.reverb.low}
                 value={reverb.postEqLowGain}
+                min={EQ_GAIN_RANGE[0]}
+                max={EQ_GAIN_RANGE[1]}
+                step={0.5}
+                defaultValue={defaults.postEqLowGain}
+                format={formatDb}
+                entry={EQ_LOW_ENTRY}
+                onChange={(postEqLowGain) => onChange({ postEqLowGain })}
+                {...gesture}
               />
               <Knob
-                display={formatDb(reverb.postEqMidGain)}
-                label={ko.reverb.mid}
-                max={12}
-                min={-12}
-                onChange={(postEqMidGain) => onChange({ postEqMidGain })}
+                face="cap"
                 size="small"
-                step={0.5}
+                label={`${ko.reverb.postEq} ${ko.reverb.mid}`}
+                caption={ko.reverb.mid}
                 value={reverb.postEqMidGain}
+                min={EQ_GAIN_RANGE[0]}
+                max={EQ_GAIN_RANGE[1]}
+                step={0.5}
+                defaultValue={defaults.postEqMidGain}
+                format={formatDb}
+                entry={EQ_MID_ENTRY}
+                onChange={(postEqMidGain) => onChange({ postEqMidGain })}
+                {...gesture}
               />
               <Knob
-                display={formatDb(reverb.postEqHighGain)}
-                label={ko.reverb.high}
-                max={12}
-                min={-12}
-                onChange={(postEqHighGain) => onChange({ postEqHighGain })}
+                face="cap"
                 size="small"
-                step={0.5}
+                label={`${ko.reverb.postEq} ${ko.reverb.high}`}
+                caption={ko.reverb.high}
                 value={reverb.postEqHighGain}
+                min={EQ_GAIN_RANGE[0]}
+                max={EQ_GAIN_RANGE[1]}
+                step={0.5}
+                defaultValue={defaults.postEqHighGain}
+                format={formatDb}
+                entry={EQ_HIGH_ENTRY}
+                onChange={(postEqHighGain) => onChange({ postEqHighGain })}
+                {...gesture}
               />
             </section>
           </div>

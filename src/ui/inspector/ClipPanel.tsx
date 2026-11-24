@@ -9,7 +9,11 @@ import {
   startBpmDetection,
 } from "../../app/bpmDetection";
 import { toggleTempoMatch } from "../../app/tempoMatch";
-import { CommittedNumberInput } from "../../components/CommittedNumberInput";
+import { CommittedNumberInput } from "../controls/CommittedNumberInput";
+import { plainEntry } from "../controls/entries";
+import { Slider, type SliderEntry } from "../controls/Slider";
+import { useHistoryGesture } from "./useHistoryGesture";
+import { DEFAULT_CLIP_GAIN } from "../../domain/project/defaults";
 import { BPM_RANGE, CLIP_GAIN_RANGE, CLIP_SOURCE_BPM_RANGE } from "../../domain/project/ranges";
 import { formatPlaybackRate, formatSemitones, rateToSemitones } from "../../domain/timeline/pitch";
 import { ko } from "../../i18n/ko";
@@ -19,6 +23,13 @@ import { useDawStore } from "../../store/useDawStore";
 import { deleteClip } from "../../app/actions";
 import { findClip, getClipPlaybackRate, getClipTimelineDuration } from "../../utils/audioMath";
 import { PanelSection } from "./PanelSection";
+
+/** 게인 숫자 칸: 슬라이더와 같은 단위(0 ~ 2배) */
+const GAIN_ENTRY: SliderEntry = {
+  ...plainEntry(ko.clip.gainValue, CLIP_GAIN_RANGE[0], CLIP_GAIN_RANGE[1], 0.01),
+  className: "clip-gain__number",
+  testId: "clip-gain-input",
+};
 
 /**
  * 선택한 클립의 설정. 상단 바에 있던 템포 맞춤(예전 이름 WARP)·원본 BPM·배속 묶음이 여기로 왔다(클립마다 다른 값이므로).
@@ -33,8 +44,7 @@ export function ClipPanel() {
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const bpm = useDawStore((state) => state.bpm);
   const updateClip = useDawStore((state) => state.updateClip);
-  const beginHistoryGroup = useDawStore((state) => state.beginHistoryGroup);
-  const endHistoryGroup = useDawStore((state) => state.endHistoryGroup);
+  const gesture = useHistoryGesture();
   const detection = useBpmStore((state) => state.detection);
   const text = ko.clip;
 
@@ -87,8 +97,8 @@ export function ClipPanel() {
             이름
             <input
               value={selectedClip.name}
-              onFocus={beginHistoryGroup}
-              onBlur={endHistoryGroup}
+              onFocus={gesture.onChangeStart}
+              onBlur={gesture.onChangeEnd}
               onChange={(event) => updateClip(selectedClip.id, { name: event.target.value })}
             />
           </label>
@@ -138,26 +148,20 @@ export function ClipPanel() {
           <div className="clip-gain">
             <label htmlFor="clip-gain-range">{text.gain}</label>
             <div className="clip-gain__row">
-              <input
-                id="clip-gain-range"
-                max={CLIP_GAIN_RANGE[1]}
-                min={CLIP_GAIN_RANGE[0]}
-                step={0.01}
-                type="range"
-                value={selectedClip.gain}
-                data-testid="clip-gain"
-                onChange={(event) => updateClip(selectedClip.id, { gain: Number(event.target.value) })}
-              />
-              <CommittedNumberInput
+              <Slider
                 key={selectedClip.id}
-                className="clip-gain__number"
-                label={text.gainValue}
-                testId="clip-gain-input"
+                id="clip-gain-range"
+                label={text.gain}
                 min={CLIP_GAIN_RANGE[0]}
                 max={CLIP_GAIN_RANGE[1]}
                 step={0.01}
                 value={selectedClip.gain}
-                onCommit={(value) => updateClip(selectedClip.id, { gain: value })}
+                defaultValue={DEFAULT_CLIP_GAIN}
+                format={(gain) => `${gain.toFixed(2)}배`}
+                testId="clip-gain"
+                entry={GAIN_ENTRY}
+                onChange={(gain) => updateClip(selectedClip.id, { gain })}
+                {...gesture}
               />
             </div>
           </div>

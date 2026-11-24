@@ -1,6 +1,6 @@
 import { Magnet } from "lucide-react";
 import { useDawStore } from "../../store/useDawStore";
-import { CommittedNumberInput } from "../../components/CommittedNumberInput";
+import { CommittedNumberInput } from "../controls/CommittedNumberInput";
 
 /** 프로젝트 템포 · 스냅 */
 export function TempoControls() {
