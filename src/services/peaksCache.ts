@@ -1,28 +1,35 @@
 /**
- * 파형 점 보관소(음원 id → 0~1 값 목록). 문서에는 파형이 없으므로(문서 형식 v2) 화면은 여기서 읽는다.
- * 음원을 풀 때(올리기·녹음·프로젝트 열기·자동 저장 복구)마다 채우고, 새 프로젝트를 열면 비운다.
- * 지금은 메모리에만 둔다. 4단계 P4-3에서 다단계 파형과 저장소(IndexedDB `peaks`) 캐시로 바뀐다.
+ * 파형 보관소(음원 id → 다단계 파형 자료). 문서에는 파형이 없으므로(문서 형식 v2) 화면은 여기서 읽는다.
+ * 자료를 만드는 일(저장소 캐시를 먼저 보고, 없으면 Worker로 계산)은 `app/peaks.ts`가 하고, 끝나면 여기에 채운다.
+ * 새 프로젝트를 열면 비운다. 저장소(IndexedDB) 쪽 캐시는 `persistence/peaksStore.ts`.
  */
-const peaks = new Map<string, number[]>();
+import type { PeakSet } from "../domain/waveform/peakLevels";
+
+const sets = new Map<string, PeakSet>();
 const listeners = new Set<() => void>();
 
 function emit(): void {
   for (const listener of [...listeners]) listener();
 }
 
-export function setPeaks(assetId: string, values: number[]): void {
-  peaks.set(assetId, values);
+export function setPeakSet(assetId: string, set: PeakSet): void {
+  sets.set(assetId, set);
   emit();
 }
 
-export function getPeaks(assetId: string): number[] | undefined {
-  return peaks.get(assetId);
+export function getPeakSet(assetId: string): PeakSet | undefined {
+  return sets.get(assetId);
+}
+
+/** 한 음원의 파형을 버린다(음원이 문서에서 사라졌거나 소리가 바뀌었을 때) */
+export function removePeakSet(assetId: string): void {
+  if (sets.delete(assetId)) emit();
 }
 
 /** 모두 비운다(프로젝트를 통째로 바꿀 때) */
 export function clearPeaks(): void {
-  if (!peaks.size) return;
-  peaks.clear();
+  if (!sets.size) return;
+  sets.clear();
   emit();
 }
 

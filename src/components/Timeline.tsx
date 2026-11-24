@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import type { CSSProperties } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ko } from "../i18n/ko";
 import { notify } from "../services/notify";
 import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
@@ -14,6 +14,7 @@ import {
   getProjectDuration,
   snapTime,
 } from "../utils/audioMath";
+import { INITIAL_RULER_WINDOW, gridTileWidth, nextRulerWindow, planRulerTicks, type RulerWindow } from "../domain/timeline/ruler";
 import { playlistToolIcons } from "../utils/playlistToolIcons";
 import { ClipView } from "./ClipView";
 import { RecordingPreview } from "./RecordingPreview";
@@ -106,6 +107,30 @@ export function Timeline() {
   const updateTrack = useDawStore((state) => state.updateTrack);
   const selectTrack = useDawStore((state) => state.selectTrack);
   const setZoom = useDawStore((state) => state.setZoom);
+  const setTimelineViewportWidth = useDawStore((state) => state.setTimelineViewportWidth);
+  const timelineViewportWidth = useDawStore((state) => state.timelineViewportWidth);
+
+  // 눈금은 화면 근처(양옆 한 화면 폭 여유)만 그린다: 한 시간 곡을 96px/초로 볼 때 눈금 7천여 개를 DOM에 두지 않는다.
+  const [rulerWindow, setRulerWindow] = useState<RulerWindow>(INITIAL_RULER_WINDOW);
+  const syncRulerWindow = useCallback(() => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    setRulerWindow((current) => nextRulerWindow(current, scroll.scrollLeft, scroll.clientWidth));
+  }, []);
+
+  // 화면에 보이는 타임라인 폭을 스토어에 알린다: 확대 범위의 아래쪽 끝(전체 보기)이 이 폭으로 정해진다.
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    const report = () => {
+      setTimelineViewportWidth(scroll.clientWidth);
+      syncRulerWindow();
+    };
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(scroll);
+    return () => observer.disconnect();
+  }, [setTimelineViewportWidth, syncRulerWindow]);
 
   const CLIP_HEIGHT = TRACK_HEIGHT - 32;
 
@@ -167,21 +192,17 @@ export function Timeline() {
     () => getProjectDuration({ bpm, tracks }),
     [bpm, tracks],
   );
-  const width = Math.max(1200, projectDuration * zoomPxPerSecond);
+  // 눈금자·칸은 적어도 화면 폭만큼 이어진다(화면 폭을 알기 전에는 예전 값 1200px). "전체 보기"에서 가로 스크롤이 남지 않도록 1200px 고정을 두지 않는다.
+  const width = Math.max(timelineViewportWidth > 0 ? timelineViewportWidth : 1200, projectDuration * zoomPxPerSecond);
   const beatSeconds = getBeatSeconds(bpm);
   const beatWidth = beatSeconds * zoomPxPerSecond;
   const subdivisionWidth = beatWidth / gridDivision;
 
-  const rulerTicks = useMemo(() => {
-    // projectDuration 대신 실제 표시 너비 기준으로 틱 생성 → 트랙 끝까지 번호 표시
-    const visibleDuration = width / zoomPxPerSecond;
-    const totalBeats = Math.ceil(visibleDuration / beatSeconds);
-    return Array.from({ length: totalBeats + 1 }, (_, beat) => ({
-      beat,
-      left: beat * beatWidth,
-      label: beat % 4 === 0 ? String(beat / 4 + 1) : "",
-    }));
-  }, [beatSeconds, beatWidth, width, zoomPxPerSecond]);
+  // projectDuration 대신 실제 표시 너비 기준으로 눈금을 만든다(트랙 끝까지 번호 표시). 곡이 길어 한 박이 좁아지면 눈금을 솎는다.
+  const rulerTicks = useMemo(
+    () => planRulerTicks(beatSeconds, zoomPxPerSecond, width / zoomPxPerSecond, rulerWindow).ticks,
+    [beatSeconds, width, zoomPxPerSecond, rulerWindow],
+  );
   const timelineClips = useMemo(
     () =>
       tracks.flatMap((track, trackIndex) =>
@@ -526,7 +547,7 @@ export function Timeline() {
         ))}
       </div>
 
-      <div className="timeline-scroll" ref={scrollRef} onScroll={(event) => { if (headersRef.current) headersRef.current.scrollTop = event.currentTarget.scrollTop; }}>
+      <div className="timeline-scroll" ref={scrollRef} onScroll={(event) => { if (headersRef.current) headersRef.current.scrollTop = event.currentTarget.scrollTop; syncRulerWindow(); }}>
         <div
           className="ruler"
           data-testid="ruler"
@@ -560,7 +581,7 @@ export function Timeline() {
           style={{
             width,
             minHeight: tracks.length * TRACK_HEIGHT,
-            backgroundSize: `${subdivisionWidth}px 100%`,
+            backgroundSize: `${gridTileWidth(subdivisionWidth)}px 100%`,
           }}
           onPointerDown={beginLanePointer}
           onPointerMove={handleLanePointerMove}

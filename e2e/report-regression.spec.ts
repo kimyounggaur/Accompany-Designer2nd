@@ -17,6 +17,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const WAV = path.join(here, "fixtures", "quiet-loud-8s.wav"); // 앞 4초 작게(0.05), 뒤 4초 크게(0.8)
 const NOT_AUDIO = path.join(here, "fixtures", "not-audio.txt");
 const STEADY = path.join(here, "fixtures", "steady-220hz-12s.wav"); // 12초 내내 같은 크기(0.5)의 220Hz — 엔진이 만드는 클릭만 재기 위한 음원
+const HOUR = path.join(here, "fixtures", "loud-quiet-220hz-1h.wav"); // 1시간, 앞 30분 0.8 · 뒤 30분 0.2의 220Hz(8kHz 모노라 57.6 MB) — P4-3 긴 음원 시험
 
 /** 모든 시험을 한 엔진으로 돌려 비교할 때: E2E_ENGINE=v1|v2. 비우면 앱의 기본 엔진(v2, P3 기본 전환 이후). 옛 엔진 전체 돌리기는 E2E_ENGINE=v1. 주소에 engine이 이미 있으면 그대로 둔다. */
 const ENGINE = process.env.E2E_ENGINE;
@@ -72,6 +73,9 @@ const S = {
   relinkInput: '[data-testid="relink-input"]',
   relinkConfirm: '[data-testid="relink-confirm"]',
   relinkClose: '[data-testid="relink-close"]',
+  zoomFit: '[data-testid="zoom-fit"]',
+  waveform: '[data-testid="clip-waveform"]',
+  timelineScroll: ".timeline-scroll",
 };
 
 /** 소리 소스 시작 횟수, rAF 호출 수, 최종 출력 분석기를 잡아 두는 측정 훅 */
@@ -2287,3 +2291,248 @@ test.describe("P4-2 .adproj 파일과 음원 다시 연결", () => {
     for (const f of [file, saved]) fs.rmSync(f, { force: true });
   });
 });
+
+
+test.describe("P4-3 다단계 파형과 확대 범위", () => {
+  /** 클립 파형 캔버스마다 그려진 모양: 가장 높은 막대(장치 픽셀), 그려진 칸 수, 중심선을 지나지 않는 막대 수. 왼쪽부터 순서대로. */
+  async function waveformStats(page: Page) {
+    return page.evaluate(() => {
+      const canvases = [...document.querySelectorAll<HTMLCanvasElement>('[data-testid="clip-waveform"]')];
+      return canvases
+        .map((canvas) => {
+          const context = canvas.getContext("2d")!;
+          const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+          const middle = height / 2;
+          let tallest = 0;
+          let drawn = 0;
+          let offCenter = 0;
+          for (let x = 0; x < width; x++) {
+            let top = -1;
+            let bottom = -1;
+            for (let y = 0; y < height; y++) {
+              if (data[(y * width + x) * 4 + 3] > 0) {
+                if (top < 0) top = y;
+                bottom = y;
+              }
+            }
+            if (top < 0) continue;
+            drawn++;
+            tallest = Math.max(tallest, bottom - top + 1);
+            if (bottom < middle - 1 || top > middle + 1) offCenter++;
+          }
+          return { left: canvas.getBoundingClientRect().left, tallest, drawn, offCenter };
+        })
+        .sort((a, b) => a.left - b.left);
+    });
+  }
+
+  /** 모든 클립의 파형에 높이가 그려질 때까지 기다린다(파형은 Worker가 따로 계산해 나중에 채운다) */
+  async function waitForWaveforms(page: Page, count: number, timeout = 20_000) {
+    await expect
+      .poll(async () => {
+        const stats = await waveformStats(page);
+        return stats.length === count && stats.every((item) => item.drawn > 0);
+      }, { timeout })
+      .toBe(true);
+  }
+
+  const COUNT_PEAKS_WORKERS = `(() => {
+    window.__peaksWorkers = 0;
+    window.__peaksWorkerAt = -1;
+    const Native = window.Worker;
+    window.Worker = class extends Native {
+      constructor(url, options) {
+        super(url, options);
+        if (String(url).includes("peaks")) {
+          window.__peaksWorkers++;
+          if (window.__peaksWorkerAt < 0) window.__peaksWorkerAt = performance.now();
+        }
+      }
+    };
+  })();`;
+  const peaksWorkers = (page: Page) => page.evaluate(() => (window as any).__peaksWorkers as number);
+
+  const LONG_TASKS = `(() => {
+    window.__longTasks = [];
+    window.__longTaskStarts = [];
+    try {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          window.__longTasks.push(Math.round(entry.duration));
+          window.__longTaskStarts.push(Math.round(entry.startTime));
+        }
+      }).observe({ type: "longtask", buffered: true });
+    } catch (error) { /* 긴 작업 관찰을 못 하는 환경 */ }
+  })();`;
+
+  const scrollInfo = (page: Page) =>
+    page.locator(S.timelineScroll).evaluate((el) => ({ left: el.scrollLeft, width: el.scrollWidth, client: el.clientWidth }));
+
+  test("B1 한 곡을 4초에서 자르면 작은 소리 쪽 조각의 파형 높이가 큰 소리 쪽의 1/8 이하다", async ({ page }) => {
+    await openApp(page);
+    await upload(page); // 앞 4초 0.05, 뒤 4초 0.8
+    await waitForWaveforms(page, 1);
+    await page.keyboard.press("c"); // 자르기 도구
+    const box = (await page.locator(S.clip).boundingBox())!;
+    await page.mouse.click(box.x + 4 * 96, box.y + box.height / 2);
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    await waitForWaveforms(page, 2);
+    const [quiet, loud] = await waveformStats(page);
+    measuredP43("B1 자른 조각의 가장 높은 막대(장치 픽셀)", { 작은쪽: quiet.tallest, 큰쪽: loud.tallest, 비율: +(quiet.tallest / loud.tallest).toFixed(3) });
+    expect(quiet.tallest).toBeLessThanOrEqual(loud.tallest / 8);
+    expect(loud.tallest).toBeGreaterThan(30); // 큰 쪽은 칸 높이를 거의 채운다
+  });
+
+  test("저장소 캐시: 음원을 올리면 파형이 해시로 저장되고, 새로 열었을 때는 Worker 없이 캐시에서 읽는다", async ({ page }) => {
+    await page.addInitScript(COUNT_PEAKS_WORKERS);
+    await openApp(page);
+    await upload(page);
+    await waitForWaveforms(page, 1);
+    expect(await peaksWorkers(page)).toBe(1); // 처음에는 Worker가 계산했다
+    const hash = createHash("sha256").update(fs.readFileSync(WAV)).digest("hex");
+    const storedKeys = () =>
+      page.evaluate(
+        () =>
+          new Promise<string[]>((resolve, reject) => {
+            const open = indexedDB.open("accompany-designer");
+            open.onerror = () => reject(open.error);
+            open.onsuccess = () => {
+              const request = open.result.transaction("peaks", "readonly").objectStore("peaks").getAllKeys();
+              request.onsuccess = () => { open.result.close(); resolve(request.result.map(String)); };
+              request.onerror = () => reject(request.error);
+            };
+          }),
+      );
+    await expect.poll(storedKeys, { timeout: 5000 }).toEqual([0, 1, 2, 3].map((level) => `${hash}:${level}`));
+
+    await page.waitForTimeout(2000); // 자동 저장(1.2초 뒤)
+    // 한 번 새로고침: 복구한 음원은 오프라인 장치(44.1kHz)로 풀기 때문에 소리 장치와 샘플레이트가 다르면 한 번 다시 계산하고 캐시를 갈아 쓴다.
+    await page.reload();
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 5000 });
+    await waitForWaveforms(page, 1);
+    await page.waitForTimeout(500);
+    // 두 번째 새로고침부터는 같은 방식으로 풀리므로 계산 없이 캐시에서 읽는다.
+    await page.reload();
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 5000 });
+    await waitForWaveforms(page, 1);
+    expect(await peaksWorkers(page), "캐시에서 읽었으므로 파형 Worker를 만들지 않는다").toBe(0);
+    expect(await storedKeys()).toHaveLength(4); // 같은 해시는 한 벌만 있다
+  });
+
+  test("확대 범위: 위쪽 끝은 1,000px/초, 짧은 곡의 아래쪽 끝은 1px/초(눈금이 솎인다)", async ({ page }) => {
+    await openApp(page);
+    await upload(page); // 8초 클립 → 프로젝트 12초
+    await waitForWaveforms(page, 1);
+    const zoomBy = async (clicks: number, direction: -1 | 1) => {
+      await page.locator(S.timelineScroll).hover({ position: { x: 300, y: 80 } });
+      await page.keyboard.down("Control");
+      for (let i = 0; i < clicks; i++) await page.mouse.wheel(0, direction * -100);
+      await page.keyboard.up("Control");
+      await page.waitForTimeout(150);
+    };
+    await zoomBy(60, 1); // 96 × 1.14^60 이 1,000을 훌쩍 넘으므로 위쪽 끝에서 멈춘다
+    const clipWidth = (await page.locator(S.clip).boundingBox())!.width;
+    expect(clipWidth).toBeGreaterThan(8 * 1000 - 2);
+    expect(clipWidth).toBeLessThan(8 * 1000 + 2);
+
+    await zoomBy(120, -1);
+    const ticks = await page.locator(".ruler-tick").evaluateAll((nodes) => nodes.map((node) => (node as HTMLElement).offsetLeft));
+    // 1px/초에서 한 박(0.5초)은 0.5px → 16박(8px)마다 눈금 하나. 12초 곡이라 눈금이 몇 개 안 된다.
+    expect(ticks[1] - ticks[0]).toBeGreaterThanOrEqual(6);
+    expect(ticks[1] - ticks[0]).toBeLessThanOrEqual(16);
+    expect(ticks.length).toBeLessThan(200); // 눈금자 폭(1200px 안팎) ÷ 6px. 솎기 전에는 박마다라 2,400개였다.
+  });
+
+  test("최대로 확대하면 원본 샘플을 읽어 그린다: 소리가 한쪽에 치우친 칸(중심선을 지나지 않는 막대)이 보인다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await waitForWaveforms(page, 1);
+    for (let i = 0; i < 62; i++) await page.keyboard.press("PageUp"); // 96 → 1,000(한 번에 16)
+    await page.locator(S.timelineScroll).evaluate((el) => { el.scrollLeft = 5200; }); // 큰 소리 구간(5.2초~)
+    await expect.poll(async () => (await waveformStats(page))[0]?.drawn ?? 0, { timeout: 5000 }).toBeGreaterThan(200);
+    const [stats] = await waveformStats(page);
+    measuredP43("1,000px/초 파형", { 칸: stats.drawn, 중심선을_지나지_않는_막대: stats.offCenter, 가장_높은_막대: stats.tallest });
+    expect(stats.offCenter).toBeGreaterThan(20);
+    expect(stats.tallest).toBeGreaterThanOrEqual(20); // 영점을 지나는 칸은 한 칸에 위아래로 크게 벌어진다
+  });
+
+  test("전체 보기: 버튼과 Shift+0이 프로젝트 전체를 화면 폭에 맞추고 처음으로 돌아간다", async ({ page }) => {
+    await openApp(page);
+    await upload(page, STEADY_3MIN);
+    await waitForWaveforms(page, 1, 30_000);
+    await page.locator(S.timelineScroll).evaluate((el) => { el.scrollLeft = 3000; });
+    expect((await scrollInfo(page)).width).toBeGreaterThan((await scrollInfo(page)).client * 5); // 96px/초에서 3분 곡은 화면 몇 개 분량이다
+    await page.click(S.zoomFit);
+    await page.waitForTimeout(200);
+    const fitted = await scrollInfo(page);
+    expect(fitted.width).toBeLessThanOrEqual(fitted.client + 1); // 가로로 더 스크롤할 것이 없다
+    expect(fitted.left).toBe(0);
+    await waitForWaveforms(page, 1);
+
+    for (let i = 0; i < 5; i++) await page.keyboard.press("PageUp");
+    expect((await scrollInfo(page)).width).toBeGreaterThan(fitted.client);
+    await page.keyboard.press("Shift+Digit0");
+    await page.waitForTimeout(200);
+    const again = await scrollInfo(page);
+    expect(again.width).toBeLessThanOrEqual(again.client + 1);
+    expect(again.left).toBe(0);
+  });
+
+  test("1시간 음원: 올리면 파형이 보이고, 파형을 계산하는 동안 화면 스레드는 200 ms 넘게 멈추지 않는다", async ({ page }) => {
+    test.setTimeout(300_000);
+    await page.addInitScript(LONG_TASKS);
+    await page.addInitScript(COUNT_PEAKS_WORKERS);
+    await openApp(page);
+    const startedAt = Date.now();
+    await page.setInputFiles(S.upload, HOUR);
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 180_000 });
+    const decodedAt = Date.now();
+    await waitForWaveforms(page, 1, 180_000);
+    const drawnAt = Date.now();
+    expect(await peaksWorkers(page)).toBe(1);
+
+    await page.click(S.zoomFit);
+    await page.waitForTimeout(500);
+    const fitted = await scrollInfo(page);
+    expect(fitted.width).toBeLessThanOrEqual(fitted.client + 1); // 1시간이 한 화면에 들어온다
+    const clipBox = (await page.locator(S.clip).boundingBox())!;
+    expect(clipBox.width).toBeGreaterThan(fitted.client * 0.8);
+
+    // 전체 보기에서 앞 30분(0.8)과 뒤 30분(0.2): 음원 전체에서 가장 큰 소리가 칸 높이를 채우므로 뒤쪽 높이는 1/4 안팎이다.
+    await waitForWaveforms(page, 1);
+    const columns = await page.locator(S.waveform).evaluate((canvas: HTMLCanvasElement) => {
+      const { data, width, height } = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height);
+      const heightAt = (x: number) => {
+        let top = -1;
+        let bottom = -1;
+        for (let y = 0; y < height; y++) if (data[(y * width + x) * 4 + 3] > 0) { if (top < 0) top = y; bottom = y; }
+        return top < 0 ? 0 : bottom - top + 1;
+      };
+      return { width, quarter: heightAt(Math.floor(width * 0.25)), threeQuarters: heightAt(Math.floor(width * 0.7)) };
+    });
+    expect(columns.quarter).toBeGreaterThan(columns.threeQuarters * 2.5);
+    expect(columns.threeQuarters).toBeGreaterThan(3);
+
+    // 긴 작업은 "파형 계산 전"(브라우저가 1시간 음원을 디코딩해 AudioBuffer를 만드는 단계 + 클립 만들기)과 "파형 계산 중"(파형 Worker를 만든 뒤)으로 나눠 센다.
+    // 설계서의 수용 기준은 "피크 계산 중" 긴 작업 0건이다. 디코딩은 브라우저 안쪽(635MB 버퍼 만들기)이라 우리 코드로 줄일 수 없어 따로 기록만 한다.
+    const { durations, starts, workerAt } = await page.evaluate(() => ({
+      durations: (window as any).__longTasks as number[],
+      starts: (window as any).__longTaskStarts as number[],
+      workerAt: (window as any).__peaksWorkerAt as number,
+    }));
+    expect(workerAt, "파형 Worker를 만든 시각").toBeGreaterThan(0);
+    const before = durations.filter((_, i) => starts[i] < workerAt);
+    const during = durations.filter((_, i) => starts[i] >= workerAt);
+    measuredP43("1시간 음원", {
+      올리기부터_클립까지_초: +((decodedAt - startedAt) / 1000).toFixed(1),
+      클립부터_파형까지_초: +((drawnAt - decodedAt) / 1000).toFixed(1),
+      긴작업_파형_계산_전_ms: before,
+      긴작업_파형_계산_중_ms: during,
+    });
+    expect(during.filter((ms) => ms >= 200), `파형 계산 중 200 ms 넘게 멈춘 작업: ${during.join(", ")}`).toEqual([]);
+  });
+});
+
+const STEADY_3MIN = path.join(here, "fixtures", "steady-220hz-180s.wav");
+/** 측정값은 한 줄로 남긴다: 병합 기록의 이전/이후 표에 그대로 옮긴다. */
+const measuredP43 = (name: string, value: unknown) => console.log(`P4-3 측정 ${name}: ${JSON.stringify(value)}`);

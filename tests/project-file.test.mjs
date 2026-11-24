@@ -5,7 +5,8 @@ import { FORMAT, SCHEMA_VERSION } from "../src/domain/project/serialize.ts";
 import { forgetAllAudio, hasRememberedAudio, recallAudio, rememberAudio } from "../src/services/persistence/audioBlobs.ts";
 import { exportProjectFile, projectFailure, projectFromJson, readProjectFile, restoreAudio } from "../src/services/persistence/projectFile.ts";
 import { sha256Hex } from "../src/services/persistence/assetHash.ts";
-import { clearPeaks, getPeaks, setPeaks } from "../src/services/peaksCache.ts";
+import { clearPeaks, getPeakSet, setPeakSet } from "../src/services/peaksCache.ts";
+import { createPeakSet } from "../src/domain/waveform/peakLevels.ts";
 import { ko } from "../src/i18n/ko.ts";
 
 // 6월 프로젝트(v0) 모양: 껍데기 없이 프로젝트 JSON 그대로. 이펙트 설정이 없고 음원에 blobUrl·파형이 있다.
@@ -110,7 +111,8 @@ test("restoreAudio: 풀기가 끝나기 전에는 아무것도 바꾸지 않고,
 
   // 지금 열려 있는 프로젝트의 음원·파형
   rememberAudio("old", new Blob([new Uint8Array([1])]));
-  setPeaks("old", [0.5]);
+  const oldPeaks = createPeakSet({ sampleRate: 44100, length: 512, numberOfChannels: 1, getChannelData: () => new Float32Array(512).fill(0.5) });
+  setPeakSet("old", oldPeaks);
 
   const blobs = { a1: new Blob([new Uint8Array([1, 2])]), a2: new Blob([new Uint8Array([3])]) };
   const committed = [];
@@ -123,12 +125,12 @@ test("restoreAudio: 풀기가 끝나기 전에는 아무것도 바꾸지 않고,
   assert.equal(doc.assets.a1.hash, undefined);
   assert.deepEqual(committed, []);
   assert.equal(hasRememberedAudio("old"), true, "commit 전에는 지금 것을 그대로 둔다");
-  assert.deepEqual(getPeaks("old"), [0.5]);
+  assert.equal(getPeakSet("old"), oldPeaks);
 
   restored.commit();
   assert.deepEqual(committed, ["a1", "a2"]);
   assert.equal(hasRememberedAudio("old"), false);
-  assert.equal(getPeaks("old"), undefined);
+  assert.equal(getPeakSet("old"), undefined);
   assert.equal(recallAudio("a1"), blobs.a1);
   assert.equal(recallAudio("a2"), blobs.a2);
   assert.equal(hasRememberedAudio("a3"), false);

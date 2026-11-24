@@ -24,6 +24,7 @@ import {
   type AssetRecord,
   type ProjectRecord,
 } from "./db";
+import { orphanPeakKeys } from "./peaksStore";
 import { projectFailure, type LoadedProject } from "./projectFile";
 import {
   MAX_PROJECT_RECORDS,
@@ -101,21 +102,23 @@ export async function saveAutosave(
 }
 
 /**
- * 오래된 프로젝트 기록(최근 MAX_PROJECT_RECORDS개만 남김)과 어느 기록도 쓰지 않는 음원을 지운다.
+ * 오래된 프로젝트 기록(최근 MAX_PROJECT_RECORDS개만 남김)과 어느 기록도 쓰지 않는 음원·그 음원의 파형 캐시를 지운다.
  * 저장 직후 따로 하는 정리라서 실패해도 저장 결과에는 영향이 없다. 기록과 음원을 한 트랜잭션에서 보므로
  * 다른 탭이 동시에 저장하더라도 방금 저장된 음원을 잘못 지우지 않는다.
  */
 export async function pruneStorage(protectId: string): Promise<void> {
   await withDb(async (db) => {
-    const tx = db.transaction([STORE.projects, STORE.assets], "readwrite");
+    const tx = db.transaction([STORE.projects, STORE.assets, STORE.peaks], "readwrite");
     const done = transactionDone(tx);
     done.catch(() => undefined);
     const projects = tx.objectStore(STORE.projects);
     const assets = tx.objectStore(STORE.assets);
-    const [keys, values, assetKeys] = await Promise.all([
+    const peaks = tx.objectStore(STORE.peaks);
+    const [keys, values, assetKeys, peakKeys] = await Promise.all([
       requestToPromise(projects.getAllKeys()),
       requestToPromise(projects.getAll()),
       requestToPromise(assets.getAllKeys()),
+      requestToPromise(peaks.getAllKeys()),
     ]);
     const entries = keys.flatMap((key, index) => {
       const value: unknown = values[index];
@@ -126,6 +129,7 @@ export async function pruneStorage(protectId: string): Promise<void> {
     for (const id of doomed) projects.delete(id);
     const used = referencedHashes(entries.filter((e) => !doomed.has(e.id)).map((e) => e.record));
     for (const hash of orphanHashes(assetKeys.filter((key): key is string => typeof key === "string"), used)) assets.delete(hash);
+    for (const key of orphanPeakKeys(peakKeys, used)) peaks.delete(key); // 파형 캐시는 음원 데이터와 함께 정리된다
     await done;
   });
 }

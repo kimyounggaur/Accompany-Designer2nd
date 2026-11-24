@@ -24,7 +24,8 @@ const { registerAutosave } = await import("../src/app/autosaveControl.ts");
 const { useRelinkStore } = await import("../src/state/relinkStore.ts");
 const { useNoticeStore } = await import("../src/state/noticeStore.ts");
 const { forgetAllAudio, hasRememberedAudio, recallAudio } = await import("../src/services/persistence/audioBlobs.ts");
-const { clearPeaks, getPeaks } = await import("../src/services/peaksCache.ts");
+const { clearPeaks, getPeakSet } = await import("../src/services/peaksCache.ts");
+const { audioEngine } = await import("../src/audio/currentEngine.ts");
 const { sha256Hex } = await import("../src/services/persistence/assetHash.ts");
 const { createDefaultTrack, createEmptyDoc } = await import("../src/domain/project/defaults.ts");
 
@@ -32,6 +33,21 @@ const flush = () => new Promise((resolve) => setImmediate(resolve));
 const messages = () => useNoticeStore.getState().notices.map((notice) => notice.message);
 const rowOf = (assetId) => useRelinkStore.getState().rows[assetId];
 const fileOf = (name, bytes) => new File([new Uint8Array(bytes)], name, { type: "audio/wav" });
+
+/** 아주 작은 가짜 소리 데이터(파형 계산이 읽는 모양) */
+function fakeBuffer() {
+  const data = new Float32Array(4096).fill(0.25);
+  return { sampleRate: 44100, length: data.length, numberOfChannels: 1, getChannelData: () => data };
+}
+
+/** 조건이 될 때까지 기다린다(파형은 Worker가 없는 시험 환경에서 조각으로 나눠 계산하므로 몇 번 쉬고 끝난다) */
+async function waitFor(check, message) {
+  for (let i = 0; i < 200; i += 1) {
+    if (check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.fail(message);
+}
 
 /** 소리 풀기를 가짜로: 파일 이름으로 길이를 정한다. 풀면 임시 음원 id(tmpN)로 올라가고, 이어 줄 때·버릴 때를 기록한다. */
 function fakeDecoder(durations = {}) {
@@ -43,8 +59,10 @@ function fakeDecoder(durations = {}) {
     log.decoded.push(file.name);
     return {
       asset: { id, fileName: file.name, duration: durations[file.name] ?? 10, sampleRate: 44100, channels: 2, source: "upload", mimeType: file.type || undefined, byteSize: file.size },
-      peaks: [0.1, 0.9],
-      registerAs: (assetId) => log.registered.push(assetId),
+      registerAs: (assetId) => {
+        log.registered.push(assetId);
+        audioEngine.registerBuffer(assetId, fakeBuffer()); // 소리 엔진에 올라가면 파형 계산 대상이 된다
+      },
       release: () => log.released.push(id),
     };
   };
@@ -73,6 +91,7 @@ async function loadProjectMissingAudio({ withSecondSameHash = false } = {}) {
 
 beforeEach(() => {
   forgetAllAudio();
+  audioEngine.clearBuffers();
   clearPeaks();
   useNoticeStore.getState().reset();
   useRelinkStore.setState({ open: false, items: [], rows: {} });
@@ -95,7 +114,8 @@ test("업로드: 데이터가 빠진 음원과 같은 파일(해시 같음)이�
   assert.deepEqual(Object.keys(after.assets), ["a1", "a2"], "음원이 늘지 않는다");
   assert.equal(hasRememberedAudio("a1"), true);
   assert.equal(recallAudio("a1").size, SOURCE.length, "올린 파일의 원본 데이터를 기억한다");
-  assert.deepEqual(getPeaks("a1"), [0.1, 0.9]);
+  await waitFor(() => getPeakSet("a1") !== undefined, "다시 연결한 음원의 파형이 채워진다");
+  assert.equal(getPeakSet("a1").frames, 4096);
   assert.deepEqual(log.registered, ["a1"], "소리 엔진에 a1 id로 올라간다");
   assert.deepEqual(log.released, ["tmp1"], "임시 id는 내린다");
   assert.equal(after.assets.a1.hash, hash);

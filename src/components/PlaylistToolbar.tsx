@@ -11,6 +11,7 @@ import {
   resetSelectedClipSource,
   selectAllClips,
   ungroupSelectedClips,
+  zoomToFit,
   zoomToSelectedClips,
 } from "../app/actions";
 import type { PlaylistSnap, PlaylistTool } from "../domain/types";
@@ -173,6 +174,7 @@ export function PlaylistToolbar() {
         { label: "빠른 줌 1", shortcut: "Shift+1", action: () => setZoom(72) },
         { label: "빠른 줌 2", shortcut: "Shift+2", action: () => setZoom(132) },
         { label: "빠른 줌 3", shortcut: "Shift+3", action: () => setZoom(220) },
+        { label: "전체 보기", shortcut: "Shift+0", action: zoomToFit },
       ],
     },
     {

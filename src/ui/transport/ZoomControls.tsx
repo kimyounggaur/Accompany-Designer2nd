@@ -1,20 +1,11 @@
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
+import { zoomToFit } from "../../app/actions";
 import { useDawStore } from "../../store/useDawStore";
-import { getProjectDuration } from "../../utils/audioMath";
 
-/** 확대 · 축소 · 전체 맞춤 */
+/** 확대 · 축소 · 전체 보기 */
 export function ZoomControls() {
   const zoomPxPerSecond = useDawStore((state) => state.zoomPxPerSecond);
   const setZoom = useDawStore((state) => state.setZoom);
-
-  /** 프로젝트 전체가 타임라인 폭에 들어오도록 확대 배율을 정한다. */
-  function fitToProject() {
-    const { bpm, tracks } = useDawStore.getState();
-    const duration = getProjectDuration({ bpm, tracks });
-    const viewport = document.querySelector<HTMLElement>(".timeline-scroll")?.clientWidth ?? 0;
-    if (duration <= 0 || viewport <= 0) return;
-    setZoom((viewport - 24) / duration);
-  }
 
   return (
     <div className="transport-group">
@@ -24,9 +15,16 @@ export function ZoomControls() {
       <button className="icon-button" onClick={() => setZoom(zoomPxPerSecond + 16)} title="확대" type="button">
         <ZoomIn size={17} />
       </button>
-      <button className="text-button" onClick={fitToProject} title="프로젝트 전체가 보이게 맞춤" type="button">
+      <button
+        aria-keyshortcuts="Shift+0"
+        className="text-button"
+        data-testid="zoom-fit"
+        onClick={zoomToFit}
+        title="프로젝트 전체가 보이게 줄이기 (시프트+0)"
+        type="button"
+      >
         <Maximize2 size={16} />
-        <span>맞춤</span>
+        <span>전체 보기</span>
       </button>
     </div>
   );
