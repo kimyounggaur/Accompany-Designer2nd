@@ -88,7 +88,7 @@ const slice = (patch = {}) => ({ name: "곡", bpm: 120, ...shared, ...patch });
 
 test("문서가 바뀌었을 때만 변경으로 본다(재생 위치 같은 화면 상태는 아니다)", () => {
   const base = slice();
-  assert.equal(documentChanged({ ...base, playhead: 3 }, base), false);
+  assert.equal(documentChanged({ ...base, cursor: 3 }, base), false);
   assert.equal(documentChanged(slice({ bpm: 90 }), base), true);
   assert.equal(documentChanged(slice({ tracks: [] }), base), true); // 새 배열 = 새 문서
   assert.equal(documentChanged({ ...base }, base), false);

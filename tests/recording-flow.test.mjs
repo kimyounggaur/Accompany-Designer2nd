@@ -30,7 +30,7 @@ const clip = (id, trackId, startTime = 0) => ({
 function resetAll(doc = createEmptyDoc()) {
   projectStore.setState({ doc });
   history.clear();
-  useDawStore.setState({ selectedTrackId: undefined, selectedClipId: undefined, selectedClipIds: [], playhead: 0, isPlaying: false });
+  useDawStore.setState({ selectedTrackId: undefined, selectedClipId: undefined, selectedClipIds: [], cursor: 0, isPlaying: false });
   useRecordingStore.setState({ ...DEFAULT_RECORDING_SETTINGS });
   useRecordingStore.getState().resetForNewProject();
   useNoticeStore.getState().reset();
@@ -116,7 +116,7 @@ test("10초 녹음: 녹음 중에는 문서가 한 번도 바뀌지 않고, 끝�
 });
 
 test("녹음이 끝나면 곡 위치(재생 위치)는 멈춘 자리에, 재생 표시는 꺼진다", async () => {
-  useDawStore.setState({ playhead: 2 });
+  useDawStore.setState({ cursor: 2 });
   const h = harness({ now: 1, playhead: 2 });
   await h.controller.start();
   assert.equal(useDawStore.getState().isPlaying, true);
@@ -124,7 +124,7 @@ test("녹음이 끝나면 곡 위치(재생 위치)는 멈춘 자리에, 재생 
   h.context.currentTime = 4.1; // 1.1초에 시작한 반주가 3초 흘렀다
   await h.controller.stop();
   assert.equal(useDawStore.getState().isPlaying, false);
-  near(useDawStore.getState().playhead, 2 + 3, "멈춘 자리");
+  near(useDawStore.getState().cursor, 2 + 3, "멈춘 자리");
 });
 
 // ───────── 녹음할 트랙 고르기 ─────────

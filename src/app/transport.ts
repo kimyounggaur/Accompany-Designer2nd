@@ -1,6 +1,9 @@
 /**
  * 재생·정지(상단 바의 단추와 단축키가 같은 함수를 부른다).
  * 예전에는 App.tsx 안에 있어서 단축키(App의 키 처리기)와 단추(TopBar)가 각자 App의 지역 함수에 기대고 있었다.
+ *
+ * 재생을 시작하는 자리는 편집 커서(`cursor`)다. 일시정지하면 멈춘 자리가 새 커서가 되고, 정지하면 처음(0)이 된다.
+ * 재생 중 흐르는 위치는 스토어에 쓰지 않는다(`app/playhead.ts`의 `readPlayhead()`).
  */
 import { audioEngine } from "../audio/currentEngine";
 import { isRecordingBusy } from "../state/recordingStore";
@@ -23,14 +26,14 @@ export async function togglePlayback(): Promise<void> {
   if (state.isPlaying) {
     const pausedAt = audioEngine.getCurrentPlayhead();
     audioEngine.stop();
-    state.setPlayhead(pausedAt);
+    state.setCursor(pausedAt);
     state.setIsPlaying(false);
     return;
   }
 
   const duration = getProjectDuration(state);
-  const startAt = state.playhead >= duration ? 0 : state.playhead;
-  state.setPlayhead(startAt);
+  const startAt = state.cursor >= duration ? 0 : state.cursor;
+  state.setCursor(startAt);
   await audioEngine.play(getProjectSnapshot(), startAt);
   state.setIsPlaying(true);
 }
@@ -40,6 +43,6 @@ export function stopPlayback(): void {
   if (isRecordingBusy()) void stopRecording();
   audioEngine.stop();
   const state = useDawStore.getState();
-  state.setPlayhead(0);
+  state.setCursor(0);
   state.setIsPlaying(false);
 }

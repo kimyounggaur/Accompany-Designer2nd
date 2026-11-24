@@ -2,15 +2,19 @@ import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ko } from "../i18n/ko";
+import { onFrame } from "../services/frameLoop";
 import { notify } from "../services/notify";
 import { history } from "../state/history";
 import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
 import { useDawStore } from "../store/useDawStore";
 import { addClipFromSource, deleteTrackWithConfirm, setSelectedClips, toggleRecordingArm } from "../app/actions";
+import { readPlayhead } from "../app/playhead";
 import { DEFAULT_TRACK_VOLUME } from "../domain/project/defaults";
 import type { PlaylistTool } from "../domain/types";
 import { scaledEntry } from "../ui/controls/entries";
+import { countRender } from "../ui/debug/renderCount";
 import { Slider } from "../ui/controls/Slider";
+import { PlayheadOverlay } from "../ui/timeline/PlayheadOverlay";
 import {
   clamp,
   getBeatSeconds,
@@ -19,6 +23,7 @@ import {
   snapTime,
 } from "../utils/audioMath";
 import { INITIAL_RULER_WINDOW, gridTileWidth, nextRulerWindow, planRulerTicks, type RulerWindow } from "../domain/timeline/ruler";
+import { followScrollLeft } from "../domain/timeline/follow";
 import { runEmptyAreaAction } from "../domain/timeline/toolBehavior";
 import { playlistToolIcons } from "../utils/playlistToolIcons";
 import { ClipView } from "./ClipView";
@@ -69,6 +74,7 @@ function makeBox(startX: number, startY: number, endX: number, endY: number): Dr
 }
 
 export function Timeline() {
+  countRender("Timeline");
   const lanesRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const headersRef = useRef<HTMLDivElement>(null);
@@ -82,7 +88,6 @@ export function Timeline() {
   const assets = useDawStore((state) => state.assets);
   const markers = useDawStore((state) => state.markers);
   const bpm = useDawStore((state) => state.bpm);
-  const playhead = useDawStore((state) => state.playhead);
   const zoomPxPerSecond = useDawStore((state) => state.zoomPxPerSecond);
   const snapEnabled = useDawStore((state) => state.snapEnabled);
   const gridDivision = useDawStore((state) => state.gridDivision);
@@ -94,7 +99,7 @@ export function Timeline() {
   const recordingStatus = useRecordingStore((state) => state.status);
   const recordingTrackId = useRecordingStore((state) => state.trackId);
   const isPlaying = useDawStore((state) => state.isPlaying);
-  const setPlayhead = useDawStore((state) => state.setPlayhead);
+  const setCursor = useDawStore((state) => state.setCursor);
   const clearSelection = useDawStore((state) => state.clearSelection);
   const moveClip = useDawStore((state) => state.moveClip);
   const addTrack = useDawStore((state) => state.addTrack);
@@ -176,14 +181,15 @@ export function Timeline() {
     return () => scroll.removeEventListener("wheel", onWheel);
   }, [setZoom]);
 
+  // 재생선 따라가기: 재생 중에는 프레임 루프가 매 프레임 지금 위치를 보고 스크롤한다(Timeline이 매 프레임 다시 그려지지 않는다).
   useEffect(() => {
     const scroll = scrollRef.current;
     if (!scroll || !followPlayhead || !isPlaying) return;
-    const x = playhead * zoomPxPerSecond;
-    if (x < scroll.scrollLeft || x > scroll.scrollLeft + scroll.clientWidth - 30) {
-      scroll.scrollLeft = Math.max(0, x - scroll.clientWidth * 0.2);
-    }
-  }, [followPlayhead, isPlaying, playhead, zoomPxPerSecond]);
+    return onFrame(() => {
+      const next = followScrollLeft(readPlayhead() * useDawStore.getState().zoomPxPerSecond, scroll.scrollLeft, scroll.clientWidth);
+      if (next !== undefined) scroll.scrollLeft = next;
+    });
+  }, [followPlayhead, isPlaying]);
 
   const projectDuration = useMemo(
     () => getProjectDuration({ bpm, tracks }),
@@ -256,7 +262,7 @@ export function Timeline() {
     if (useDawStore.getState().isPlaying) {
       window.dispatchEvent(new CustomEvent("playlist-play-from", { detail: time }));
     } else {
-      setPlayhead(time);
+      setCursor(time);
     }
   }
 
@@ -439,7 +445,7 @@ export function Timeline() {
         const endTime = (finalBox.left + finalBox.width) / zoomPxPerSecond;
         const duration = Math.max(0.25, endTime - startTime);
 
-        setPlayhead(Math.max(0, startTime));
+        setCursor(Math.max(0, startTime));
         setZoom(viewportWidth / duration);
         requestAnimationFrame(() => {
           if (scrollRef.current) scrollRef.current.scrollLeft = startTime * useDawStore.getState().zoomPxPerSecond;
@@ -608,13 +614,7 @@ export function Timeline() {
               }}
             />
           ))}
-          <div
-            className="playhead"
-            style={{
-              left: playhead * zoomPxPerSecond,
-              height: tracks.length * TRACK_HEIGHT,
-            }}
-          />
+          <PlayheadOverlay height={tracks.length * TRACK_HEIGHT} />
           {tracks.map((track, index) => (
             <div
               className="track-lane"

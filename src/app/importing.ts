@@ -9,6 +9,7 @@ import { useDawStore } from "../store/useDawStore";
 import { createId } from "../utils/audioMath";
 import { requestAutosave } from "./autosaveControl";
 import { ensurePeaks } from "./peaks";
+import { readPlayhead } from "./playhead";
 import { getProjectSnapshot } from "./projectSnapshot";
 
 /** 소리 엔진으로 파일을 푼다(`services/importer`에 넘기는 풀기 함수). 풀면 소리는 임시 음원 id로 엔진에 올라간다. */
@@ -65,7 +66,7 @@ export async function importAudioFiles(files: FileList | File[], deps: ImportDep
       // 어느 트랙에 놓을지는 배치 규칙이 정한다(선택한 트랙의 그 구간이 비어 있으면 그 트랙, 아니면 새 트랙. 겹침은 템포 맞춤을 반영한 길이로 본다).
       const plan = planUpload(getProjectSnapshot(), asset, {
         clipId: createId("clip"),
-        startTime: state.playhead,
+        startTime: readPlayhead(),
         selectedTrackId: state.selectedTrackId,
       });
       let trackId: string;

@@ -19,6 +19,7 @@ import { useRecordingStore } from "../state/recordingStore";
 import { confirmAction } from "../services/confirm";
 import { notify } from "../services/notify";
 import { createId } from "../utils/audioMath";
+import { readPlayhead } from "./playhead";
 
 const store = () => useDawStore.getState();
 const text = ko.notice;
@@ -156,10 +157,12 @@ export function copySelectedClips() {
 export function pasteClips() {
   const state = store();
   const first = Math.min(...clipboard.map((clip) => clip.startTime));
+  // 재생 중에 붙이면 눈앞에서 흐르는 위치에 붙는다(예전과 같다).
+  const at = readPlayhead();
   let pasted = 0;
   for (const clip of clipboard) {
     if (!state.tracks.some((track) => track.id === clip.trackId)) continue;
-    state.addClip(clip.trackId, { ...clip, id: createId("clip"), startTime: state.playhead + clip.startTime - first });
+    state.addClip(clip.trackId, { ...clip, id: createId("clip"), startTime: at + clip.startTime - first });
     pasted += 1;
   }
   notify("info", pasted ? text.clipsPasted(pasted) : text.pasteNeedsCopy);

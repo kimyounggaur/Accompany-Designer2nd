@@ -50,17 +50,17 @@ export const recordingHost: RecordingHost = {
     return { armedTrackId, inputDeviceId, monitoringEnabled, metronomeEnabled, countInBeats, latencyOffsetMs };
   },
   bpm: () => getDoc().bpm,
-  playhead: () => useDawStore.getState().playhead,
+  playhead: () => useDawStore.getState().cursor,
   update: (patch) => useRecordingStore.getState().setProgress(patch),
   reset: () => useRecordingStore.getState().resetProgress(),
   setPlaying: (playing) => useDawStore.getState().setIsPlaying(playing),
-  setPlayhead: (position) => useDawStore.getState().setPlayhead(position),
+  setPlayhead: (position) => useDawStore.getState().setCursor(position),
   chooseTrack: () => {
     // 녹음 대기 트랙 → 클립이 하나도 없는 첫 트랙 → 새 트랙(배치 규칙). 녹음은 끝나야 길이를 알므로 길이는 0으로 넘긴다.
     const choice = placement.chooseTrack(getDoc(), {
       purpose: "recording",
       armedTrackId: useRecordingStore.getState().armedTrackId,
-      start: useDawStore.getState().playhead,
+      start: useDawStore.getState().cursor,
       length: 0,
     });
     if ("trackId" in choice) return { trackId: choice.trackId, created: false };

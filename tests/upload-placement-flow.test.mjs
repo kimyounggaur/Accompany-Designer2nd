@@ -55,12 +55,12 @@ beforeEach(() => {
   clearPeaks();
   useNoticeStore.getState().reset();
   useDawStore.getState().importProject(createEmptyDoc());
-  useDawStore.setState({ playhead: 0, selectedTrackId: undefined, selectedClipId: undefined, selectedClipIds: [] });
+  useDawStore.setState({ cursor: 0, selectedTrackId: undefined, selectedClipId: undefined, selectedClipIds: [] });
   history.clear();
 });
 
 test("처음 올린 음원은 첫 트랙의 재생 위치에 놓이고 트랙은 늘지 않는다", async () => {
-  useDawStore.setState({ playhead: 3 });
+  useDawStore.setState({ cursor: 3 });
   await importAudioFiles([fileOf("반주.wav", [1])], fakeDecoder());
   const doc = getDoc();
   assert.equal(doc.tracks.length, 1);
@@ -86,7 +86,7 @@ test("선택한 트랙의 그 구간이 비어 있으면 첫 트랙이 아니어
   const second = createDefaultTrack(2);
   first.clips = [makeClip(first.id, "앞", 0, { duration: 10 })];
   loadDoc([first, second]);
-  useDawStore.setState({ selectedTrackId: second.id, playhead: 0 });
+  useDawStore.setState({ selectedTrackId: second.id, cursor: 0 });
   await importAudioFiles([fileOf("새.wav", [3])], fakeDecoder());
   const doc = getDoc();
   assert.equal(doc.tracks.length, 2, "트랙이 늘지 않는다");
@@ -98,13 +98,13 @@ test("템포 맞춤으로 짧아진 클립의 끝 뒤에 올리면 같은 트랙
   const track = createDefaultTrack(1);
   track.clips = [makeClip(track.id, "빠른 클립", 0, { duration: 10, sourceBpm: 60, stretchMode: "resample" })];
   loadDoc([track]);
-  useDawStore.setState({ selectedTrackId: track.id, playhead: 5 });
+  useDawStore.setState({ selectedTrackId: track.id, cursor: 5 });
   await importAudioFiles([fileOf("뒤.wav", [4])], fakeDecoder({ "뒤.wav": 2 }));
   let doc = getDoc();
   assert.equal(doc.tracks.length, 1, "원본 길이(10초)로 판단했다면 새 트랙이 생겼을 것이다");
   assert.deepEqual(clipNames(doc.tracks[0]), ["빠른 클립", "뒤.wav"]);
 
-  useDawStore.setState({ selectedTrackId: doc.tracks[0].id, playhead: 4 });
+  useDawStore.setState({ selectedTrackId: doc.tracks[0].id, cursor: 4 });
   await importAudioFiles([fileOf("겹침.wav", [5])], fakeDecoder({ "겹침.wav": 2 }));
   doc = getDoc();
   assert.equal(doc.tracks.length, 2, "4~6초는 빠른 클립(0~5초)과 겹친다");
@@ -116,7 +116,7 @@ test("템포 맞춤으로 길어진 클립은 원본 길이가 끝난 뒤에도 
   const track = createDefaultTrack(1);
   track.clips = [makeClip(track.id, "느린 클립", 0, { duration: 10, sourceBpm: 240, stretchMode: "resample" })];
   loadDoc([track]);
-  useDawStore.setState({ selectedTrackId: track.id, playhead: 15 });
+  useDawStore.setState({ selectedTrackId: track.id, cursor: 15 });
   await importAudioFiles([fileOf("겹침.wav", [6])], fakeDecoder({ "겹침.wav": 2 }));
   const doc = getDoc();
   assert.equal(doc.tracks.length, 2, "원본 길이(10초)로 판단했다면 같은 트랙에 겹쳐 놓았을 것이다");

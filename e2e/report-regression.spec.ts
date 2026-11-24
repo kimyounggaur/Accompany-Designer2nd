@@ -44,6 +44,7 @@ const S = {
   trackVolume: '[data-testid="track-volume"]',
   trackName: '[data-testid="track-name"]',
   timeDisplay: '[data-testid="time-display"]',
+  playhead: '[data-testid="playhead"]',
   statusbar: '[data-testid="statusbar"]',
   trackHeader: '[data-testid="track-header"]',
   fileMenuTrigger: '[data-testid="file-menu-trigger"]',
@@ -1958,7 +1959,7 @@ test.describe("C10 화면 갱신", () => {
   });
 
   test("재생 중 화면 갱신 요청이 초당 70회 이하다(루프 하나)", async ({ page }) => {
-    test.fail(true, "P5-3에서 해결 예정 (11/13 기준 초당 약 180회: 루프 3개)");
+    // P5-3에서 해결: 11/13에는 초당 약 180회(루프 3개: 재생선·미터·분석기)였고, 지금은 공용 루프 하나(약 60회)다.
     await openApp(page);
     await upload(page);
     await page.click(S.play);
@@ -3903,5 +3904,240 @@ test.describe("P5-2 단축키 관리자", () => {
     await expect(menuKey("전체 보기")).toHaveText("Shift+0");
     await expect(menuKey("선택 항목으로 확대")).toHaveText("Shift+5");
     await expect(menuKey("확대")).toHaveText("Page Up");
+  });
+});
+
+// ───────────────────────── P5-3 재생선·시간 표시를 React 밖으로 ─────────────────────────
+
+const measuredP53 = (name: string, value: unknown) => console.log(`P5-3 측정 ${name}: ${JSON.stringify(value)}`);
+
+test.describe("P5-3 화면 갱신 루프 하나", () => {
+  const secondsOf = (text: string) => {
+    const match = /^(\d+):(\d+\.\d+)$/.exec(text.trim());
+    return match ? Number(match[1]) * 60 + Number(match[2]) : Number.NaN;
+  };
+  /** 시간 표시가 가리키는 초 */
+  const shownSeconds = async (page: Page) => secondsOf(await page.locator(S.timeDisplay).innerText());
+  /** 재생선의 가로 위치(px): style.transform = translateX(…px) */
+  const playheadX = (page: Page) =>
+    page.locator(S.playhead).evaluate((element) => {
+      const match = /translateX\((-?[\d.]+(?:e-?\d+)?)px\)/.exec((element as HTMLElement).style.transform);
+      return match ? Number(match[1]) : Number.NaN;
+    });
+  const rafCount = (page: Page) => page.evaluate(() => (window as any).__raf as number);
+  const isShownPlaying = (page: Page) => page.locator(`${S.play} svg.lucide-pause`).count().then((count) => count > 0);
+  const scrollLeftOf = (page: Page) => page.locator(S.timelineScroll).evaluate((element) => element.scrollLeft);
+  const followToggle = (page: Page) => page.locator(".follow-toggle");
+
+  /** 재생을 시작하고 시간이 흐르기 시작할 때까지 기다린다. */
+  async function startPlaying(page: Page) {
+    await page.click(S.play);
+    await expect.poll(() => shownSeconds(page), { timeout: 5000 }).toBeGreaterThan(0.25);
+  }
+
+  test("재생 5초 동안 Timeline·상단 바·툴바·재생 단추가 한 번도 다시 그려지지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await startPlaying(page);
+    await page.evaluate(() => { (window as any).__renders = {}; }); // 이때부터 부품이 그려질 때마다 이름별로 센다(배포 빌드에서도 켜진다)
+    const [x0, t0] = [await playheadX(page), await shownSeconds(page)];
+    await page.waitForTimeout(5000);
+    const renders = await page.evaluate(() => ({ ...((window as any).__renders as Record<string, number>) }));
+    const [x1, t1] = [await playheadX(page), await shownSeconds(page)];
+    measuredP53("재생 5초 다시 그리기", { 다시_그리기: renders, 재생선_이동_px: Math.round(x1 - x0), 시간_표시_초: Number((t1 - t0).toFixed(2)) });
+    for (const name of ["Timeline", "TopBar", "PlaylistToolbar", "TransportControls"]) expect(renders[name] ?? 0, name).toBe(0);
+    // 그리지 않았는데도 화면은 흐른다: 재생선은 5초만큼, 시간 표시도 5초만큼 갔다.
+    expect(t1 - t0).toBeGreaterThan(4.5);
+    expect(t1 - t0).toBeLessThan(5.8);
+    expect(x1 - x0).toBeGreaterThan(4.5 * 96);
+    expect(x1 - x0).toBeLessThan(5.8 * 96);
+  });
+
+  test("재생선은 재생 중 흐르고, 일시정지하면 그 자리에 서며, 정지하면 맨 앞으로 돌아간다. 시간 표시와 늘 같은 자리를 가리킨다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await page.locator(S.ruler).click({ position: { x: 480, y: 8 } }); // 편집 커서(재생 시작 자리)를 앞으로
+    const cursorSeconds = await shownSeconds(page);
+    expect(cursorSeconds).toBeGreaterThan(4);
+    expect(Math.abs((await playheadX(page)) - cursorSeconds * 96)).toBeLessThan(1.5);
+
+    await startPlaying(page);
+    await page.waitForTimeout(1000);
+    const flowing = { x: await playheadX(page), t: await shownSeconds(page) };
+    expect(flowing.t).toBeGreaterThan(cursorSeconds + 1);
+    expect(Math.abs(flowing.x - flowing.t * 96)).toBeLessThan(10); // 시간 표시는 초당 30번, 재생선은 매 프레임이라 조금 어긋날 수 있다
+
+    await page.click(S.play); // 일시정지
+    await expect.poll(() => isShownPlaying(page)).toBe(false);
+    const paused = { x: await playheadX(page), t: await shownSeconds(page) };
+    await page.waitForTimeout(600);
+    expect(await playheadX(page)).toBe(paused.x); // 그 자리에 서 있다
+    expect(await shownSeconds(page)).toBe(paused.t);
+    expect(paused.t).toBeGreaterThan(flowing.t - 0.1);
+    expect(Math.abs(paused.x - paused.t * 96)).toBeLessThan(1.5);
+
+    await page.click(S.play); // 멈춘 자리에서 이어 간다
+    await expect.poll(() => shownSeconds(page), { timeout: 5000 }).toBeGreaterThan(paused.t + 0.25);
+    await page.click(S.stop);
+    await expect.poll(() => isShownPlaying(page)).toBe(false);
+    expect(await playheadX(page)).toBe(0);
+    expect(await shownSeconds(page)).toBe(0);
+    await expect(page.locator(S.timeDisplay)).toHaveText("0:00.00");
+    measuredP53("재생선 이동", { 편집_커서_초: cursorSeconds, 재생_중_px_초: [Math.round(flowing.x), flowing.t], 일시정지_px_초: [Math.round(paused.x), paused.t], 정지_px: 0 });
+  });
+
+  test("재생 중 시간 표시는 글자만 초당 30번쯤 바뀐다(React 다시 그리기가 아니다)", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await startPlaying(page);
+    await page.evaluate((selector) => {
+      const element = document.querySelector(selector)!;
+      (window as any).__timeWrites = 0;
+      new MutationObserver((records) => { (window as any).__timeWrites += records.length; }).observe(element, { childList: true, characterData: true, subtree: true });
+    }, S.timeDisplay);
+    await page.waitForTimeout(1000);
+    const writes = await page.evaluate(() => (window as any).__timeWrites as number);
+    measuredP53("시간 표시 글자 바뀜", { 초당: writes });
+    expect(writes).toBeGreaterThanOrEqual(15);
+    expect(writes).toBeLessThanOrEqual(36);
+  });
+
+  test("멈추면 화면 갱신 요청이 다시 0회가 된다(일시정지·정지 모두)", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    for (const stopWith of [S.play, S.stop]) {
+      await startPlaying(page);
+      await page.waitForTimeout(400);
+      await page.click(stopWith);
+      await expect.poll(() => isShownPlaying(page)).toBe(false);
+      await page.waitForTimeout(300); // 이미 예약된 마지막 한 번이 지나가도록
+      const before = await rafCount(page);
+      await page.waitForTimeout(1000);
+      expect(await rafCount(page), stopWith).toBe(before);
+    }
+  });
+
+  test("곡 끝에 닿으면 저절로 멈추고 재생선이 곡 끝에 서며, 화면 갱신도 멈춘다. 다시 재생하면 처음부터 간다", async ({ page }) => {
+    await openApp(page);
+    await upload(page); // 8초 음원
+    const tempo = page.locator(S.tempo);
+    await tempo.click();
+    await tempo.press("Control+a");
+    await tempo.pressSequentially("300"); // 곡 길이 = 8초 + 8박(300BPM에서 1.6초) = 9.6초
+    await tempo.press("Enter");
+    await page.keyboard.press("Shift+Digit0"); // 전체 보기: 곡 전체가 화면 안에 들어온다
+    const ruler = (await page.locator(S.ruler).boundingBox())!;
+    await page.locator(S.ruler).click({ position: { x: ruler.width * 0.88, y: 8 } });
+    const start = { t: await shownSeconds(page), x: await playheadX(page) };
+    expect(start.t).toBeGreaterThan(7.5);
+    const pxPerSecond = start.x / start.t;
+
+    await startPlaying(page);
+    await expect.poll(() => isShownPlaying(page), { timeout: 8000 }).toBe(false); // 저절로 멈춘다
+    await expect(page.locator(S.timeDisplay)).toHaveText("0:09.60");
+    const end = await playheadX(page);
+    expect(Math.abs(end - 9.6 * pxPerSecond)).toBeLessThan(1.5);
+    await page.waitForTimeout(300);
+    const before = await rafCount(page);
+    await page.waitForTimeout(800);
+    expect(await rafCount(page)).toBe(before);
+
+    await page.click(S.play); // 곡 끝에서 재생하면 처음부터
+    await expect.poll(() => shownSeconds(page), { timeout: 5000 }).toBeLessThan(2);
+    expect(await isShownPlaying(page)).toBe(true);
+    await page.click(S.stop);
+    measuredP53("곡 끝 자동 정지", { 곡_끝_초: 9.6, 멈춘_재생선_px: Math.round(end), 멈춘_뒤_갱신_요청: 0 });
+  });
+
+  test("재생 중 눈금자를 눌러 옮기면 재생선이 그 자리로 가서 이어서 흐른다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await startPlaying(page);
+    await page.locator(S.ruler).click({ position: { x: 480, y: 8 } });
+    await expect.poll(() => shownSeconds(page), { timeout: 3000 }).toBeGreaterThan(4.8);
+    const jumped = await shownSeconds(page);
+    expect(jumped).toBeLessThan(6.5);
+    await page.waitForTimeout(700);
+    const later = await shownSeconds(page);
+    expect(later).toBeGreaterThan(jumped + 0.4);
+    expect(Math.abs((await playheadX(page)) - later * 96)).toBeLessThan(10);
+    await page.click(S.stop);
+  });
+
+  test("따라가기 켬: 확대해서 재생선이 화면 오른쪽을 벗어나면 스크롤이 따라가고, 끔이면 따라가지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    for (let index = 0; index < 14; index++) await page.locator('button[title="확대"]').click(); // 초당 320px 근처까지
+    expect(await scrollLeftOf(page)).toBe(0);
+
+    await expect(followToggle(page)).toHaveAttribute("aria-pressed", "true");
+    await startPlaying(page);
+    await expect.poll(() => scrollLeftOf(page), { timeout: 8000 }).toBeGreaterThan(100); // 재생선이 보이는 곳으로 스크롤이 옮겨 간다
+    const view = await page.locator(S.timelineScroll).evaluate((element) => ({ left: element.scrollLeft, width: element.clientWidth }));
+    const x = await playheadX(page);
+    expect(x).toBeGreaterThanOrEqual(view.left - 40);
+    expect(x).toBeLessThanOrEqual(view.left + view.width);
+    await page.click(S.stop);
+    await expect.poll(() => isShownPlaying(page)).toBe(false);
+
+    await page.locator(S.timelineScroll).evaluate((element) => { element.scrollLeft = 0; });
+    await followToggle(page).click();
+    await expect(followToggle(page)).toHaveAttribute("aria-pressed", "false");
+    await startPlaying(page);
+    await page.waitForTimeout(4500); // 켜져 있었다면 벌써 스크롤이 옮겨 갔을 시간
+    expect(await playheadX(page)).toBeGreaterThan(view.width); // 재생선은 화면 밖으로 나갔는데
+    expect(await scrollLeftOf(page)).toBe(0); // 스크롤은 그대로다
+    await page.click(S.stop);
+    measuredP53("따라가기", { 켬_스크롤_px: Math.round(view.left), 끔_스크롤_px: 0 });
+  });
+
+  test("재생 중 레벨 미터는 움직이고, 정지하면 처음 값으로 돌아온다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    const master = page.locator(".level-meter.master .level-meter-label span");
+    const idle = await master.innerText();
+    await startPlaying(page);
+    await page.waitForTimeout(800);
+    const playing = await master.innerText();
+    expect(playing).not.toBe(idle);
+    expect(parseFloat(playing)).toBeGreaterThan(parseFloat(idle)); // 소리가 들어와 올라갔다
+    await page.click(S.stop);
+    await expect(master).toHaveText(idle);
+    measuredP53("마스터 미터", { 멈춰_있을_때: idle, 재생_중: playing });
+  });
+
+  test("재생 중 주파수 분석기는 프레임마다 그리고(초당 40~75번), 멈추면 더 그리지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    // 분석기는 프레임마다 캔버스 전체를 배경색으로 한 번 칠하고 시작한다. 그 호출을 센다.
+    await page.evaluate(() => {
+      (window as any).__specDraws = 0;
+      const fillRect = CanvasRenderingContext2D.prototype.fillRect;
+      CanvasRenderingContext2D.prototype.fillRect = function (x: number, y: number, w: number, h: number) {
+        const canvas = this.canvas as HTMLCanvasElement;
+        if (canvas.classList.contains("spec-canvas") && x === 0 && y === 0 && w === canvas.clientWidth && h === canvas.clientHeight) (window as any).__specDraws++;
+        return fillRect.call(this, x, y, w, h);
+      };
+    });
+    const draws = () => page.evaluate(() => (window as any).__specDraws as number);
+    const reset = () => page.evaluate(() => { (window as any).__specDraws = 0; });
+    const canvas = page.locator(".spec-canvas");
+    const snapshot = () => canvas.evaluate((element) => (element as HTMLCanvasElement).toDataURL());
+    const idle = await snapshot();
+    await startPlaying(page);
+    await page.waitForTimeout(300);
+    expect(await snapshot()).not.toBe(idle); // 소리가 들어오면 막대가 그려진다
+    await reset();
+    await page.waitForTimeout(1000);
+    const playing = await draws();
+    measuredP53("분석기 그리기", { 재생_중_초당: playing });
+    expect(playing).toBeGreaterThanOrEqual(40);
+    expect(playing).toBeLessThanOrEqual(75);
+    await page.click(S.stop);
+    await expect.poll(() => isShownPlaying(page)).toBe(false);
+    await page.waitForTimeout(300);
+    await reset();
+    await page.waitForTimeout(800);
+    expect(await draws()).toBe(0);
   });
 });

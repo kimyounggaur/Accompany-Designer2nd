@@ -1,7 +1,8 @@
 import { Circle, Pause, Play, Square } from "lucide-react";
 import { useRecordingStore } from "../../state/recordingStore";
 import { useDawStore } from "../../store/useDawStore";
-import { formatTime } from "../../utils/audioMath";
+import { countRender } from "../debug/renderCount";
+import { TimeDisplay } from "./TimeDisplay";
 
 interface TransportControlsProps {
   isRecording: boolean;
@@ -13,8 +14,8 @@ interface TransportControlsProps {
 /** 재생/일시정지 · 정지 · 녹음 · 시간 표시 */
 export function TransportControls({ isRecording, onPlayPause, onStop, onRecordToggle }: TransportControlsProps) {
   const isPlaying = useDawStore((state) => state.isPlaying);
-  const playhead = useDawStore((state) => state.playhead);
   const preparing = useRecordingStore((state) => state.status === "preparing");
+  countRender("TransportControls");
 
   return (
     <div className="transport-group">
@@ -43,7 +44,7 @@ export function TransportControls({ isRecording, onPlayPause, onStop, onRecordTo
       >
         <Circle size={16} fill="currentColor" />
       </button>
-      <output className="time-display" data-testid="time-display">{formatTime(playhead)}</output>
+      <TimeDisplay />
     </div>
   );
 }

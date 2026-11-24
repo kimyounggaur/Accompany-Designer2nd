@@ -1,4 +1,5 @@
 import { useDawStore } from "../../store/useDawStore";
+import { countRender } from "../debug/renderCount";
 import { useTextGesture } from "../inspector/useHistoryGesture";
 import { useMediaQuery } from "../useMediaQuery";
 import { FileMenu } from "./FileMenu";
@@ -37,6 +38,7 @@ export function TopBar({
   onRelink,
   onStop,
 }: TopBarProps) {
+  countRender("TopBar");
   const wide = useMediaQuery("(min-width: 1600px)");
   const narrow = useMediaQuery("(max-width: 1279px)");
   const projectName = useDawStore((state) => state.name);

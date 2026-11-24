@@ -17,8 +17,10 @@ import {
   zoomToFit,
   zoomToSelectedClips,
 } from "../app/actions";
+import { readPlayhead } from "../app/playhead";
 import type { PlaylistSnap, PlaylistTool } from "../domain/types";
 import { ariaKeys, keyLabel, toolShortcutId } from "../services/shortcuts";
+import { countRender } from "../ui/debug/renderCount";
 import { menuIcon, playlistToolIcons, snapIcon } from "../utils/playlistToolIcons";
 
 /** 도구 단추. 단추에 적는 키는 단축키 표(services/shortcuts.ts)에서 읽는다. */
@@ -66,6 +68,7 @@ interface CommandSection {
 }
 
 export function PlaylistToolbar() {
+  countRender("PlaylistToolbar");
   const [openMenu, setOpenMenu] = useState<"menu" | "snap" | undefined>();
   const toolbarRef = useRef<HTMLDivElement>(null);
   const playlistTool = useDawStore((state) => state.playlistTool);
@@ -75,7 +78,6 @@ export function PlaylistToolbar() {
   const playlistDetached = useDawStore((state) => state.playlistDetached);
   const selectedClipIds = useDawStore((state) => state.selectedClipIds);
   const tracks = useDawStore((state) => state.tracks);
-  const playhead = useDawStore((state) => state.playhead);
   const setPlaylistTool = useDawStore((state) => state.setPlaylistTool);
   const setPlaylistSnap = useDawStore((state) => state.setPlaylistSnap);
   const setGlobalSnap = useDawStore((state) => state.setGlobalSnap);
@@ -86,7 +88,7 @@ export function PlaylistToolbar() {
   const togglePlaylistDetached = useDawStore(
     (state) => state.togglePlaylistDetached,
   );
-  const setPlayhead = useDawStore((state) => state.setPlayhead);
+  const setCursor = useDawStore((state) => state.setCursor);
 
   const selectedSnapLabel = useMemo(() => {
     const localLabel =
@@ -138,7 +140,7 @@ export function PlaylistToolbar() {
       return;
     }
 
-    setPlayhead(Math.min(...selectedClips.map((clip) => clip.startTime)));
+    setCursor(Math.min(...selectedClips.map((clip) => clip.startTime)));
   };
 
   const commandSections: CommandSection[] = [
@@ -202,7 +204,7 @@ export function PlaylistToolbar() {
     {
       title: "타임 마커",
       items: [
-        { label: "재생 헤드에 추가", action: () => addTimeMarker(playhead) },
+        { label: "재생 헤드에 추가", action: () => addTimeMarker(readPlayhead()) },
         { label: "마커 지우기", action: clearTimeMarkers },
       ],
     },
@@ -225,7 +227,7 @@ export function PlaylistToolbar() {
     {
       title: "재생 헤드",
       items: [
-        { label: "곡 처음으로 이동", action: () => setPlayhead(0) },
+        { label: "곡 처음으로 이동", action: () => setCursor(0) },
         { label: "선택 시작점으로 이동", action: goToSelectionStart },
       ],
     },
