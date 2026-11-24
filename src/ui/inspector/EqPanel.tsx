@@ -43,7 +43,7 @@ export function EqPanel({ track }: { track: Track }) {
       actions={
         <Toggle
           className={`plugin-power-button ${eq.enabled ? "on" : ""}`}
-          label="이퀄라이저 켜기"
+          label={ko.state.power("이퀄라이저", eq.enabled)}
           pressed={eq.enabled}
           onChange={(enabled) => updateTrack(track.id, effectPatch(track, "eq", { enabled }))}
         >

@@ -8,7 +8,7 @@
 
 .comp-title {
   transform: rotate(180deg);
-  font-size: 9px;
+  font-size: var(--font-size-0);
   color: var(--color-text-muted);
   flex-shrink: 0;
 }
@@ -25,7 +25,7 @@
 .comp-vu-scale {
   display: flex;
   justify-content: space-between;
-  font-size: 8px;
+  font-size: var(--font-size-0);
   color: #333;
   font-weight: 700;
   font-family: monospace;
@@ -93,7 +93,7 @@
 }
 
 .comp-power-label {
-  font-size: 8px;
+  font-size: var(--font-size-0);
   font-weight: 900;
   color: #7a6a4a;
   letter-spacing: 0.1em;
@@ -124,12 +124,12 @@
 }
 
 .comp-knob-label {
-  font-size: 8px;
+  font-size: var(--font-size-0);
   color: var(--color-text-muted);
 }
 
 .comp-knob-sub {
-  font-size: 9px;
+  font-size: var(--font-size-0);
 }
 
 .comp-power-btn {

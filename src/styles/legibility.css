@@ -14,7 +14,7 @@
 
 .comp-vu-label {
   color: #c9c9c9;
-  font-size: 9px;
+  font-size: var(--font-size-0);
 }
 
 .comp-vu-scale span {

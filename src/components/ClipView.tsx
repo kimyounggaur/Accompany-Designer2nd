@@ -13,7 +13,10 @@ import {
   deleteClip,
   deleteSelectedClips,
   duplicateSelectedClips,
+  nudgeClip,
   renameClip,
+  resizeClip,
+  selectClipFromKeyboard,
   sliceClipAt,
   sliceSelectedClipsAtPlayhead,
   toggleSelectedClipsMuted,
@@ -44,6 +47,9 @@ interface ClipViewProps {
   trackIds: string[];
   trackIndex: number;
 }
+
+/** 클립의 키 안내 글자(화면 낭독기만 읽는다)가 있는 요소의 id. 타임라인이 한 번만 그리고 모든 클립이 가리킨다. */
+export const CLIP_KEYS_HELP_ID = "clip-keys-help";
 
 /** 누른 곳에서 이만큼(px) 안쪽의 움직임은 "끌었다"로 치지 않는다(떼면 선택을 이 클립 하나로 줄이는 판단에만 쓴다) */
 const DRAG_THRESHOLD_PX = 3;
@@ -312,6 +318,50 @@ export function ClipView({
     }
   }
 
+  /**
+   * 초점이 클립 자체에 있을 때의 키(설계 P6-2): Enter = 고르기(Shift·Ctrl과 함께면 더하기·빼기), ←→ = 격자 한 칸 옮기기,
+   * Shift+←→ = 길이 바꾸기, Delete·Backspace = 지우기. Space는 어디서나 재생·일시정지라서 여기서 쓰지 않는다.
+   * 이름 바꾸기 칸·메뉴·단추 안에서 누른 키는 그 부품의 것이므로 건드리지 않는다(칸 안의 ←→·Delete가 클립을 옮기거나 지우면 안 된다).
+   */
+  function handleKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    if (event.target !== event.currentTarget || event.altKey || event.metaKey) return;
+    if (event.key === "Enter") {
+      event.preventDefault();
+      selectClipFromKeyboard(clip.id, event.shiftKey || event.ctrlKey);
+      return;
+    }
+    if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && !event.ctrlKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      const direction = event.key === "ArrowLeft" ? -1 : 1;
+      if (event.shiftKey) resizeClip(clip.id, direction);
+      else nudgeClip(clip.id, direction);
+      return;
+    }
+    if ((event.key === "Delete" || event.key === "Backspace") && !event.ctrlKey && !event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      removeFromKeyboard(event.currentTarget);
+    }
+  }
+
+  /**
+   * 키보드로 지운다. 이 클립이 선택에 있으면 선택 전체를(마우스로 고른 것과 같은 규칙), 없으면 이 클립만 지운다.
+   * 지운 뒤에는 초점이 사라지지 않도록, 남은 클립 중 뒤쪽 가장 가까운 것(없으면 앞쪽 가장 가까운 것)으로 초점을 옮긴다.
+   */
+  function removeFromKeyboard(current: HTMLElement) {
+    const order = Array.from(current.parentElement?.querySelectorAll<HTMLElement>('[data-testid="clip"]') ?? []);
+    const index = order.indexOf(current);
+    if (isSelected) deleteSelectedClips();
+    else deleteClip(clip.id);
+    // 지운 결과가 화면에 반영된 다음에 옮긴다(setTimeout: 화면 갱신 루프가 아니라 한 번짜리 예약).
+    window.setTimeout(() => {
+      const alive = order.filter((element) => element.isConnected);
+      const next = alive.find((element) => order.indexOf(element) > index) ?? alive[alive.length - 1];
+      next?.focus();
+    }, 0);
+  }
+
   return (
     <article
       data-testid="clip"
@@ -326,7 +376,8 @@ export function ClipView({
       }}
       tabIndex={0}
       aria-label={`${clip.name} 클립`}
-      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectClip(clip.id, event.shiftKey || event.ctrlKey); } }}
+      aria-describedby={CLIP_KEYS_HELP_ID}
+      onKeyDown={handleKeyDown}
       onPointerDown={(event) => {
         longPress.onPointerDown(event);
         handleClipPointerDown(event);
@@ -347,6 +398,7 @@ export function ClipView({
       <button
         aria-label="클립 시작점 다듬기"
         className="trim-handle left"
+        tabIndex={-1}
         onPointerDown={(event) => beginTrim("trim-left", event)}
         onPointerMove={updateDrag}
         onPointerUp={endDrag}
@@ -397,6 +449,7 @@ export function ClipView({
       <button
         aria-label="페이드 인 조절"
         className="fade-handle fade-in"
+        tabIndex={-1}
         onPointerDown={(event) => beginDrag("fade-in", event)}
         onPointerMove={updateDrag}
         onPointerUp={endDrag}
@@ -407,6 +460,7 @@ export function ClipView({
       <button
         aria-label="페이드 아웃 조절"
         className="fade-handle fade-out"
+        tabIndex={-1}
         onPointerDown={(event) => beginDrag("fade-out", event)}
         onPointerMove={updateDrag}
         onPointerUp={endDrag}
@@ -433,6 +487,7 @@ export function ClipView({
       <button
         aria-label="클립 끝점 다듬기"
         className="trim-handle right"
+        tabIndex={-1}
         onPointerDown={(event) => beginTrim("trim-right", event)}
         onPointerMove={updateDrag}
         onPointerUp={endDrag}

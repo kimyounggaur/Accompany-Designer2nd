@@ -44,7 +44,7 @@ export function DelayPluginPanel({ bpm, delay, onChange }: DelayPluginPanelProps
             </div>
             <Toggle
               className={`dly-power ${delay.enabled ? "on" : ""}`}
-              label="딜레이 켜기"
+              label={ko.state.power("딜레이", delay.enabled)}
               pressed={delay.enabled}
               onChange={(enabled) => onChange({ enabled })}
             >

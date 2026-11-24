@@ -243,6 +243,30 @@ export function moveClips(moves: readonly ClipMove[], options?: EditOptions): bo
   }, options);
 }
 
+/** 클립 하나의 새 시작 시간 */
+export interface ClipStart {
+  clipId: string;
+  startTime: number;
+}
+
+/**
+ * 클립들의 시작 시간만 그 자리에서 바꾼다(키보드 ←→로 옮기기, 설계 P6-2). `moveClips`와 달리 옮긴 클립을 트랙 맨 뒤로 보내지
+ * 않아서 화면의 겹침 순서가 그대로이고, 클립 요소가 다시 만들어지지 않아 키보드 초점도 남는다. 시작 시간은 0초 아래로 내려가지 않는다.
+ * 같은 클립들을 800ms 안에 이어서 옮긴 편집은 이력 한 단계로 묶인다(방향키를 여러 번 눌러도 실행 취소는 한 번).
+ */
+export function setClipStarts(starts: readonly ClipStart[], options?: EditOptions): boolean {
+  const wanted = new Map(starts.map((item) => [item.clipId, Math.max(0, item.startTime)] as const));
+  const key = options?.key ?? `clip-starts:${[...wanted.keys()].sort().join(",")}`;
+  return history.edit("클립 이동", (doc) => {
+    const base = baseOf(doc);
+    for (const [trackIndex, clipIndex] of locateMany(base, new Set(wanted.keys()))) {
+      const clip = base.tracks[trackIndex].clips[clipIndex];
+      const startTime = wanted.get(clip.id);
+      if (startTime !== undefined && clip.startTime !== startTime) doc.tracks[trackIndex].clips[clipIndex].startTime = startTime;
+    }
+  }, { ...options, key });
+}
+
 /**
  * 계획대로 새 클립들을 놓는다. 계획이 가리키는 트랙 칸이 지금 트랙 수를 넘으면 모자란 트랙을 같은 편집 안에서 만든다(실행 취소 한 단계).
  * 같은 그룹이던 클립이 사본에도 둘 이상 있으면 사본끼리 새 그룹으로 묶는다. 놓은 클립들의 id를 계획 순서대로 돌려준다.

@@ -145,6 +145,24 @@ export function planMultiMove(items: readonly MoveItem[], deltaTime: number, del
   return items.map((item) => ({ id: item.id, trackIndex: item.trackIndex + rows, startTime: item.startTime + time }));
 }
 
+/** 격자 위인지 가르는 허용 오차(칸 수 단위). 부동소수점 끝자리 때문에 "칸 위"가 칸 아래로 읽히지 않게 한다. */
+const GRID_EPSILON = 1e-6;
+
+/**
+ * 방향키로 값을 격자 한 칸 옮긴 값(키보드로 클립을 옮기거나 길이를 바꿀 때).
+ *  - `aligned`(스냅 켜짐): 지금 값에서 `direction` 쪽으로 가장 가까운 "다음 격자 선"으로 간다. 이미 선 위면 한 칸 옆 선,
+ *    선과 선 사이면 그 쪽의 첫 선. 그래서 한 번 누르면 격자에 정렬되고, 계속 누르면 한 칸씩 움직인다.
+ *  - 스냅 꺼짐: 지금 값에서 한 칸 길이만큼 더하거나 뺀다(격자에 맞추지 않는다).
+ * 0 아래·길이 제한은 부르는 쪽이 정한다.
+ */
+export function stepOnGrid(value: number, direction: -1 | 1, step: number, aligned: boolean): number {
+  if (!(step > 0) || !Number.isFinite(value)) return value;
+  if (!aligned) return value + direction * step;
+  const cells = value / step;
+  const next = direction > 0 ? Math.floor(cells + GRID_EPSILON) + 1 : Math.ceil(cells - GRID_EPSILON) - 1;
+  return next * step;
+}
+
 /** 새 클립을 놓을 계획 하나: 무엇을(`source`) 어느 트랙 칸(`trackIndex`)의 몇 초에 놓을지 */
 export interface ClipPlacement {
   readonly source: Clip;

@@ -1,0 +1,82 @@
+/*
+ * 눌리는 크기 24×24px 이상(WCAG 2.2 · 2.5.8, 설계 P6-2). 맨 마지막에 불러와 앞의 규칙을 덮어쓴다.
+ * 눈에 보이는 모양과 줄의 높이는 그대로 두고, 눌리는 영역(단추·입력 칸 자체의 크기)만 24px 이상으로 키운다.
+ *  - 슬라이더·숫자 칸·선택 상자: 높이를 24px로 하고, 원래 줄이 22px 이하였던 곳은 위아래 -1px 여백으로 줄 높이를 지킨다.
+ *  - 작은 단추: 눈에 보이는 면은 안쪽(background-clip: content-box)에 그대로 두고 단추 자체를 키운다.
+ * 일부러 두는 것(docs/PHASES.md P6-2):
+ *  - 노브 옆 값 글자(.knob-value): 글자 크기 안내이고 같은 일을 노브가 한다(노브에서 Enter).
+ *  - 클립의 끝점·페이드 손잡이: 좁은 클립에서도 몸통을 끌 자리를 남기려고 12~14px로 둔다.
+ *    길이는 키보드 Shift+←→로도 바꿀 수 있다.
+ */
+
+/* 가로 막대(슬라이더) */
+.track-header .track-volume-row input[type="range"] {
+  height: 24px;
+  margin-block: -1px;
+}
+
+.monitor-volume-control input[type="range"],
+.master-slider,
+.clip-gain__row input[type="range"] {
+  height: 24px;
+}
+
+/* 숫자 칸 */
+.track-header input.track-volume-number {
+  height: 24px;
+  margin-block: -1px;
+}
+
+.topbar .monitor-volume-control input.monitor-volume-number {
+  height: 24px;
+}
+
+/* 선택 상자 */
+.count-in-control select,
+.reverb-model-select select,
+.dly-select {
+  min-height: 24px;
+}
+
+.count-in-control select {
+  height: 24px;
+}
+
+/* 작은 단추 */
+.statusbar__toggle {
+  height: 24px;
+}
+
+.spec-led-btn {
+  width: 24px;
+  height: 24px;
+  margin-block: -5px;
+  padding: 5px 4px;
+  background-clip: content-box;
+}
+
+.trax-switch {
+  width: 24px;
+  margin-inline: -2px;
+}
+
+.trax-switch-lever {
+  left: 4px;
+}
+
+/* 눈에 안 보이는 체크 상자: 상자가 이름표 전체를 덮어 이름표 어디를 눌러도 상자를 누른 것이 된다 */
+.reverb-toggle {
+  position: relative;
+  min-width: 24px;
+  min-height: 24px;
+  align-content: center;
+  cursor: pointer;
+}
+
+.reverb-toggle input {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}

@@ -34,10 +34,13 @@ interface ValueEntryProps {
  * 값 글자 자리. 평소에는 글자처럼 보이는 단추이고, 누르면 숫자 칸으로 바뀐다(Enter로 정하고 Esc로 취소).
  * 단추는 키보드 순서에 넣지 않는다: 키보드로는 노브에서 Enter를 눌러 연다.
  * 모듈 맨 위에 한 번만 정의한다(다른 부품 안에서 만들면 다시 그릴 때마다 지워지고 새로 생긴다).
+ *
+ * 단추의 이름은 눈에 보이는 글자(`text`)로 시작한다(WCAG 2.5.3 "이름에 보이는 글자 넣기"):
+ * 음성으로 "80퍼센트 누르기"라고 말하는 사람이 같은 단추를 부를 수 있어야 한다.
  */
 export function ValueEntry({ text, config, value, editing, onOpen, onCommit, onClose }: ValueEntryProps) {
   if (!editing) {
-    return <button type="button" className="knob-value" tabIndex={-1} aria-label={`${config.label} 입력`} onClick={onOpen}>{text}</button>;
+    return <button type="button" className="knob-value" tabIndex={-1} aria-label={`${text} ${config.label} 입력`} onClick={onOpen}>{text}</button>;
   }
   return (
     <CommittedNumberInput

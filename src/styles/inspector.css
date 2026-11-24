@@ -89,7 +89,7 @@
   flex-direction: column;
   justify-content: space-between;
   color: #819189;
-  font-size: 9px;
+  font-size: var(--font-size-0);
   line-height: 1;
 }
 

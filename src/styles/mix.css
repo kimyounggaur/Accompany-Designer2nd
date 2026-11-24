@@ -60,7 +60,7 @@
 }
 
 .trax-switch-label {
-  font-size: 7px;
+  font-size: var(--font-size-0);
   color: var(--color-text-muted);
 }
 
@@ -79,7 +79,7 @@
 }
 
 .trax-knob-label {
-  font-size: 9px;
+  font-size: var(--font-size-0);
   color: rgba(0,0,0,0.55);
 }
 

@@ -1021,8 +1021,9 @@ test.describe("P3-2 재생 시계·예약기", () => {
 /** 같은 규칙으로 한 줄 측정을 남긴다(병합 기록의 이전/이후 표용). */
 const measured33 = (name: string, value: unknown) => console.log(`P3-3 측정 [${P32_ENGINE}] ${name}: ${JSON.stringify(value)}`);
 
-const delayPower = '[aria-label="딜레이 켜기"]';
-const reverbPower = '[aria-label="리버브 켜기"]';
+// 전원 단추의 이름은 보이는 글자를 따라 "딜레이 켜짐"·"딜레이 꺼짐"으로 바뀐다(P6-2). 눌림 상태(aria-pressed)가 있는 단추만 고른다.
+const delayPower = 'button[aria-pressed][aria-label^="딜레이 "]';
+const reverbPower = 'button[aria-pressed][aria-label^="리버브 "]';
 const reverbDecay = '[aria-label="잔향 길이"]';
 
 test.describe("P3-3 트랙 경로와 이펙트 약속", () => {
@@ -3191,7 +3192,8 @@ const measuredP50 = (name: string, value: unknown) => console.log(`P5-0 측정 $
 
 test.describe("P5-0 공용 조작부", () => {
   const knob = (page: Page, name: string) => page.locator(`[role=slider][aria-label="${name}"]`);
-  const entryOpener = (page: Page, name: string) => page.locator(`button[aria-label="${name} 입력"]`);
+  // 이름은 보이는 값 글자로 시작한다("80% 트랙 볼륨 값(%) 입력"): 끝맞춤 선택자로 고른다.
+  const entryOpener = (page: Page, name: string) => page.locator(`button[aria-label$=" ${name} 입력"]`);
   const entryField = (page: Page, name: string) => page.locator(`input[aria-label="${name}"]`);
   const clickEmpty = (page: Page) => page.mouse.click(700, 650);
   const BASS = "저음 이퀄라이저";
@@ -3459,14 +3461,19 @@ test.describe("P5-0 공용 조작부", () => {
     await expect(time).not.toHaveAttribute("aria-valuenow", "375");
   });
 
-  test("이펙트 전원 단추는 이름과 눌림 상태를 가진다(이퀄라이저·컴프레서·딜레이·리버브)", async ({ page }) => {
+  test("이펙트 전원 단추는 이름과 눌림 상태를 가진다(이퀄라이저·컴프레서·딜레이·리버브). 이름에는 단추 안에 보이는 글자(켜짐·꺼짐)가 들어 있다", async ({ page }) => {
     await openApp(page);
-    for (const [name, initial] of [["이퀄라이저 켜기", "true"], ["컴프레서 켜기", "false"], ["딜레이 켜기", "false"], ["리버브 켜기", "false"]] as const) {
-      const power = page.getByRole("button", { name, exact: true });
+    for (const [name, initial] of [["이퀄라이저", "true"], ["컴프레서", "false"], ["딜레이", "false"], ["리버브", "false"]] as const) {
+      const power = page.getByRole("button", { name: new RegExp(`^${name} (켜짐|꺼짐)$`) });
       await power.scrollIntoViewIfNeeded();
       await expect(power, name).toHaveAttribute("aria-pressed", initial);
+      // 보이는 글자가 곧 이름의 끝말이다(WCAG 2.5.3): 켜져 있으면 "켜짐", 꺼져 있으면 "꺼짐"
+      await expect(power, name).toHaveAttribute("aria-label", `${name} ${initial === "true" ? "켜짐" : "꺼짐"}`);
+      await expect(power, name).toContainText(initial === "true" ? "켜짐" : "꺼짐");
       await power.click();
       await expect(power, `${name} 누른 뒤`).toHaveAttribute("aria-pressed", initial === "true" ? "false" : "true");
+      await expect(power, `${name} 누른 뒤 이름`).toHaveAttribute("aria-label", `${name} ${initial === "true" ? "꺼짐" : "켜짐"}`);
+      await expect(power, `${name} 누른 뒤 글자`).toContainText(initial === "true" ? "꺼짐" : "켜짐");
     }
   });
 
@@ -4894,7 +4901,7 @@ test.describe("P5-6 동작하지 않는 조작부 정리", () => {
   /** 바늘이 가리키는 각도(도): 요소에 적힌 목표 각도. 움직임(0.15초 transition)이 끝나기를 기다릴 필요가 없다. */
   const angle = (page: Page) =>
     needle(page).evaluate((element) => Number(/rotate\((-?[\d.]+)deg\)/.exec((element as HTMLElement).style.transform)?.[1]));
-  const power = (page: Page) => page.getByRole("button", { name: "컴프레서 켜기", exact: true });
+  const power = (page: Page) => page.getByRole("button", { name: /^컴프레서 (켜짐|꺼짐)$/ });
 
   test("컴프레서 바늘: 노브만 돌려서는 안 움직이고, 재생 중 세게 걸면 소리 크기에 따라 움직이며(reduction < −3 dB), 멈추거나 끄면 제자리로 돌아온다", async ({ page }) => {
     test.skip(!onNewEngine, "압축량은 새 엔진만 알려 준다");
@@ -4908,7 +4915,7 @@ test.describe("P5-6 동작하지 않는 조작부 정리", () => {
     // 켜고 세게 건다: 기준 음량 −24 dB(작은 앞부분은 아래, 큰 뒷부분은 위), 압축 비율 20:1
     await power(page).click();
     await expect(power(page)).toHaveAttribute("aria-pressed", "true");
-    await page.locator('button[aria-label="기준 음량 값(dB) 입력"]').click();
+    await page.locator('button[aria-label$=" 기준 음량 값(dB) 입력"]').click();
     await page.locator('input[aria-label="기준 음량 값(dB)"]').fill("-24");
     await page.keyboard.press("Enter");
     const threshold = knob(page, "기준 음량 컴프레서");
@@ -4925,7 +4932,7 @@ test.describe("P5-6 동작하지 않는 조작부 정리", () => {
       expect(await angle(page), `노브 ${key} 뒤에도 재생 전에는 쉬는 자리`).toBe(80);
       expect(await reduction(page)).toBe(0);
     }
-    await page.locator('button[aria-label="기준 음량 값(dB) 입력"]').click();
+    await page.locator('button[aria-label$=" 기준 음량 값(dB) 입력"]').click();
     await page.locator('input[aria-label="기준 음량 값(dB)"]').fill("-24");
     await page.keyboard.press("Enter");
     await expect(threshold).toHaveAttribute("aria-valuenow", "-24");
@@ -5159,5 +5166,367 @@ test.describe("P6-1 스타일 정리", () => {
     expect(shortest.equals(longest), "짧게 ↔ 길게").toBe(false);
     expect(middle.equals(longest) || middle.equals(shortest), "가운데 값이 양 끝과 같은 그림").toBe(false);
     measuredP61("리버브 손잡이", { 불투명도: 1, "짧게·가운데·길게 그림이 서로 다름": true });
+  });
+});
+
+const measuredP62 = (name: string, value: unknown) => console.log(`P6-2 측정 ${name}: ${JSON.stringify(value)}`);
+
+/**
+ * P6-2 접근성(설계 §P6-2): axe 위반, 조작부 크기, 키보드만으로 하는 작업, 클립 키보드 조작, 화면 낭독기 알림, 초점 표시를 실제 화면에서 잰다.
+ * NVDA·VoiceOver 같은 낭독 프로그램으로 듣는 것과 음성 제어는 사람이 할 일이라 docs/ops-checklist.md에 있다.
+ */
+test.describe("P6-2 접근성", () => {
+  const live = (page: Page) => page.locator('[data-testid="live-announcer"]');
+
+  /**
+   * 모든 기본 규칙에, 기본으로 꺼져 있는 두 규칙을 더해 돌린다:
+   * target-size(WCAG 2.2 클릭 영역 24×24)와 label-content-name-mismatch(보이는 글자가 접근 이름에 들어 있어야 함: 음성 제어).
+   * 두 규칙이 실제로 돌았는지도 돌려준다(규칙 이름이 바뀌어 아무것도 안 재는 시험이 되지 않도록).
+   */
+  async function scan(page: Page) {
+    const result = await new AxeBuilder({ page })
+      .options({ rules: { "target-size": { enabled: true }, "label-content-name-mismatch": { enabled: true } } })
+      .analyze();
+    const ran = new Set([...result.passes, ...result.violations, ...result.incomplete, ...result.inapplicable].map((rule) => rule.id));
+    const rows = result.violations.flatMap((rule) =>
+      rule.nodes.map((node) => ({ id: rule.id, blocking: rule.impact === "serious" || rule.impact === "critical", text: `${rule.id}[${rule.impact}] ${node.target.join(" ")} — ${node.any[0]?.message ?? ""}` })),
+    );
+    return {
+      sizeRuleRan: ran.has("target-size"),
+      nameRuleRan: ran.has("label-content-name-mismatch"),
+      blocking: rows.filter((row) => row.blocking).map((row) => row.text),
+      others: rows.filter((row) => !row.blocking).map((row) => row.id),
+    };
+  }
+
+  /** Tab을 눌러 초점이 `selector`에 맞는 요소에 닿을 때까지 간다. 누른 횟수를 돌려준다(한도 안에 닿지 못하면 실패). */
+  async function tabUntil(page: Page, selector: string, limit = 250) {
+    for (let presses = 1; presses <= limit; presses++) {
+      await page.keyboard.press("Tab");
+      if (await page.evaluate((target) => document.activeElement?.matches(target) ?? false, selector)) return presses;
+    }
+    throw new Error(`Tab을 ${limit}번 눌러도 ${selector}에 닿지 못했습니다`);
+  }
+
+  const geometry = (page: Page, index = 0) =>
+    page.locator(S.clip).nth(index).evaluate((element) => ({
+      left: Math.round(parseFloat((element as HTMLElement).style.left)),
+      width: Math.round(parseFloat((element as HTMLElement).style.width)),
+    }));
+
+  const tallScreen = async (page: Page) => {
+    await page.setViewportSize({ width: 1440, height: 3200 }); // 오른쪽 패널의 장비 화면이 모두 보이는 높이
+    await expect.poll(async () => (await page.locator(S.inspector).boundingBox())?.height ?? 0).toBeGreaterThan(2500);
+  };
+
+  test("axe 심각·치명 위반 0건: 기본 규칙 전부에 24×24 크기 규칙과 보이는 이름 규칙을 더해 — 첫 화면·올린 뒤·클립 선택·파일 메뉴·클립 메뉴·스냅 메뉴·높이 3200·폭 1024", async ({ page }) => {
+    test.setTimeout(240_000);
+    await openApp(page);
+    const found: Record<string, { 심각_치명: number; 그_밖의_위반: string[] }> = {};
+    const check = async (label: string) => {
+      const result = await scan(page);
+      expect(result.sizeRuleRan, `${label}: 크기 규칙(target-size)이 돌았다`).toBe(true);
+      expect(result.nameRuleRan, `${label}: 보이는 이름 규칙(label-content-name-mismatch)이 돌았다`).toBe(true);
+      found[label] = { 심각_치명: result.blocking.length, 그_밖의_위반: result.others };
+      expect(result.blocking, label).toEqual([]);
+    };
+    await check("첫 화면");
+    await upload(page);
+    await check("올린 뒤");
+    await page.locator(S.clip).first().click();
+    await check("클립을 고른 뒤");
+
+    await page.locator(S.fileMenuTrigger).click();
+    await expect(page.locator(S.fileMenuPanel)).toBeVisible();
+    await check("파일 메뉴");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(S.fileMenuPanel)).toHaveCount(0);
+
+    await page.locator(S.clip).first().click({ button: "right" });
+    await expect(page.locator(S.contextMenu)).toBeVisible();
+    await check("클립 메뉴");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(S.contextMenu)).toHaveCount(0);
+
+    await page.locator(".snap-tool").click();
+    await expect(page.locator(".snap-dropdown")).toBeVisible();
+    await check("스냅 메뉴");
+    await page.locator(".snap-tool").click();
+    await expect(page.locator(".snap-dropdown")).toHaveCount(0);
+
+    await tallScreen(page);
+    await check("높이 3200(장비 화면까지)");
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.waitForTimeout(400);
+    await check("폭 1024");
+    measuredP62("axe 위반", found);
+  });
+
+  test("조작부 크기: 트랙 머리의 녹음 대기·음소거·솔로와 슬라이더·숫자 칸·선택 칸·LED·스위치가 모두 24×24px 이상 — 예외는 값 읽기 단추와 클립 손잡이뿐", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await page.locator(S.clip).first().click();
+    await tallScreen(page);
+    const trackButtons: Record<string, [number, number]> = {};
+    for (const name of ["트랙 1 녹음 대기", "트랙 1 음소거", "트랙 1 솔로"]) {
+      const box = (await page.getByRole("button", { name, exact: true }).boundingBox())!;
+      trackButtons[name] = [Math.round(box.width * 10) / 10, Math.round(box.height * 10) / 10];
+      expect(box.width, `${name} 너비`).toBeGreaterThanOrEqual(24);
+      expect(box.height, `${name} 높이`).toBeGreaterThanOrEqual(24);
+    }
+    const result = await page.evaluate(() => {
+      const selector =
+        'button, a[href], input:not([type=hidden]), select, textarea, [role=button], [role=slider], [role=menuitem], [role=tab], [role=switch], [role=checkbox], [role=radio], [tabindex]:not([tabindex="-1"])';
+      const exempt = ".knob-value, .trim-handle, .fade-handle"; // 노브 옆 값 읽기 단추(노브가 같은 일을 한다)와 클립 가장자리 손잡이(끌어서 쓰는 곳)
+      const label = (element: Element) =>
+        element.tagName.toLowerCase() +
+        (typeof element.className === "string" && element.className ? "." + element.className.trim().split(/\s+/).slice(0, 2).join(".") : "") +
+        (element.getAttribute("aria-label") ? `[${element.getAttribute("aria-label")!.slice(0, 20)}]` : "");
+      let checked = 0;
+      const small: Array<{ text: string; exempt: boolean }> = [];
+      for (const element of document.querySelectorAll(selector)) {
+        const style = getComputedStyle(element);
+        if (style.display === "none" || style.visibility === "hidden") continue;
+        if (element.closest("[aria-hidden=true]") && style.position === "absolute") continue;
+        const rect = element.getBoundingClientRect();
+        if (rect.width < 0.5 || rect.height < 0.5) continue;
+        checked++;
+        if (rect.width >= 23.95 && rect.height >= 23.95) continue;
+        small.push({ text: `${label(element)} ${rect.width.toFixed(1)}×${rect.height.toFixed(1)}`, exempt: element.matches(exempt) });
+      }
+      return { checked, small };
+    });
+    expect(result.checked, "훑어 본 조작부 수").toBeGreaterThan(100);
+    expect(result.small.filter((item) => !item.exempt).map((item) => item.text), "24×24 미만인데 예외도 아닌 조작부").toEqual([]);
+    measuredP62("조작부 크기", { 훑은_조작부: result.checked, "24×24_미만이지만_예외": result.small.length, 트랙_머리_단추: trackButtons });
+  });
+
+  test("키보드만으로 업로드 → 재생 → 클립 선택 → 자르기 → 저장을 끝낸다(마우스를 쓰지 않는다)", async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    await openApp(page);
+    const taps: Record<string, number> = {};
+
+    // 1) 업로드: Tab으로 파일 메뉴 단추에 가서 Enter로 열고 첫 항목(오디오 업로드)에서 Enter. 파일 고르는 창은 운영체제의 것이라 그것만 대신한다.
+    taps["파일 메뉴 단추까지"] = await tabUntil(page, S.fileMenuTrigger);
+    await page.keyboard.press("Enter");
+    await expect(page.locator(S.fileMenuPanel)).toBeVisible();
+    await expect(page.locator(`${S.fileMenuPanel} [role="menuitem"]`).first()).toBeFocused(); // 첫 항목에 초점이 간 뒤에 누른다(사람은 이 사이가 늘 더 길다)
+    const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.keyboard.press("Enter")]);
+    await chooser.setFiles(WAV);
+    await expect(page.locator(S.clip)).toHaveCount(1);
+
+    // 2) 재생: Space(초점이 단추에 있어도 재생·멈춤이다)
+    await page.keyboard.press("Space");
+    await expect(live(page)).toHaveText("재생 중");
+    await page.waitForTimeout(700);
+    await page.keyboard.press("Space");
+    await expect(live(page)).toHaveText("재생 멈춤");
+
+    // 3) 클립 선택: Tab으로 클립에 간다. 올린 클립은 처음부터 선택돼 있으므로 Shift+Enter로 선택에서 뺀 뒤 Enter로 다시 고른다.
+    taps["클립까지"] = await tabUntil(page, S.clip);
+    await expect(page.locator(S.clip).first()).toBeFocused();
+    await expect(page.locator(`${S.clip}.selected`)).toHaveCount(1);
+    await page.keyboard.press("Shift+Enter");
+    await expect(page.locator(`${S.clip}.selected`)).toHaveCount(0);
+    await expect(live(page)).toContainText("선택 해제");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(`${S.clip}.selected`)).toHaveCount(1);
+    await expect(live(page)).toContainText("선택됨");
+
+    // 4) 자르기: Ctrl+E(재생선에서 고른 클립을 자른다)
+    await page.keyboard.press("Control+e");
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    await expect(page.locator(S.status)).toContainText("클립 자르기 완료");
+
+    // 5) 저장: Ctrl+S
+    const [download] = await Promise.all([page.waitForEvent("download"), page.keyboard.press("Control+s")]);
+    const saved = path.join(os.tmpdir(), `ad2-p62-${testInfo.workerIndex}-${Date.now()}.adproj`);
+    await download.saveAs(saved);
+    const doc = JSON.parse(strFromBytes(unzipSync(new Uint8Array(fs.readFileSync(saved)))["project.json"])).doc;
+    expect(doc.tracks[0].clips, "저장한 파일 안의 클립 수").toHaveLength(2);
+    measuredP62("키보드만으로 한 작업", { Tab_누른_횟수: taps, 마우스: "쓰지 않음", 저장한_클립_수: doc.tracks[0].clips.length });
+  });
+
+  test("클립 키보드 조작: ←·→는 격자 한 칸 이동, Shift+←·→는 길이, Enter는 선택, Delete는 지우기(초점은 이웃 클립에 남는다), Space는 재생이다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    const clip = page.locator(S.clip).first();
+    const bpm = Number(await page.locator(S.tempo).inputValue());
+    const cell = (60 / bpm / 2) * 96; // 스냅 1/2박 한 칸의 너비(px)
+    await clip.focus();
+    await expect(clip).toBeFocused();
+    await expect(clip).toHaveAttribute("aria-describedby", "clip-keys-help");
+    await expect(page.locator("#clip-keys-help")).toContainText("엔터로 고르기");
+
+    // Enter = 선택(Shift+Enter는 선택에서 빼기), Space = 재생(선택이 아니다). 올린 클립은 처음부터 선택돼 있다.
+    await expect(clip).toHaveClass(/selected/);
+    await page.keyboard.press("Shift+Enter");
+    await expect(clip).not.toHaveClass(/selected/);
+    await expect(live(page)).toContainText("선택 해제");
+    await page.keyboard.press("Space");
+    await expect(live(page)).toHaveText("재생 중");
+    await expect(clip).not.toHaveClass(/selected/); // Space는 클립을 고르지 않는다
+    await page.keyboard.press("Space");
+    await expect(live(page)).toHaveText("재생 멈춤");
+    await page.keyboard.press("Enter");
+    await expect(clip).toHaveClass(/selected/);
+    await expect(live(page)).toContainText("선택됨");
+
+    // ←·→ = 격자 한 칸. 누를 때마다 초점은 그 클립에 남는다
+    const start = await geometry(page);
+    expect(start.left).toBe(0);
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(async () => (await geometry(page)).left).toBe(Math.round(cell));
+    await expect(clip).toBeFocused();
+    await expect(live(page)).toContainText("시작 0.25초");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(async () => (await geometry(page)).left).toBe(Math.round(3 * cell));
+    await page.keyboard.press("ArrowLeft");
+    await expect.poll(async () => (await geometry(page)).left).toBe(Math.round(2 * cell));
+    expect((await geometry(page)).width, "옮겨도 길이는 그대로").toBe(start.width);
+    // 연달아 누른 이동은 실행 취소 한 번에 시작 자리로 돌아온다
+    await page.keyboard.press("Control+z");
+    await expect.poll(async () => (await geometry(page)).left).toBe(0);
+    await page.keyboard.press("Control+Shift+z");
+    await expect.poll(async () => (await geometry(page)).left).toBe(Math.round(2 * cell));
+    // 곡 시작(0초) 앞으로는 가지 않는다
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await expect.poll(async () => (await geometry(page)).left).toBe(0);
+    await expect(live(page)).toContainText("시작 0.00초");
+
+    // Shift+←·→ = 길이(끝점). 원본(8초)을 넘겨 늘어나지는 않는다
+    await page.keyboard.press("Shift+ArrowLeft");
+    await expect.poll(async () => (await geometry(page)).width).toBe(Math.round(start.width - cell));
+    await expect(live(page)).toContainText("길이 7.75초");
+    await page.keyboard.press("Shift+ArrowRight");
+    await expect.poll(async () => (await geometry(page)).width).toBe(start.width);
+    await page.keyboard.press("Shift+ArrowRight");
+    await expect(live(page)).toContainText("더 바꿀 수 없음");
+    expect((await geometry(page)).width).toBe(start.width);
+    await expect(clip).toBeFocused();
+
+    // Delete = 지우기. 초점은 남은 이웃 클립으로 간다(없어지지 않는다). 실행 취소 한 번에 돌아온다
+    await upload(page); // 둘째 트랙에 같은 클립
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    await page.locator(S.clip).first().focus();
+    await page.keyboard.press("Delete");
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    await expect(page.locator(S.clip).first()).toBeFocused();
+    await page.keyboard.press("Control+z");
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    measuredP62("클립 키보드", { 격자_한_칸_px: Math.round(cell), 길이_한_칸: "7.75초 ↔ 8초", 지운_뒤_초점: "이웃 클립" });
+  });
+
+  test("클립 이름 바꾸는 칸 안의 ←·→·Delete·Backspace는 글자 편집이다(클립이 움직이거나 지워지지 않는다)", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    const clip = page.locator(S.clip).first();
+    await clip.click({ button: "right" });
+    await page.locator('[data-testid="menu-rename"]').click();
+    const editor = page.locator(S.clipNameEditor);
+    await expect(editor).toBeVisible();
+    await editor.press("End");
+    await editor.press("ArrowLeft");
+    await editor.press("ArrowLeft");
+    await editor.press("Delete");
+    await editor.press("Backspace");
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    expect((await geometry(page)).left).toBe(0);
+    await editor.press("Escape");
+    await expect(page.locator(S.clip)).toHaveCount(1);
+  });
+
+  test("화면 낭독기 알림: 재생·멈춤·녹음 준비·녹음 중·녹음 멈춤이 정중한(polite) 알림 영역에 한 줄씩 나오고, 영역은 눈에 보이지 않으며, 화면에는 제목(h1)이 있다", async ({ page }) => {
+    await openApp(page);
+    const region = live(page);
+    await expect(region).toHaveAttribute("role", "status");
+    await expect(region).toHaveAttribute("aria-live", "polite");
+    await expect(region).toHaveAttribute("aria-atomic", "true");
+    const box = (await region.boundingBox())!;
+    expect(box.width, "알림 영역은 1px 상자라 눈에 보이지 않는다").toBeLessThanOrEqual(1);
+    expect(box.height).toBeLessThanOrEqual(1);
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.locator("h1")).toHaveText("반주 디자이너 2");
+
+    // 재생 ↔ 멈춤(같은 알림이 되풀이돼도 다시 읽히도록 글자가 갱신된다)
+    await upload(page);
+    const texts: string[] = [];
+    for (const expected of ["재생 중", "재생 멈춤", "재생 중", "재생 멈춤"]) {
+      await page.keyboard.press("Space");
+      await expect(region).toHaveText(expected);
+      texts.push(expected);
+    }
+
+    // 녹음: 카운트인 → 녹음 중 → 멈춤
+    await page.selectOption(S.countIn, "2"); // 2박 = 1초
+    await page.click(S.record);
+    await expect(region).toHaveText("녹음 준비, 카운트인");
+    await expect(region).toHaveText("녹음 중", { timeout: 8000 });
+    await page.click(S.stop);
+    await expect(region).toHaveText("녹음 멈춤");
+    measuredP62("낭독기 알림", { 재생_멈춤: texts, 녹음: ["녹음 준비, 카운트인", "녹음 중", "녹음 멈춤"] });
+  });
+
+  test("Tab으로 지나가는 모든 조작부에 눈에 보이는 초점 표시가 있고, 클립 가장자리 손잡이는 Tab 정지에 끼지 않는다", async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.emulateMedia({ reducedMotion: "reduce" }); // 초점 표시가 움직이는 도중의 그림을 재지 않도록
+    await openApp(page);
+    await upload(page);
+    await page.locator(S.clip).first().click(); // 오른쪽 패널의 '클립' 칸이 열린 화면
+    await page.mouse.move(1, 1);
+    await page.evaluate(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      window.scrollTo(0, 0);
+    });
+    const stops: Array<{ label: string; visible: boolean | null }> = [];
+    let handleStops = 0;
+    await page.keyboard.press("Tab");
+    for (let index = 0; index < 400; index++) {
+      const info = await page.evaluate(() => {
+        const element = document.activeElement as HTMLElement | null;
+        if (!element || element === document.body) return null;
+        if (element.dataset.fscan) return { again: true as const };
+        element.dataset.fscan = "1";
+        const rect = element.getBoundingClientRect();
+        return {
+          again: false as const,
+          label: `${element.tagName.toLowerCase()}[${(element.getAttribute("aria-label") ?? element.getAttribute("title") ?? element.textContent ?? "").trim().slice(0, 24)}]`,
+          handle: element.matches(".trim-handle, .fade-handle"),
+          rect: { x: rect.left, y: rect.top, width: rect.width, height: rect.height },
+          onScreen: rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth,
+        };
+      });
+      if (!info) {
+        await page.keyboard.press("Tab");
+        continue;
+      }
+      if (info.again) break; // 한 바퀴를 돌았다
+      if (info.handle) handleStops++;
+      let visible: boolean | null = null;
+      if (info.onScreen) {
+        const pad = 6;
+        const x = Math.max(0, info.rect.x - pad);
+        const y = Math.max(0, info.rect.y - pad);
+        const clip = { x, y, width: Math.min(1440 - x, info.rect.width + pad * 2), height: Math.min(900 - y, info.rect.height + pad * 2) };
+        if (clip.width > 0 && clip.height > 0) {
+          const focused = await page.screenshot({ clip, animations: "disabled", caret: "hide" });
+          const handle = await page.evaluateHandle(() => document.activeElement as HTMLElement);
+          await handle.evaluate((element) => element.blur());
+          const blurred = await page.screenshot({ clip, animations: "disabled", caret: "hide" });
+          await handle.evaluate((element) => element.focus());
+          await handle.dispose();
+          visible = !focused.equals(blurred); // 초점이 있을 때와 없을 때 그림이 같으면 표시가 없는 것
+        }
+      }
+      stops.push({ label: info.label, visible });
+      await page.keyboard.press("Tab");
+    }
+    expect(stops.length, "한 바퀴에 거치는 조작부 수").toBeGreaterThan(100);
+    expect(handleStops, "클립 손잡이(자르기·페이드)가 Tab 정지에 끼지 않는다").toBe(0);
+    expect(stops.filter((stop) => stop.visible === false).map((stop) => stop.label), "초점 표시가 안 보이는 조작부").toEqual([]);
+    measuredP62("초점 표시", { Tab_정지: stops.length, 화면_밖: stops.filter((stop) => stop.visible === null).length, 표시_없음: 0 });
   });
 });

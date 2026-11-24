@@ -70,7 +70,7 @@ export function CompressorPanel({ track }: { track: Track }) {
           </div>
           <Toggle
             className={`comp-power-btn ${compressor.enabled ? "on" : ""}`}
-            label="컴프레서 켜기"
+            label={ko.state.power("컴프레서", compressor.enabled)}
             pressed={compressor.enabled}
             onChange={(enabled) => updateTrack(track.id, effectPatch(track, "compressor", { enabled }))}
           >

@@ -35,7 +35,7 @@ import { quarterBeatsPerBar } from "../domain/timeline/snap";
 import { followScrollLeft } from "../domain/timeline/follow";
 import { runEmptyAreaAction } from "../domain/timeline/toolBehavior";
 import { playlistToolIcons } from "../utils/playlistToolIcons";
-import { ClipView } from "./ClipView";
+import { CLIP_KEYS_HELP_ID, ClipView } from "./ClipView";
 import { RecordingPreview } from "./RecordingPreview";
 import { PlaylistToolbar } from "./PlaylistToolbar";
 
@@ -524,6 +524,7 @@ export function Timeline() {
       aria-label="플레이리스트"
       style={playlistCursorStyle}
     >
+      <span id={CLIP_KEYS_HELP_ID} className="visually-hidden">{ko.announce.clipKeys}</span>
       <PlaylistToolbar />
       <div className="track-column" ref={headersRef}>
         <div className="ruler-corner">
