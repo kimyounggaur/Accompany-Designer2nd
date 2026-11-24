@@ -1,0 +1,170 @@
+.spec-wrap {
+  overflow: hidden;
+}
+
+.spec-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 10px 4px;
+}
+
+.spec-title-script {
+  font-family: 'Georgia', serif;
+  font-size: var(--font-size-2);
+  letter-spacing: 0.02em;
+}
+
+.spec-title-main {
+  flex: 1;
+  font-size: 8px;
+}
+
+.spec-display {
+  position: relative;
+  display: flex;
+  gap: 0;
+  padding: 4px 4px 0;
+}
+
+.spec-db-scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 2px 4px 18px 0;
+  min-width: 24px;
+}
+
+.spec-canvas {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: 160px;
+  display: block;
+}
+
+.spec-controls {
+  display: flex;
+  gap: 10px;
+  padding: 5px 8px 6px;
+}
+
+.spec-btn-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.spec-btn-label {
+  font-size: 7px;
+}
+
+.spec-btn-row {
+  display: flex;
+  gap: 2px;
+}
+
+.spec-led-btn {
+  width: 16px;
+  height: 14px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.spec-led-btn:hover {
+  border-color: transparent;
+}
+
+.spec-title-script,
+.spec-db-scale span {
+  font-weight: 600;
+}
+
+.spec-led-btn {
+  font-family: monospace;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  color: var(--color-text);
+  border: 0;
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.spec-led-btn:hover {
+  color: var(--color-text);
+  background: var(--color-surface-strong);
+}
+
+.spec-led-btn.active {
+  color: #ffffff;
+  background: var(--color-dark);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.spec-title-main {
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.spec-wrap {
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.spec-display,
+.spec-canvas {
+  border: 1px solid rgba(127, 99, 21, 0.16);
+  border-radius: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: none;
+}
+
+.spec-header {
+  border: 1px solid rgba(127, 99, 21, 0.14);
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.spec-controls {
+  justify-content: flex-end;
+  border: 1px solid rgba(127, 99, 21, 0.14);
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.spec-title-script {
+  font-style: italic;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+
+.spec-title-main {
+  text-align: center;
+  color: var(--color-text);
+}
+
+.spec-btn-label {
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--color-text);
+}
+
+.spec-db-scale span {
+  font-size: 7px;
+  font-family: monospace;
+  text-align: right;
+  line-height: 1;
+  color: var(--color-text-muted);
+}

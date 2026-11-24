@@ -1,17 +1,12 @@
-/*
- * 사용자 안내(토스트·확인창) — P2-2
- * 배치와 색만 정한다. 안내 문구와 시간 규칙은 state/noticeStore.ts에 있다.
- */
-
 .toast-region {
   position: fixed;
   left: 50%;
-  bottom: 44px; /* 아래 상태 줄(28px) 위 */
-  z-index: 2000;
+  bottom: 44px;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: min(560px, calc(100vw - 24px));
   transform: translateX(-50%);
   pointer-events: none;
@@ -23,12 +18,12 @@
   gap: 10px;
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-line);
   border-left-width: 5px;
-  background: var(--mistral-ivory);
-  color: var(--mistral-black);
-  box-shadow: var(--mistral-shadow);
-  font-size: 13px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+  font-size: var(--font-size-2);
   line-height: 1.4;
   pointer-events: auto;
 }
@@ -49,7 +44,7 @@
 }
 
 .toast--info {
-  border-left-color: var(--mistral-orange);
+  border-left-color: var(--color-brand);
 }
 
 .toast__body {
@@ -62,10 +57,9 @@
   overflow-wrap: anywhere;
 }
 
-/* 브라우저 원문 오류: 접어 두고 필요할 때만 연다(개발·문의용) */
 .toast__details {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: var(--font-size-1);
 }
 
 .toast__details summary {
@@ -90,10 +84,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-.toast__action,
-.toast__close {
+.toast__action {
   flex: 0 0 auto;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-line);
   background: transparent;
   color: inherit;
   cursor: pointer;
@@ -102,10 +95,15 @@
 .toast__action {
   height: 28px;
   padding: 0 10px;
-  font-size: 12px;
+  font-size: var(--font-size-1);
 }
 
 .toast__close {
+  flex: 0 0 auto;
+  border: 1px solid var(--color-line);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -116,17 +114,16 @@
 
 .toast__action:hover,
 .toast__close:hover {
-  background: var(--mistral-gold);
+  background: var(--color-surface-strong);
 }
 
-/* 확인창 */
 .confirm-dialog {
   width: min(420px, calc(100vw - 32px));
   padding: 0;
-  border: 1px solid var(--line);
-  background: var(--mistral-ivory);
-  color: var(--mistral-black);
-  box-shadow: var(--mistral-shadow);
+  border: 1px solid var(--color-line);
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
 }
 
 .confirm-dialog::backdrop {
@@ -135,7 +132,7 @@
 
 .confirm-dialog__body {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 20px;
 }
 
@@ -153,22 +150,22 @@
 .confirm-dialog__buttons {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   margin-top: 4px;
 }
 
 .confirm-dialog__buttons .text-button {
   height: 36px;
   padding: 0 16px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-line);
   background: #ffffff;
-  color: var(--mistral-black);
+  color: var(--color-text);
 }
 
 .confirm-dialog__buttons .text-button.primary {
-  border-color: var(--mistral-orange);
-  background: var(--mistral-orange);
-  color: #ffffff;
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+  color: var(--color-text);
 }
 
 .confirm-dialog__buttons .text-button.danger {
@@ -177,14 +174,13 @@
   color: #ffffff;
 }
 
-/* 믹스 내보내기 대화상자(P3-6) */
 .export-dialog {
   width: min(440px, calc(100vw - 32px));
   padding: 0;
-  border: 1px solid var(--line);
-  background: var(--mistral-ivory);
-  color: var(--mistral-black);
-  box-shadow: var(--mistral-shadow);
+  border: 1px solid var(--color-line);
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
 }
 
 .export-dialog::backdrop {
@@ -193,7 +189,7 @@
 
 .export-dialog__body {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 20px;
 }
 
@@ -203,16 +199,24 @@
 }
 
 .export-dialog__summary,
-.export-dialog__status,
-.export-dialog__hint,
-.export-dialog__percent {
+.export-dialog__status {
   margin: 0;
   font-size: 14px;
   line-height: 1.5;
 }
 
 .export-dialog__hint {
-  font-size: 12px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.export-dialog__percent {
+  margin: 0;
+  font-size: 14px;
+}
+
+.export-dialog__hint {
+  font-size: var(--font-size-1);
   color: #5a5a5a;
 }
 
@@ -222,12 +226,12 @@
   gap: 8px 16px;
   margin: 0;
   padding: 8px 12px 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-line);
 }
 
 .export-dialog__group legend {
   padding: 0 4px;
-  font-size: 12px;
+  font-size: var(--font-size-1);
   font-weight: 700;
 }
 
@@ -241,23 +245,24 @@
 }
 
 .export-dialog__choice input {
-  accent-color: var(--mistral-orange);
+  accent-color: var(--color-brand);
 }
 
 .export-dialog__progress {
   height: 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-line);
   background: #ffffff;
   overflow: hidden;
 }
 
 .export-dialog__bar {
   height: 100%;
-  background: var(--mistral-orange);
+  background: var(--color-brand);
   transition: width 120ms linear;
 }
 
 .export-dialog__percent {
+  line-height: 1.5;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -265,22 +270,22 @@
 .export-dialog__buttons {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   margin-top: 4px;
 }
 
 .export-dialog__buttons .text-button {
   height: 36px;
   padding: 0 16px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-line);
   background: #ffffff;
-  color: var(--mistral-black);
+  color: var(--color-text);
 }
 
 .export-dialog__buttons .text-button.primary {
-  border-color: var(--mistral-orange);
-  background: var(--mistral-orange);
-  color: #ffffff;
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+  color: var(--color-text);
 }
 
 .export-dialog__buttons .text-button:disabled {
@@ -294,14 +299,13 @@
   }
 }
 
-/* 음원 다시 연결 대화상자(P4-2) */
 .relink-dialog {
   width: min(560px, calc(100vw - 32px));
   padding: 0;
-  border: 1px solid var(--line);
-  background: var(--mistral-ivory);
-  color: var(--mistral-black);
-  box-shadow: var(--mistral-shadow);
+  border: 1px solid var(--color-line);
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
 }
 
 .relink-dialog::backdrop {
@@ -310,7 +314,7 @@
 
 .relink-dialog__body {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
   max-height: calc(100vh - 64px);
   padding: 20px;
   overflow: auto;
@@ -329,7 +333,7 @@
 
 .relink-list {
   display: grid;
-  gap: 8px;
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -341,7 +345,7 @@
   gap: 6px 12px;
   align-items: center;
   padding: 10px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-line);
   background: #ffffff;
 }
 
@@ -365,7 +369,7 @@
 }
 
 .relink-row__meta {
-  font-size: 12px;
+  font-size: var(--font-size-1);
   color: #5a5a5a;
 }
 
@@ -373,7 +377,7 @@
   grid-column: 1 / -1;
   grid-row: 2;
   margin: 0;
-  font-size: 13px;
+  font-size: var(--font-size-2);
   line-height: 1.4;
 }
 
@@ -386,7 +390,7 @@
   display: flex;
   grid-column: 2;
   grid-row: 1;
-  gap: 8px;
+  gap: var(--space-2);
   justify-content: flex-end;
 }
 
@@ -399,32 +403,30 @@
 .relink-dialog .text-button {
   height: 32px;
   padding: 0 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-line);
   background: #ffffff;
-  color: var(--mistral-black);
+  color: var(--color-text);
 }
 
 .relink-dialog .text-button.primary {
-  border-color: var(--mistral-orange);
-  background: var(--mistral-orange);
-  color: #ffffff;
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+  color: var(--color-text);
 }
-
-/* ───────── 화면 오류 안내(app/ErrorBoundary.tsx) ───────── */
 
 .crash-screen {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--space-3);
   width: min(640px, calc(100vw - 32px));
   margin: 12vh auto 0;
   padding: 24px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-line);
   border-left: 6px solid #c8261a;
-  background: var(--mistral-ivory);
-  color: var(--mistral-black);
-  box-shadow: var(--mistral-shadow);
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
 }
 
 .crash-screen__title {
@@ -432,27 +434,28 @@
   font-size: 20px;
 }
 
-.crash-screen__message,
-.crash-screen__note {
+.crash-screen__message {
   margin: 0;
   font-size: 14px;
   line-height: 1.5;
 }
 
 .crash-screen__note {
-  font-size: 13px;
+  margin: 0;
+  line-height: 1.5;
+  font-size: var(--font-size-2);
 }
 
 .crash-screen__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .crash-screen button {
   min-height: 36px;
   padding: 0 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--color-line);
   background: transparent;
   color: inherit;
   font-size: 14px;
@@ -460,14 +463,14 @@
 }
 
 .crash-screen .crash-screen__primary {
-  border-color: var(--mistral-black);
-  background: var(--mistral-black);
-  color: var(--mistral-ivory);
+  border-color: var(--color-dark);
+  background: var(--color-dark);
+  color: var(--color-bg);
 }
 
 .crash-screen__details {
   width: 100%;
-  font-size: 13px;
+  font-size: var(--font-size-2);
 }
 
 .crash-screen__details pre {
@@ -476,7 +479,7 @@
   padding: 10px;
   overflow: auto;
   background: rgba(0, 0, 0, 0.06);
-  font-size: 12px;
+  font-size: var(--font-size-1);
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-all;

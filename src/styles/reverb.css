@@ -1,0 +1,524 @@
+.reverb-rack {
+  opacity: 0.85;
+  transition: opacity 0.18s ease;
+}
+
+.reverb-rack.on {
+  opacity: 1;
+}
+
+.reverb-wood-frame {
+  padding: 7px;
+}
+
+.reverb-faceplate {
+  position: relative;
+  padding: 10px 9px 9px;
+}
+
+.reverb-screws {
+  position: absolute;
+  inset: 5px;
+  pointer-events: none;
+}
+
+.reverb-screws span {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 1px solid rgba(45, 38, 30, 0.58);
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(255,255,255,0.5), transparent 45%), #7d766e;
+  box-shadow: inset 0 -1px 1px rgba(0,0,0,0.5);
+}
+
+.reverb-screws span:nth-child(1) {
+  left: 0;
+  top: 0;
+}
+
+.reverb-screws span:nth-child(2) {
+  right: 0;
+  top: 0;
+}
+
+.reverb-screws span:nth-child(3) {
+  left: 0;
+  bottom: 0;
+}
+
+.reverb-screws span:nth-child(4) {
+  right: 0;
+  bottom: 0;
+}
+
+.reverb-main-deck {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.reverb-brand-module,
+.reverb-tube-module,
+.reverb-decay-module,
+.reverb-blend-module {
+  min-width: 0;
+}
+
+/* 폭이 모자라면 (이름·초록 표시창) 한 줄, (잔향 길이·섞는 비율) 한 줄로 나뉜다. */
+.reverb-brand-module {
+  flex: 1 1 104px;
+}
+
+.reverb-tube-module {
+  flex: 1 1 90px;
+}
+
+.reverb-decay-module {
+  flex: 2 1 165px;
+}
+
+.reverb-blend-module {
+  flex: 1 1 80px;
+}
+
+.reverb-brand-module {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 13px;
+  padding: 16px 8px;
+}
+
+.reverb-brand-module > div {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  width: 88px;
+}
+
+.reverb-brand {
+  font-size: var(--font-size-2);
+}
+
+.reverb-subtitle {
+  font-size: 7px;
+}
+
+.reverb-power {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  color: #2a241d;
+  background: transparent;
+  cursor: pointer;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.reverb-power-lamp {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #28231e;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, rgba(255,255,255,0.4), transparent 20%), #181612;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.4), inset 0 0 3px rgba(0,0,0,0.8);
+}
+
+.reverb-tube-module {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 9px 7px;
+}
+
+.reverb-decay-module {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+}
+
+.reverb-blend-module {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  padding: 9px 7px;
+}
+
+.reverb-tube-window {
+  position: relative;
+  width: 42px;
+  height: 78px;
+  border: 1px solid #6d695f;
+  box-shadow: inset 0 0 12px rgba(0,0,0,0.9);
+}
+
+.reverb-tube-window span {
+  position: absolute;
+  inset: 12px 11px;
+  border-radius: 45%;
+  background: radial-gradient(circle at 50% 24%, rgba(255,255,210,0.9), transparent 10%), radial-gradient(circle at 50% 56%, rgba(255,88,42,0.9), transparent 26%), linear-gradient(90deg, transparent, rgba(255,150,60,0.32), transparent);
+  box-shadow: 0 0 13px rgba(255, 82, 32, 0.75);
+}
+
+.reverb-decay-module {
+  grid-template-columns: minmax(50px, 0.85fr) minmax(32px, 0.55fr) minmax(45px, 0.7fr);
+  gap: 7px;
+  padding: 10px;
+}
+
+.reverb-module-title {
+  font-size: 8px;
+}
+
+.reverb-model-select {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+}
+
+.reverb-model-select span,
+.reverb-knob > span,
+.reverb-mod-section > span,
+.reverb-eq-section > span {
+  font-size: 7px;
+}
+
+.reverb-decay-fader {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  width: 32px;
+  height: 92px;
+  border: 1px solid #6b6356;
+  background: #d4c6a8;
+}
+
+.reverb-decay-fader input {
+  position: absolute;
+  inset: 0;
+  width: 92px;
+  height: 32px;
+  margin: 30px 0 0 -30px;
+  padding: 0;
+  appearance: none;
+  background: transparent;
+  transform: rotate(-90deg);
+  cursor: ns-resize;
+}
+
+.reverb-decay-fader input::-webkit-slider-runnable-track {
+  height: 32px;
+  background: transparent;
+}
+
+.reverb-decay-fader input::-moz-range-track {
+  height: 32px;
+  background: transparent;
+}
+
+.reverb-decay-fader input::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 26px;
+  margin-top: 3px;
+  border: 2px solid #a59674;
+  border-radius: 0;
+  background: linear-gradient(var(--color-brand), var(--color-brand)) center / 2px 100% no-repeat, var(--color-dark);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+}
+
+.reverb-decay-fader input::-moz-range-thumb {
+  width: 12px;
+  height: 26px;
+  border: 2px solid #a59674;
+  border-radius: 0;
+  background: linear-gradient(var(--color-brand), var(--color-brand)) center / 2px 100% no-repeat, var(--color-dark);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+}
+
+.reverb-decay-scale {
+  display: grid;
+  align-content: space-around;
+  height: 100%;
+  padding: 5px 0;
+  font-size: 5px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.reverb-decay-scale::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 11px;
+  width: 14px;
+  height: 67px;
+  border: 1px solid rgba(42, 37, 31, 0.36);
+  background: linear-gradient(180deg, #6a5b3f, #e2c47b 28%, #e5d3a4 70%, #8c7956);
+  opacity: 0.45;
+}
+
+.reverb-decay-module > strong {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reverb-blend-module {
+  gap: 14px;
+}
+
+.reverb-bottom-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 8px 9px;
+}
+
+.reverb-bottom-strip > .reverb-arturia-mark {
+  flex: 0 0 auto;
+}
+
+.reverb-bottom-strip > .reverb-knob {
+  flex: 1 1 45px;
+}
+
+.reverb-bottom-strip > .reverb-mod-section {
+  flex: 1.2 1 86px;
+}
+
+.reverb-bottom-strip > .reverb-eq-section {
+  flex: 1.8 1 140px;
+}
+
+.reverb-arturia-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 22px;
+  border: 2px solid #2f2b26;
+  color: var(--color-bg);
+  font-family: Georgia, serif;
+  font-size: var(--font-size-2);
+  font-weight: 900;
+}
+
+.reverb-mod-section {
+  display: grid;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 7px;
+  border: 1px solid rgba(42, 37, 31, 0.28);
+  border-radius: var(--radius-1);
+  background: rgba(145, 139, 129, 0.18);
+}
+
+.reverb-mod-section {
+  grid-template-columns: 1fr 42px;
+}
+
+.reverb-mod-section > span {
+  grid-column: 1 / -1;
+  text-align: center;
+}
+
+.reverb-eq-section {
+  display: grid;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 7px;
+  border: 1px solid rgba(42, 37, 31, 0.28);
+  border-radius: var(--radius-1);
+  background: rgba(145, 139, 129, 0.18);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.reverb-eq-section > span {
+  text-align: center;
+}
+
+.reverb-toggle {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  font-size: 7px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.reverb-toggle input {
+  position: absolute;
+  opacity: 0;
+}
+
+.reverb-knob {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.reverb-knob-cap {
+  position: relative;
+  display: block;
+  width: 40px;
+  height: 40px;
+  border: 2px solid #a59674;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4), inset 0 1px 3px rgba(255,255,255,0.12);
+}
+
+.reverb-knob.small .reverb-knob-cap {
+  width: 32px;
+  height: 32px;
+}
+
+.reverb-knob.small .reverb-knob-cap::after {
+  height: 12px;
+}
+
+.reverb-decay-module > strong {
+  font-weight: 600;
+}
+
+.reverb-model-select select {
+  width: 62px;
+  padding: 3px 4px;
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--color-text);
+  border: 1px solid hsl(240, 5.9%, 90%);
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.reverb-model-select select:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(250, 82, 15, 0.16);
+}
+
+.reverb-power.on .reverb-power-lamp {
+  color: #ffffff;
+}
+
+.reverb-brand,
+.reverb-subtitle,
+.reverb-module-title,
+.reverb-model-select span,
+.reverb-knob > span,
+.reverb-mod-section > span {
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.reverb-wood-frame {
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.reverb-faceplate {
+  border: 1px solid rgba(127, 99, 21, 0.16);
+  border-radius: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: none;
+}
+
+.reverb-tube-module,
+.reverb-decay-module,
+.reverb-blend-module,
+.reverb-bottom-strip {
+  border: 1px solid rgba(127, 99, 21, 0.14);
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.reverb-brand,
+.reverb-decay-module > strong {
+  color: var(--color-text);
+}
+
+.reverb-knob strong {
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  color: var(--color-text);
+}
+
+.reverb-subtitle {
+  color: var(--color-text-muted);
+}
+
+.reverb-module-title {
+  grid-column: 1 / -1;
+  justify-self: end;
+  color: var(--color-text-muted);
+}
+
+.reverb-model-select span,
+.reverb-knob > span,
+.reverb-mod-section > span {
+  color: var(--color-text-muted);
+}
+
+.reverb-eq-section > span {
+  grid-column: 1 / -1;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.reverb-toggle i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.6);
+  background: #ffb83e;
+}
+
+.reverb-toggle input:checked + i {
+  color: #ffffff;
+  border-color: transparent;
+  background: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(250, 82, 15, 0.16);
+}
+
+.reverb-power.on .reverb-power-lamp {
+  border-color: transparent;
+  background: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(250, 82, 15, 0.16);
+}
+
+.reverb-arturia-mark,
+.reverb-tube-window,
+.reverb-knob-cap {
+  border-radius: 0;
+  background: var(--color-dark);
+}
+
+.reverb-knob-cap::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 15px;
+  border-radius: 999px;
+  transform: translate(-50%, -92%) rotate(var(--angle));
+  transform-origin: 50% 92%;
+  background: #ffffff;
+}

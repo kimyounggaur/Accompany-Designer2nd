@@ -1,0 +1,206 @@
+.comp-vu-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid #4a4030;
+}
+
+.comp-title {
+  transform: rotate(180deg);
+  font-size: 9px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.comp-vu-meter {
+  flex: 1;
+  padding: 6px 8px 4px;
+  border: 1px solid #c0b090;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3), 0 1px 0 rgba(255,255,220,0.1);
+  position: relative;
+  min-height: 54px;
+}
+
+.comp-vu-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  color: #333;
+  font-weight: 700;
+  font-family: monospace;
+  margin-bottom: 2px;
+}
+
+.comp-vu-needle-wrap {
+  position: relative;
+  height: 22px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.comp-vu-needle {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 1.5px;
+  height: 22px;
+  background: #c0392b;
+  transform-origin: bottom center;
+  transform: rotate(80deg);
+  transition: transform 0.15s ease-out;
+  margin-left: -0.75px;
+  border-radius: 1px 1px 0 0;
+}
+
+.comp-vu-label {
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+  text-transform: none;
+}
+
+.comp-power-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.comp-power-ring {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #555, #1a1a1a);
+  border: 2px solid #666;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  transition: border-color 0.2s;
+}
+
+.comp-power-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.comp-power-label {
+  font-size: 8px;
+  font-weight: 900;
+  color: #7a6a4a;
+  letter-spacing: 0.1em;
+}
+
+.comp-power-btn.on .comp-power-label {
+  color: #e74c3c;
+}
+
+.comp-knobs-row {
+  display: flex;
+  justify-content: space-around;
+  padding: 10px 8px 12px;
+}
+
+.comp-knob-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.comp-knob-svg {
+  width: 58px;
+  height: 58px;
+  display: block;
+  filter: drop-shadow(0 3px 5px rgba(0,0,0,0.6));
+}
+
+.comp-knob-label {
+  font-size: 8px;
+  color: var(--color-text-muted);
+}
+
+.comp-knob-sub {
+  font-size: 9px;
+}
+
+.comp-power-btn {
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.comp-power-btn:hover {
+  border-color: transparent;
+}
+
+.comp-power-btn {
+  color: var(--color-text);
+  border: 0;
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.comp-power-btn:hover {
+  color: var(--color-text);
+  background: var(--color-surface-strong);
+}
+
+.comp-power-btn.on .comp-power-ring {
+  color: #ffffff;
+  background: var(--color-dark);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.comp-title {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.comp-knob-label {
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.comp-knob-sub {
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.comp-rack {
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.comp-power-dot {
+  background: #ffb83e;
+}
+
+.comp-power-btn.on .comp-power-dot {
+  background: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(250, 82, 15, 0.16);
+}
+
+.comp-vu-meter {
+  border-radius: 0;
+  background: var(--color-dark);
+}
