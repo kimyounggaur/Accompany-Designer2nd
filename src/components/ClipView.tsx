@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import { useRef, useState } from "react";
+import { runClipAction, trimHandleActionFor } from "../domain/timeline/toolBehavior";
 import type { AssetMeta, Clip } from "../domain/types";
 import { useDawStore } from "../store/useDawStore";
 import { deleteClip, sliceClipAt } from "../app/actions";
@@ -95,42 +96,31 @@ export function ClipView({
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
+  /** 클립을 눌렀을 때: 무엇을 할지는 도구 동작 표(domain/timeline/toolBehavior)에서 찾고, 여기서는 그 일을 하는 방법만 안다. */
   function handleClipPointerDown(event: React.PointerEvent<HTMLElement>) {
     event.stopPropagation();
 
     if (event.button === 2) return;
-    if (playlistTool === "delete") {
-      event.preventDefault();
-      deleteClip(clip.id);
-      return;
-    }
-
-    if (playlistTool === "mute") {
-      toggleClipMuted(clip.id);
-      return;
-    }
-
-    if (playlistTool === "slice") {
-      sliceClipAt(clip.id, getPointerTime(event));
-      return;
-    }
-
-    if (playlistTool === "play-selected") {
-      selectClip(clip.id, event.shiftKey || event.ctrlKey);
-      playFromPointer(event);
-      return;
-    }
-
-    if (playlistTool === "select" || event.ctrlKey || event.shiftKey) {
-      selectClip(clip.id, event.shiftKey || event.ctrlKey);
-      return;
-    }
-
-    beginDrag(playlistTool === "slip" ? "slip" : "move", event);
+    const additive = event.shiftKey || event.ctrlKey;
+    runClipAction(playlistTool, additive, {
+      select: () => selectClip(clip.id, additive),
+      "select-and-move": () => beginDrag("move", event),
+      "select-and-slip": () => beginDrag("slip", event),
+      delete: () => {
+        event.preventDefault();
+        deleteClip(clip.id);
+      },
+      "toggle-mute": () => toggleClipMuted(clip.id),
+      slice: () => sliceClipAt(clip.id, getPointerTime(event)),
+      "select-and-play": () => {
+        selectClip(clip.id, additive);
+        playFromPointer(event);
+      },
+    });
   }
 
   function beginTrim(mode: Extract<DragMode, "trim-left" | "trim-right">, event: React.PointerEvent<HTMLElement>) {
-    if (["delete", "mute", "slice", "play-selected"].includes(playlistTool)) {
+    if (trimHandleActionFor(playlistTool) === "same-as-clip") {
       handleClipPointerDown(event);
       return;
     }

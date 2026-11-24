@@ -15,6 +15,7 @@ import {
   snapTime,
 } from "../utils/audioMath";
 import { INITIAL_RULER_WINDOW, gridTileWidth, nextRulerWindow, planRulerTicks, type RulerWindow } from "../domain/timeline/ruler";
+import { runEmptyAreaAction } from "../domain/timeline/toolBehavior";
 import { playlistToolIcons } from "../utils/playlistToolIcons";
 import { ClipView } from "./ClipView";
 import { RecordingPreview } from "./RecordingPreview";
@@ -294,6 +295,7 @@ export function Timeline() {
       .map(({ clip }) => clip.id);
   }
 
+  /** 빈 곳을 눌렀을 때: 무엇을 할지는 도구 동작 표(domain/timeline/toolBehavior)에서 찾고, 여기서는 그 일을 하는 방법만 안다. */
   function beginLanePointer(event: React.PointerEvent<HTMLDivElement>) {
     if (event.button !== 0) {
       return;
@@ -304,67 +306,84 @@ export function Timeline() {
       return;
     }
 
-    if (playlistTool === "draw" || playlistTool === "paint") {
-      event.preventDefault();
-      const sourceClipId = selectedClipId;
-      captureHistory();
-      const clipId = addClipFromSource(
-        sourceClipId,
-        position.trackId,
-        position.time,
-        { history: false },
-      );
-
-      if (!clipId) {
-        return;
-      }
-
-      sessionRef.current = {
-        mode: playlistTool,
-        pointerId: event.pointerId,
-        startX: position.x,
-        startY: position.y,
-        sourceClipId,
-        clipId,
-        lastPaintKey: getPaintKey(position),
-      };
-      event.currentTarget.setPointerCapture(event.pointerId);
-      return;
-    }
-
-    if (playlistTool === "select" || event.ctrlKey || event.shiftKey) {
-      event.preventDefault();
-      if (!event.shiftKey && !event.ctrlKey) {
+    const additive = event.shiftKey || event.ctrlKey;
+    runEmptyAreaAction(playlistTool, additive, {
+      seek: () => {
         clearSelection();
-      }
+        seekFromPointer(event);
+      },
+      "stamp-and-move": () => beginStamp("draw", event, position),
+      "stamp-along": () => beginStamp("paint", event, position),
+      "box-select": () => beginBoxSelect(event, position, additive),
+      "zoom-box": () => beginZoomBox(event, position),
+    });
+  }
 
-      sessionRef.current = {
-        mode: "select",
-        pointerId: event.pointerId,
-        startX: position.x,
-        startY: position.y,
-        additive: event.shiftKey || event.ctrlKey,
-      };
-      setDragBox(makeBox(position.x, position.y, position.x, position.y));
-      event.currentTarget.setPointerCapture(event.pointerId);
+  /** 그리기·페인트: 선택한 클립의 복사본을 누른 자리에 놓는다. 끌면 그리기는 복사본을 옮기고, 페인트는 칸마다 하나씩 더 놓는다. */
+  function beginStamp(
+    mode: "draw" | "paint",
+    event: React.PointerEvent<HTMLDivElement>,
+    position: PointerPosition,
+  ) {
+    event.preventDefault();
+    const sourceClipId = selectedClipId;
+    captureHistory();
+    const clipId = addClipFromSource(
+      sourceClipId,
+      position.trackId,
+      position.time,
+      { history: false },
+    );
+
+    if (!clipId) {
       return;
     }
 
-    if (playlistTool === "zoom") {
-      event.preventDefault();
-      sessionRef.current = {
-        mode: "zoom",
-        pointerId: event.pointerId,
-        startX: position.x,
-        startY: position.y,
-      };
-      setDragBox(makeBox(position.x, position.y, position.x, position.y));
-      event.currentTarget.setPointerCapture(event.pointerId);
-      return;
+    sessionRef.current = {
+      mode,
+      pointerId: event.pointerId,
+      startX: position.x,
+      startY: position.y,
+      sourceClipId,
+      clipId,
+      lastPaintKey: getPaintKey(position),
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  /** 끌어서 상자로 선택: 수정 키 없이 시작하면 먼저 선택을 풀고, 수정 키가 있으면 이미 선택한 것에 더한다. */
+  function beginBoxSelect(
+    event: React.PointerEvent<HTMLDivElement>,
+    position: PointerPosition,
+    additive: boolean,
+  ) {
+    event.preventDefault();
+    if (!additive) {
+      clearSelection();
     }
 
-    clearSelection();
-    seekFromPointer(event);
+    sessionRef.current = {
+      mode: "select",
+      pointerId: event.pointerId,
+      startX: position.x,
+      startY: position.y,
+      additive,
+    };
+    setDragBox(makeBox(position.x, position.y, position.x, position.y));
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  /** 끌어서 그 범위로 확대(놓을 때 endLanePointer가 마무리한다) */
+  function beginZoomBox(event: React.PointerEvent<HTMLDivElement>, position: PointerPosition) {
+    event.preventDefault();
+    sessionRef.current = {
+      mode: "zoom",
+      pointerId: event.pointerId,
+      startX: position.x,
+      startY: position.y,
+    };
+    setDragBox(makeBox(position.x, position.y, position.x, position.y));
+    event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function updateLanePointer(event: React.PointerEvent<HTMLDivElement>) {

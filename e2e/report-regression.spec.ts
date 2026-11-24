@@ -2049,14 +2049,15 @@ test.describe("P4-1 문서 형식 v2", () => {
     await expect(page.locator(S.tempo)).toHaveValue("300");
     await expect(page.locator(S.status)).toContainText("값 1개를 허용 범위로 고쳤습니다");
 
-    // 문서에는 파형이 없다. 음원을 풀면서 다시 계산해 그린다.
-    const painted = await page.locator(`${S.clip} canvas`).first().evaluate((canvas: HTMLCanvasElement) => {
+    // 문서에는 파형이 없다. 음원을 풀면서 다시 계산해 그린다. 클립이 나타난 뒤 캔버스에 그려지기까지는 잠깐 걸리고
+    // (화면이 바쁘면 더 걸린다), 클립 수·템포·안내 문구는 그보다 먼저 맞춰진다. 한 번 읽고 끝내지 않고 그려질 때까지 기다린다.
+    const paintedPixels = () => page.locator(`${S.clip} canvas`).first().evaluate((canvas: HTMLCanvasElement) => {
       const data = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
       let count = 0;
       for (let i = 3; i < data.length; i += 4) if (data[i] > 0) count += 1;
       return count;
     });
-    expect(painted).toBeGreaterThan(200);
+    await expect.poll(paintedPixels, { timeout: 5000 }).toBeGreaterThan(200);
     fs.rmSync(file, { force: true });
   });
 
@@ -2907,5 +2908,275 @@ test.describe("P4-5 클립 배치 규칙", () => {
     const rows = [await rowOf(page, 0), await rowOf(page, 1), await rowOf(page, 2)];
     measuredP45("파일 3개 한꺼번에 올리기", { 트랙_수: 3, 클립_줄: rows });
     expect(new Set(rows).size).toBe(3);
+  });
+});
+
+const measuredP46 = (name: string, value: unknown) => console.log(`P4-6 측정 ${name}: ${JSON.stringify(value)}`);
+
+test.describe("P4-6 도구 동작 표", () => {
+  const TITLES = {
+    move: "이동",
+    draw: "그리기",
+    paint: "페인트",
+    delete: "삭제",
+    mute: "음소거",
+    slip: "슬립 편집",
+    slice: "자르기",
+    select: "선택",
+    zoom: "확대/축소",
+    "play-selected": "선택 재생",
+  } as const;
+  type ToolName = keyof typeof TITLES;
+
+  /** 도구 모음의 단추로 도구를 고른다(단축키는 쓰지 않는다: 이 시험은 눌렀을 때의 동작만 본다) */
+  async function pickTool(page: Page, tool: ToolName) {
+    const button = page.locator(`.playlist-tool-button[title^="${TITLES[tool]} ("]`);
+    await button.click();
+    await expect(button).toHaveClass(/active/);
+  }
+
+  const clipBox = async (page: Page, index = 0) => (await page.locator(S.clip).nth(index).boundingBox())!;
+
+  /** 첫 클립 끝에서 오른쪽으로 40px 떨어진 빈 곳(같은 트랙 줄) */
+  async function emptySpot(page: Page) {
+    const box = await clipBox(page);
+    return { x: box.x + box.width + 40, y: box.y + box.height / 2 };
+  }
+
+  async function drag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 6 });
+    await page.mouse.up();
+  }
+
+  /** 이동 도구로 빈 곳을 눌러 선택을 풀고 재생 위치를 옮겨 둔다(올린 클립이 처음부터 선택돼 있어도 같은 출발점이 되도록) */
+  async function startClean(page: Page) {
+    await openApp(page);
+    await upload(page); // 8초 클립 1개: 트랙 1의 0~8초
+    const spot = await emptySpot(page);
+    await page.mouse.click(spot.x, spot.y);
+    await expect(page.locator(S.clip).first()).not.toHaveClass(/selected/);
+    return spot;
+  }
+
+  const selectFirstClip = async (page: Page) => {
+    await pickTool(page, "move");
+    await page.locator(S.clip).first().click({ position: { x: 100, y: 40 } });
+    await expect(page.locator(S.clip).first()).toHaveClass(/selected/);
+  };
+
+  test("B9 기본 도구는 이동이다: 빈 곳을 클릭하면 시간 표시가 바뀌고 클립은 늘지 않으며, 눈금자를 눌러도 바뀐다", async ({ page }) => {
+    await openApp(page);
+    await upload(page); // 8초 클립 1개
+    await expect(page.locator(`.playlist-tool-button[title^="${TITLES.move} ("]`)).toHaveClass(/active/);
+    expect(await timeSeconds(page)).toBe(0);
+
+    const spot = await emptySpot(page); // 클립 끝(8초)에서 40px 뒤 ≈ 8.4초
+    await page.mouse.click(spot.x, spot.y);
+    await expect.poll(() => timeSeconds(page)).toBeGreaterThan(8);
+    const afterLane = await timeSeconds(page);
+    await expect(page.locator(S.clip)).toHaveCount(1);
+
+    await clickRuler(page, 2, 96);
+    await expect.poll(() => timeSeconds(page)).toBeLessThan(3);
+    const afterRuler = await timeSeconds(page);
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    measuredP46("B9 기본 도구(이동)로 빈 곳 클릭", { 도구: "이동", 빈_곳_클릭_뒤_시간: afterLane, 눈금자_클릭_뒤_시간: afterRuler, 클립_수: 1 });
+  });
+
+  test("빈 곳 클릭: 이동·삭제·음소거·슬립·자르기·선택 재생 도구는 선택을 풀고 재생 위치만 옮기며 클립은 그대로다", async ({ page }) => {
+    await startClean(page);
+    const spot = await emptySpot(page);
+    const clip = page.locator(S.clip).first();
+    const seen: Record<string, number> = {};
+    for (const tool of ["move", "delete", "mute", "slip", "slice", "play-selected"] as const) {
+      await selectFirstClip(page);
+      await clickRuler(page, 0, 96); // 재생 위치를 처음으로 되돌려 둔다
+      await expect.poll(() => timeSeconds(page)).toBeLessThan(0.5);
+      await pickTool(page, tool);
+      await page.mouse.click(spot.x, spot.y);
+      await expect(clip, `${tool}: 선택이 풀린다`).not.toHaveClass(/selected/);
+      await expect.poll(() => timeSeconds(page), { message: `${tool}: 재생 위치가 옮겨진다` }).toBeGreaterThan(8);
+      await expect(page.locator(S.clip), `${tool}: 클립 수는 그대로`).toHaveCount(1);
+      await expect(clip, `${tool}: 음소거도 그대로`).not.toHaveClass(/muted/);
+      seen[tool] = await timeSeconds(page);
+    }
+    measuredP46("빈 곳 클릭 뒤 재생 위치(초)", seen);
+  });
+
+  /** 클립 이름표 글자(왼쪽부터). 복사본은 이름 끝에 '복사본'이 붙는다. */
+  const clipNames = (page: Page) => page.locator(`${S.clip} .clip-label strong`).allInnerTexts();
+
+  for (const tool of ["draw", "paint"] as const) {
+    test(`빈 곳 클릭: ${TITLES[tool]} 도구는 선택한 클립의 복사본을 누른 자리에 놓는다`, async ({ page }) => {
+      const spot = await startClean(page);
+      const timeBefore = await timeSeconds(page);
+      await selectFirstClip(page);
+      await pickTool(page, tool);
+      await page.mouse.click(spot.x, spot.y);
+      await expect(page.locator(S.clip)).toHaveCount(2);
+      const names = await clipNames(page);
+      expect(names[1]).toBe(`${names[0]} 복사본`);
+      const copy = await clipBox(page, 1);
+      expect(copy.x).toBeGreaterThan(spot.x - 60); // 누른 자리(눈금에 붙음)에 놓인다
+      expect(copy.x).toBeLessThan(spot.x + 60);
+      expect(await timeSeconds(page)).toBe(timeBefore); // 재생 위치는 옮기지 않는다
+      measuredP46(`${TITLES[tool]} 도구 빈 곳 클릭(클립 선택됨)`, { 클립_수: 2, 이름: names, 복사본_왼쪽_px: Math.round(copy.x), 누른_자리_px: Math.round(spot.x) });
+    });
+
+    test(`빈 곳 클릭: ${TITLES[tool]} 도구는 선택한 클립이 없으면 첫 음원으로 새 클립을 놓는다`, async ({ page }) => {
+      const spot = await startClean(page); // 선택을 푼 상태
+      const timeBefore = await timeSeconds(page);
+      await pickTool(page, tool);
+      await page.mouse.click(spot.x, spot.y);
+      await expect(page.locator(S.clip)).toHaveCount(2);
+      const names = await clipNames(page);
+      expect(names[1]).toBe(names[0]); // 복사본이 아니라 음원 이름 그대로의 새 클립
+      expect(await timeSeconds(page)).toBe(timeBefore);
+      measuredP46(`${TITLES[tool]} 도구 빈 곳 클릭(선택 없음)`, { 클립_수: 2, 이름: names });
+    });
+  }
+
+  test("빈 곳 끌기: 선택 도구는 상자로 선택하고 그냥 누르면 선택을 풀며, 이동 도구는 Shift를 더하면 상자로 선택한다", async ({ page }) => {
+    const spot = await startClean(page);
+    const clip = page.locator(S.clip).first();
+    const box = await clipBox(page);
+    const from = { x: spot.x, y: box.y + box.height - 4 };
+    const to = { x: box.x + 300, y: box.y + 20 };
+
+    await pickTool(page, "select");
+    await drag(page, from, to);
+    await expect(clip).toHaveClass(/selected/);
+    await page.mouse.click(spot.x, spot.y); // 상자 없이 누르기
+    await expect(clip).not.toHaveClass(/selected/);
+
+    await pickTool(page, "move");
+    await page.keyboard.down("Shift");
+    await drag(page, from, to);
+    await page.keyboard.up("Shift");
+    await expect(clip).toHaveClass(/selected/);
+    await expect(page.locator(S.clip)).toHaveCount(1);
+  });
+
+  test("빈 곳 끌기: 확대 도구는 끌어 놓은 범위로 확대한다", async ({ page }) => {
+    const spot = await startClean(page);
+    const before = (await clipBox(page)).width;
+    await pickTool(page, "zoom");
+    await drag(page, spot, { x: spot.x + 50, y: spot.y });
+    await expect.poll(async () => (await clipBox(page)).width).toBeGreaterThan(before * 2);
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    measuredP46("확대 도구로 빈 곳 끌기", { 클립_폭_이전_px: Math.round(before), 클립_폭_이후_px: Math.round((await clipBox(page)).width) });
+  });
+
+  test("클립 클릭: 삭제 도구는 클립을 지우고, 다듬기 손잡이를 눌러도 지운다", async ({ page }) => {
+    await startClean(page);
+    await pickTool(page, "delete");
+    await page.locator(S.clip).first().click({ position: { x: 100, y: 40 } });
+    await expect(page.locator(S.clip)).toHaveCount(0);
+
+    await clickRuler(page, 0, 96); // 다시 올린 클립이 화면 안(0초)에 놓이도록 재생 위치를 처음으로
+    await upload(page);
+    await pickTool(page, "delete");
+    await page.getByRole("button", { name: "클립 끝점 다듬기" }).click();
+    await expect(page.locator(S.clip)).toHaveCount(0);
+  });
+
+  test("클립 클릭: 음소거 도구는 음소거를 켜고 끈다", async ({ page }) => {
+    await startClean(page);
+    const clip = page.locator(S.clip).first();
+    await pickTool(page, "mute");
+    await clip.click({ position: { x: 100, y: 40 } });
+    await expect(clip).toHaveClass(/muted/);
+    await clip.click({ position: { x: 100, y: 40 } });
+    await expect(clip).not.toHaveClass(/muted/);
+    await expect(page.locator(S.clip)).toHaveCount(1);
+  });
+
+  test("클립 클릭: 자르기 도구는 누른 자리에서 클립을 둘로 자른다", async ({ page }) => {
+    await startClean(page);
+    const before = await clipBox(page);
+    await pickTool(page, "slice");
+    await page.locator(S.clip).first().click({ position: { x: 288, y: 40 } }); // 3초 지점
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    const left = await clipBox(page, 0);
+    const right = await clipBox(page, 1);
+    expect(Math.abs(left.x - before.x)).toBeLessThan(2); // 왼쪽 조각은 제자리에서 시작하고
+    expect(left.width).toBeGreaterThan(200);
+    expect(left.width).toBeLessThan(380); // 3초(288px)쯤에서 끝나며
+    expect(Math.abs(left.x + left.width - right.x)).toBeLessThan(2); // 오른쪽 조각이 바로 이어진다
+    measuredP46("자르기 도구로 3초 지점 클릭", { 왼쪽_폭_px: Math.round(left.width), 오른쪽_폭_px: Math.round(right.width) });
+  });
+
+  test("클립 클릭: 선택 도구는 선택만 하고 끌어도 옮기지 않으며, 이동 도구에서 Shift 클릭은 선택을 더하고 뺀다", async ({ page }) => {
+    await startClean(page);
+    const clip = page.locator(S.clip).first();
+    const box = await clipBox(page);
+    await pickTool(page, "select");
+    await drag(page, { x: box.x + 200, y: box.y + box.height / 2 }, { x: box.x + 392, y: box.y + box.height / 2 });
+    await expect(clip).toHaveClass(/selected/);
+    expect(Math.abs((await clipBox(page)).x - box.x)).toBeLessThan(2); // 끌어도 제자리
+
+    await pickTool(page, "move");
+    await page.mouse.click(box.x + box.width + 40, box.y + box.height / 2); // 선택 풀기
+    await expect(clip).not.toHaveClass(/selected/);
+    await clip.click({ position: { x: 100, y: 40 }, modifiers: ["Shift"] });
+    await expect(clip).toHaveClass(/selected/);
+    await clip.click({ position: { x: 100, y: 40 }, modifiers: ["Shift"] });
+    await expect(clip).not.toHaveClass(/selected/);
+  });
+
+  test("클립 끌기: 이동 도구는 클립을 옮기고, 슬립 도구와 확대 도구는 각자 정해진 대로 한다", async ({ page }) => {
+    await startClean(page);
+    const start = await clipBox(page);
+    const grab = { x: start.x + 200, y: start.y + start.height / 2 };
+
+    await pickTool(page, "move");
+    await drag(page, grab, { x: grab.x + 192, y: grab.y });
+    const moved = await clipBox(page);
+    expect(moved.x - start.x).toBeGreaterThan(150); // 2초(192px) 가까이 옮겨진다
+    expect(moved.x - start.x).toBeLessThan(230);
+
+    // 슬립: 클립 자리는 그대로이고(여기서는 음원을 다 쓰는 클립이라 밀 여유도 없다), 클립이 사라지거나 늘지 않는다
+    await pickTool(page, "slip");
+    await drag(page, { x: moved.x + 200, y: grab.y }, { x: moved.x + 296, y: grab.y });
+    expect(Math.abs((await clipBox(page)).x - moved.x)).toBeLessThan(2);
+    await expect(page.locator(S.clip)).toHaveCount(1);
+
+    // 확대 도구로 클립을 누르면 이동 도구처럼 선택하고, 끌면 옮긴다(설계서 표에는 '—'이지만 지금 동작이 이렇다)
+    await pickTool(page, "zoom");
+    const before = await clipBox(page);
+    await drag(page, { x: before.x + 200, y: grab.y }, { x: before.x + 296, y: grab.y });
+    await expect(page.locator(S.clip).first()).toHaveClass(/selected/);
+    expect((await clipBox(page)).x - before.x).toBeGreaterThan(60);
+    measuredP46("클립 끌기(px)", { 이동: Math.round(moved.x - start.x), 슬립: 0, 확대: Math.round((await clipBox(page)).x - before.x) });
+  });
+
+  test("다듬기 손잡이: 이동 도구에서는 끌어서 다듬고, 선택 재생 도구에서는 클립을 누른 것처럼 그 지점부터 재생한다", async ({ page }) => {
+    await startClean(page);
+    const before = await clipBox(page);
+    await pickTool(page, "move");
+    const handle = page.getByRole("button", { name: "클립 끝점 다듬기" });
+    const handleBox = (await handle.boundingBox())!;
+    await drag(page, { x: handleBox.x + handleBox.width / 2, y: handleBox.y + handleBox.height / 2 }, { x: handleBox.x + handleBox.width / 2 - 192, y: handleBox.y + handleBox.height / 2 });
+    await expect.poll(async () => (await clipBox(page)).width).toBeLessThan(before.width - 100); // 2초(192px)쯤 짧아진다
+    await expect(page.locator(S.clip)).toHaveCount(1);
+
+    await pickTool(page, "play-selected");
+    await page.getByRole("button", { name: "클립 시작점 다듬기" }).click(); // 클립 시작(0초)에 있는 손잡이
+    await expect(page.locator(S.clip).first()).toHaveClass(/selected/); // 손잡이를 눌러도 클립을 누른 것으로 친다
+    await expect.poll(() => timeSeconds(page), { timeout: 5000 }).toBeGreaterThan(0.5); // 0초에서 시작해 흐른다
+    await page.click(S.stop);
+  });
+
+  test("클립 클릭: 선택 재생 도구는 클립을 선택하고 누른 지점부터 재생한다", async ({ page }) => {
+    await startClean(page);
+    await pickTool(page, "play-selected");
+    const clip = page.locator(S.clip).first();
+    await clip.click({ position: { x: 192, y: 40 } }); // 2초 지점
+    await expect(clip).toHaveClass(/selected/);
+    await expect.poll(() => timeSeconds(page), { timeout: 5000 }).toBeGreaterThan(2.2); // 2초에서 시작해 흐른다
+    expect(await timeSeconds(page)).toBeLessThan(6);
+    await page.click(S.stop);
   });
 });
