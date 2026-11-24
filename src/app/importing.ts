@@ -4,19 +4,18 @@ import type { Clip } from "../domain/types";
 import { ko } from "../i18n/ko";
 import { attachAudio, readAudioFile, type DecodedUpload } from "../services/importer";
 import { notify, notifyError } from "../services/notify";
-import { setPeaks } from "../services/peaksCache";
 import { hasRememberedAudio, rememberAudio } from "../services/persistence/audioBlobs";
 import { useDawStore } from "../store/useDawStore";
 import { createId } from "../utils/audioMath";
 import { requestAutosave } from "./autosaveControl";
+import { ensurePeaks } from "./peaks";
 import { getProjectSnapshot } from "./projectSnapshot";
 
 /** 소리 엔진으로 파일을 푼다(`services/importer`에 넘기는 풀기 함수). 풀면 소리는 임시 음원 id로 엔진에 올라간다. */
 export async function decodeUpload(file: File): Promise<DecodedUpload> {
-  const { asset, buffer, peaks } = await audioEngine.decodeFile(file);
+  const { asset, buffer } = await audioEngine.decodeFile(file);
   return {
     asset,
-    peaks,
     registerAs: (assetId) => audioEngine.registerBuffer(assetId, buffer),
     release: () => audioEngine.removeBuffer(asset.id),
   };
@@ -52,6 +51,7 @@ export async function importAudioFiles(files: FileList | File[], deps: ImportDep
         let clipCount = 0;
         for (const { asset, clipCount: count } of same) {
           store.updateAudioAsset(asset.id, attachAudio(asset, file, read), { history: false });
+          void ensurePeaks({ id: asset.id, hash: read.hash });
           clipCount += count;
         }
         requestAutosave(); // 문서가 그대로여도 저장할 음원 데이터가 늘었다
@@ -60,7 +60,7 @@ export async function importAudioFiles(files: FileList | File[], deps: ImportDep
         continue;
       }
 
-      const { asset, peaks } = read;
+      const { asset } = read;
       const state = useDawStore.getState();
       const startTime = state.playhead;
       const selected = state.tracks.find((track) => track.id === state.selectedTrackId);
@@ -91,9 +91,9 @@ export async function importAudioFiles(files: FileList | File[], deps: ImportDep
       };
 
       rememberAudio(asset.id, file);
-      setPeaks(asset.id, peaks);
       state.addAudioAsset(asset);
       state.addClip(targetTrack.id, clip);
+      void ensurePeaks(asset); // 파형은 Worker가 만든다. 끝나면 저절로 그려진다.
       uploaded += 1;
       if (fileArray.length > 1) notify("info", ko.notice.uploadProgress(i + 1, fileArray.length, asset.fileName));
       else notify("success", ko.notice.uploadDone(asset.fileName));

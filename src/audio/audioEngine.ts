@@ -5,7 +5,6 @@ import { clipSignature } from "./engine/clipSignature";
 import { scheduleClipGainEnvelope } from "./engine/clipEnvelope";
 import { createTrackGraph, disposeGraph, graphSignature, updateTrackGraph, type TrackGraph } from "./engine/trackGraph";
 import { getProjectDuration } from "../utils/audioMath";
-import { createWaveformPeaks } from "./waveformPeaks";
 import { smooth } from "./effects/EffectNode";
 import { clampMasterVolumeDb, dbToGain, MASTER_VOLUME_DEFAULT_DB } from "./engine/MasterBus";
 import { MONITOR_VOLUME_DEFAULT, MonitorBus, clampMonitorVolume } from "./engine/MonitorBus";
@@ -18,8 +17,6 @@ import {
 interface DecodedAudio {
   asset: AssetMeta;
   buffer: AudioBuffer;
-  /** 파형 점. 문서(AssetMeta)에는 담지 않으므로 부르는 쪽이 services/peaksCache에 넣는다. */
-  peaks: number[];
 }
 
 /** 옛 마스터 사슬이 처음부터 곱하던 이득. 마스터 볼륨 0 dB에서도 이 값이 남는다(새 엔진은 1.0). */
@@ -117,7 +114,7 @@ export class BrowserAudioEngine {
     };
 
     this.buffers.set(asset.id, buffer);
-    return { asset, buffer, peaks: createWaveformPeaks(buffer) };
+    return { asset, buffer };
   }
 
   async decodeBlob(
@@ -142,7 +139,7 @@ export class BrowserAudioEngine {
     };
 
     this.buffers.set(asset.id, buffer);
-    return { asset, buffer, peaks: createWaveformPeaks(buffer) };
+    return { asset, buffer };
   }
 
   registerBuffer(assetId: string, buffer: AudioBuffer) {

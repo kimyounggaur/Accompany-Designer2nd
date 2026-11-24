@@ -99,6 +99,13 @@ export function zoomToSelectedClips() {
   if (!result.ok) notify("info", text.zoomNeedsClip);
 }
 
+/** "전체 보기"(Shift+0): 프로젝트 전체가 화면 폭에 들어오게 줄이고 처음으로 돌아간다. */
+export function zoomToFit() {
+  if (!store().zoomToFit().ok) return; // 화면 폭을 모르면(아직 그려지기 전) 할 일이 없다
+  const scroll = document.querySelector<HTMLElement>(".timeline-scroll");
+  if (scroll) scroll.scrollLeft = 0;
+}
+
 export function resetSelectedClipSource() {
   const result = store().resetSelectedClipSource();
   notify("info", result.ok ? text.sourceReset : text.resetNeedsClip);

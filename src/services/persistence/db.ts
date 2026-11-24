@@ -6,7 +6,7 @@
  *  - v2: 저장소 4개
  *      projects  키=프로젝트 id      값=ProjectRecord   (문서 + 음원 해시 목록)
  *      assets    키=음원 해시(SHA-256) 값=AssetRecord     (같은 음원은 한 번만 저장)
- *      peaks     키=`${해시}:${단계}`  값=파형 최소·최대값 (P4-3에서 사용, 지금은 비어 있음)
+ *      peaks     키=`${해시}:${단계}`  값=파형 최소·최대값 한 단계 (P4-3: 단계 0~3, 음원마다 4칸. peaksStore.ts)
  *      meta      키=이름              값=문자열           (lastProjectId 등)
  *
  * 올림 처리(onupgradeneeded) 안에서는 비동기 해시 계산을 기다릴 수 없으므로 새 저장소만 만든다.

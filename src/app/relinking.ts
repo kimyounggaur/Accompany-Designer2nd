@@ -8,6 +8,7 @@ import { useRelinkStore } from "../state/relinkStore";
 import { useDawStore } from "../store/useDawStore";
 import { requestAutosave } from "./autosaveControl";
 import { decodeUpload, type ImportDeps } from "./importing";
+import { ensurePeaks } from "./peaks";
 import { getProjectSnapshot } from "./projectSnapshot";
 
 /**
@@ -44,6 +45,7 @@ function link(targets: ReadonlyArray<AssetMeta>, file: File, read: ReadAudio, sa
   const store = useDawStore.getState();
   for (const asset of targets) {
     store.updateAudioAsset(asset.id, attachAudio(asset, file, read), { history: false });
+    void ensurePeaks({ id: asset.id, hash: read.hash });
     useRelinkStore.getState().setRow(asset.id, { kind: "linked", sameFile });
   }
   requestAutosave(); // 문서가 그대로여도 저장할 음원 데이터가 늘었다

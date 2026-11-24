@@ -12,6 +12,7 @@ import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
 import { useDawStore } from "../store/useDawStore";
 import { registerAutosave } from "./autosaveControl";
 import { connectEngineSync } from "./engineSync";
+import { cancelAllPeaks, ensurePeaksForAssets } from "./peaks";
 import { decodeStoredAudio, saveProjectFile } from "./projectFile";
 import { getProjectSnapshot } from "./projectSnapshot";
 import { consumeSkipRecover } from "./recoverFlag";
@@ -77,9 +78,11 @@ export function startApp(): () => void {
         const restored = await restoreAudio(loaded.loaded, decodeStoredAudio);
         if (cancelled) return;
         if (untouched()) {
+          cancelAllPeaks();
           audioEngine.clearBuffers();
           restored.commit();
           useDawStore.getState().importProject(restored.doc);
+          void ensurePeaksForAssets(Object.values(restored.doc.assets));
           useAutosaveStore.getState().setStatus({ state: "saved", savedAt: loaded.updatedAt });
           if (restored.missing) {
             // 시작하자마자 대화상자를 띄우지 않는다. 안내의 [다시 연결]이나 파일 메뉴에서 연다.

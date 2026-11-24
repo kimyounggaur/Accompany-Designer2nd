@@ -18,7 +18,8 @@ import type {
   ProjectDoc,
   Track,
 } from "../domain/types";
-import { clamp, createId, getClipTimelineDuration } from "../utils/audioMath";
+import { clampZoom, minZoomFor, zoomToFitValue } from "../domain/timeline/zoom";
+import { clamp, createId, getClipTimelineDuration, getProjectDuration } from "../utils/audioMath";
 import { fail, ok, type CommandResult } from "../state/commandResult";
 import * as commands from "../state/commands/index";
 import { history, type EditOptions } from "../state/history";
@@ -37,6 +38,8 @@ interface DawStore extends ProjectDoc {
   isPlaying: boolean;
   playhead: number;
   zoomPxPerSecond: number;
+  /** 타임라인이 화면에 보이는 가로 폭(px). 확대 범위의 아래쪽 끝(전체 보기)을 정하는 데 쓴다. 아직 모르면 0. */
+  timelineViewportWidth: number;
   snapEnabled: boolean;
   gridDivision: number;
   playlistTool: PlaylistTool;
@@ -56,6 +59,9 @@ interface DawStore extends ProjectDoc {
   setPlayhead: (playhead: number) => void;
   setIsPlaying: (isPlaying: boolean) => void;
   setZoom: (zoomPxPerSecond: number) => void;
+  setTimelineViewportWidth: (width: number) => void;
+  /** 프로젝트 전체가 화면 폭에 들어오게 확대 배율을 정한다("전체 보기"). 화면 폭을 아직 모르면 실패. */
+  zoomToFit: () => CommandResult<"unknown-size">;
   setSnapEnabled: (enabled: boolean) => void;
   setPlaylistTool: (tool: PlaylistTool) => void;
   setPlaylistSnap: (snap: PlaylistSnap) => void;
@@ -171,6 +177,7 @@ export const useDawStore = create<DawStore>((set, get) => ({
   isPlaying: false,
   playhead: 0,
   zoomPxPerSecond: 96,
+  timelineViewportWidth: 0,
   snapEnabled: true,
   gridDivision: 2,
   playlistTool: "move",
@@ -206,7 +213,23 @@ export const useDawStore = create<DawStore>((set, get) => ({
   setPlayhead: (playhead) => set({ playhead: Math.max(0, playhead) }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   setZoom: (zoomPxPerSecond) =>
-    set({ zoomPxPerSecond: clamp(zoomPxPerSecond, 1, 320) }),
+    set((state) => ({
+      zoomPxPerSecond: clampZoom(
+        zoomPxPerSecond,
+        minZoomFor(getProjectDuration({ bpm: state.bpm, tracks: state.tracks }), state.timelineViewportWidth),
+      ),
+    })),
+  setTimelineViewportWidth: (width) => {
+    const next = Number.isFinite(width) && width > 0 ? Math.round(width) : 0;
+    if (next !== get().timelineViewportWidth) set({ timelineViewportWidth: next });
+  },
+  zoomToFit: () => {
+    const state = get();
+    const zoom = zoomToFitValue(getProjectDuration({ bpm: state.bpm, tracks: state.tracks }), state.timelineViewportWidth);
+    if (zoom === undefined) return fail("unknown-size");
+    set({ zoomPxPerSecond: zoom });
+    return ok();
+  },
   setSnapEnabled: (snapEnabled) =>
     set({
       snapEnabled,

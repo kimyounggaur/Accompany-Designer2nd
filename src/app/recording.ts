@@ -9,8 +9,8 @@ import { createTickTimer } from "../audio/engine/tickTimer";
 import { createClickPlayer } from "../audio/Metronome";
 import { MicRecorder } from "../audio/recording/Recorder";
 import { RecordingController, type RecordingEngine } from "../audio/recording/RecordingController";
-import { setPeaks } from "../services/peaksCache";
 import { hashOrUndefined } from "../services/persistence/assetHash";
+import { ensurePeaks } from "./peaks";
 import { getProjectSnapshot } from "./projectSnapshot";
 import { recordingHost } from "./recordingHost";
 
@@ -26,9 +26,10 @@ const engine: RecordingEngine = {
   getMonitorInput: () => audioEngine.getMonitorInput(),
   decode: async (blob, fileName, assetId) => {
     const decoded = await audioEngine.decodeBlob(blob, fileName, assetId, "recording");
-    setPeaks(decoded.asset.id, decoded.peaks); // 문서에는 파형이 없다. 화면은 파형 보관소에서 읽는다.
     const hash = await hashOrUndefined(blob); // 같은 파일 판별·다시 연결에 쓴다(P4-2)
-    return hash ? { ...decoded.asset, hash } : decoded.asset;
+    const asset = hash ? { ...decoded.asset, hash } : decoded.asset;
+    void ensurePeaks(asset); // 문서에는 파형이 없다. Worker가 만들어 파형 보관소에 채우면 화면이 그린다.
+    return asset;
   },
 };
 

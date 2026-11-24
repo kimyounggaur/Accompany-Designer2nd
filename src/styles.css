@@ -797,6 +797,7 @@ button {
 
 .ruler {
   position: relative;
+  overflow: hidden; /* 오른쪽 끝의 눈금·번호가 가로 스크롤을 만들지 않게(전체 보기에서 스크롤이 남지 않는다) */
   height: 42px;
   border-bottom: 1px solid var(--line);
   background: #171c19;

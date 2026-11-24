@@ -3,7 +3,7 @@ import { audioEngine } from "./audio/currentEngine";
 import { Inspector } from "./components/Inspector";
 import { Timeline } from "./components/Timeline";
 import { AppShell } from "./app/AppShell";
-import { quantizeSelectedClips, redo, undo, zoomToSelectedClips, deleteSelectedClips } from "./app/actions";
+import { quantizeSelectedClips, redo, undo, zoomToFit, zoomToSelectedClips, deleteSelectedClips } from "./app/actions";
 import { startApp } from "./app/bootstrap";
 import { importAudioFiles } from "./app/importing";
 import { loadProjectFile, saveProjectFile } from "./app/projectFile";
@@ -145,6 +145,12 @@ export default function App() {
       if (event.shiftKey && ["Digit1", "Digit2", "Digit3"].includes(event.code)) {
         event.preventDefault();
         setZoom(event.code === "Digit1" ? 72 : event.code === "Digit2" ? 132 : 220);
+        return;
+      }
+
+      if (event.shiftKey && event.code === "Digit0") {
+        event.preventDefault();
+        zoomToFit();
         return;
       }
 

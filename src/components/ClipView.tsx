@@ -1,9 +1,9 @@
 import type { RefObject } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { AssetMeta, Clip } from "../domain/types";
 import { useDawStore } from "../store/useDawStore";
 import { deleteClip, sliceClipAt } from "../app/actions";
-import { useWaveformPeaks } from "./useWaveformPeaks";
+import { WaveformCanvas } from "../ui/timeline/WaveformCanvas";
 import {
   clamp,
   getClipPlaybackRate,
@@ -38,8 +38,6 @@ export function ClipView({
   trackIds,
   trackIndex,
 }: ClipViewProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const peaks = useWaveformPeaks(asset?.id);
   const [showMenu, setShowMenu] = useState(false);
   const sessionRef = useRef<PointerSession | undefined>(undefined);
   const selectedClipIds = useDawStore((state) => state.selectedClipIds);
@@ -62,62 +60,6 @@ export function ClipView({
   const top = trackIndex * trackHeight + 15;
   const fadeInWidth = Math.min(width / 2, Math.max(0, clip.fadeIn || 0) * zoomPxPerSecond);
   const fadeOutWidth = Math.min(width / 2, Math.max(0, clip.fadeOut || 0) * zoomPxPerSecond);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !asset || !peaks) {
-      return;
-    }
-
-    const scroll = canvas.closest(".timeline-scroll");
-    if (!scroll) return;
-    const draw = () => {
-      const clipElement = canvas.parentElement;
-      if (!clipElement || !scroll) return;
-      const clipRect = clipElement.getBoundingClientRect();
-      const viewport = scroll.getBoundingClientRect();
-      // Keep the canvas bounded by the viewport, even for hour-long clips.
-      const start = Math.max(0, viewport.left - clipRect.left - 2);
-      const end = Math.min(clipRect.width, viewport.right - clipRect.left + 2);
-      const cssWidth = Math.max(1, Math.ceil(end - start));
-      canvas.style.left = `${start}px`;
-      canvas.style.width = `${cssWidth}px`;
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.max(1, Math.floor(cssWidth * dpr));
-      canvas.height = Math.max(1, Math.floor(53 * dpr));
-      const context = canvas.getContext("2d");
-      if (!context) {
-        return;
-      }
-
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.fillStyle = clip.muted
-        ? "rgba(188, 196, 185, 0.52)"
-        : "rgba(218, 255, 239, 0.82)";
-      const middle = canvas.height / 2;
-      for (let x = 0; x < cssWidth; x += 1) {
-        const sourceStart = clip.offset + ((start + x) / Math.max(1, width)) * clip.duration;
-        const sourceEnd = clip.offset + ((start + x + 1) / Math.max(1, width)) * clip.duration;
-        const peakStart = Math.max(0, Math.floor(sourceStart / asset.duration * peaks.length));
-        const peakEnd = Math.min(peaks.length, Math.max(peakStart + 1, Math.ceil(sourceEnd / asset.duration * peaks.length)));
-        let peak = 0;
-        for (let i = peakStart; i < peakEnd; i += 1) peak = Math.max(peak, peaks[i] || 0);
-        const barHeight = Math.max(1, peak * canvas.height * 0.43);
-        context.fillRect(
-          Math.floor(x * dpr),
-          middle - barHeight,
-          Math.max(1, dpr),
-          barHeight * 2,
-        );
-      }
-    };
-
-    draw();
-    const resizeObserver = new ResizeObserver(draw);
-    resizeObserver.observe(scroll);
-    scroll.addEventListener("scroll", draw, { passive: true });
-    return () => { resizeObserver.disconnect(); scroll.removeEventListener("scroll", draw); };
-  }, [asset, peaks, clip.muted, clip.offset, clip.duration, width, left]);
 
   function getPointerTime(event: React.PointerEvent<HTMLElement>) {
     const lanesRect = lanesRef.current?.getBoundingClientRect();
@@ -333,7 +275,7 @@ export function ClipView({
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
       />
-      <canvas ref={canvasRef} />
+      <WaveformCanvas asset={asset} clip={clip} width={width} left={left} />
       {showMenu && <div className="clip-context-menu" role="menu" onPointerDown={(event) => event.stopPropagation()}>
         <button type="button" role="menuitem" onClick={() => { deleteClip(clip.id); setShowMenu(false); }}>클립 삭제</button>
         <button type="button" role="menuitem" onClick={() => setShowMenu(false)}>닫기</button>
