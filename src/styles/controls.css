@@ -1,0 +1,136 @@
+/*
+ * 공용 조작부(ui/controls) — P5-0
+ *
+ * 노브의 눈에 보이는 요소(svg 또는 span)는 모양이 달라도 모두 `.knob`을 가진다.
+ * 끌기 표시·초점 링·꺼짐 표시를 여기서 한 번만 정하고, 모양별 CSS는 그리는 일만 맡는다.
+ * 값 글자를 눌러 숫자 칸으로 바꾸는 `.knob-value`·`.knob-entry`도 여기서 정한다.
+ */
+
+.knob {
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.knob[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.knob:focus-visible {
+  outline: 2px solid var(--mistral-orange);
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+
+/* 값 글자: 평소에는 글자처럼 보이고, 누르면 숫자 칸이 된다 */
+.knob-value {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  text-transform: inherit;
+  cursor: text;
+}
+
+.knob-value:hover {
+  text-decoration: underline dotted;
+}
+
+.knob-entry {
+  box-sizing: border-box;
+  width: 5.2em;
+  min-width: 0;
+  margin: 0;
+  padding: 1px 2px;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  border-radius: 3px;
+  background: #fff;
+  color: #1f1f1f;
+  font: inherit;
+  letter-spacing: 0;
+  text-align: center;
+  text-transform: none;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.knob-entry::-webkit-inner-spin-button,
+.knob-entry::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+/* 슬라이더 옆 숫자 칸: 슬라이더가 남는 폭을 쓰고, 숫자 칸은 글자 몇 개만큼만 쓴다 */
+.topbar .monitor-volume-control input.monitor-volume-number {
+  flex: 0 0 auto;
+  width: 40px;
+  min-width: 0;
+  height: 22px;
+  padding: 0 4px;
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.track-header .track-volume-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.track-header .track-volume-row input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.track-header input.track-volume-number {
+  flex: 0 0 auto;
+  width: 40px;
+  min-width: 0;
+  height: 22px;
+  padding: 0 4px;
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  border-color: var(--line-soft);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+/* 잔향 길이 값 글자: 예전 배치에서는 옆 모듈에 가려 보이지 않았다. 슬라이더 바로 아래에 두고, 누르면 숫자 칸으로 바뀐다 */
+.reverb-decay-module > strong {
+  grid-column: 1 / 3;
+  grid-row: 3;
+  justify-self: center;
+  align-self: start;
+}
+
+/* 잔향 길이 슬라이더(투명하게 눕혀 둔 입력) 위의 장식이 눌림을 가로채지 않게 한다 — 예전에는 가운데를 눌러도 슬라이더에 닿지 않았다 */
+.reverb-decay-scale,
+.reverb-decay-scale::after {
+  pointer-events: none;
+}
+
+/* 딜레이 장비의 호 노브 다섯 개: 패널이 좁으면 노브도 같이 줄어든다.
+   예전에는 노브마다 56px 고정이라 패널 폭이 346px 이하이면 5번째가 오른쪽에서 잘렸다(1440px 화면의 기본 폭이 345px). */
+.dly-knobs-row .dly-knob-wrap {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 56px;
+}
+
+.dly-knobs-row .dly-knob-wrap > svg.knob {
+  width: 100%;
+  height: auto;
+}
+
+.dly-knobs-row .dly-knob-value {
+  min-width: 0;
+  white-space: nowrap;
+}

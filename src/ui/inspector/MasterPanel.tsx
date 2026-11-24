@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { audioEngine } from "../../audio/currentEngine";
-import { CommittedNumberInput } from "../../components/CommittedNumberInput";
+import { plainEntry } from "../controls/entries";
+import { Slider, type SliderEntry } from "../controls/Slider";
 import {
   MASTER_VOLUME_DEFAULT_DB,
   MASTER_VOLUME_MAX_DB,
@@ -12,6 +13,14 @@ import { useProject } from "../../state/projectStore";
 import { useRecordingStore } from "../../state/recordingStore";
 import { useDawStore } from "../../store/useDawStore";
 import { PanelSection } from "./PanelSection";
+import { useHistoryGesture } from "./useHistoryGesture";
+
+/** 마스터 볼륨 숫자 칸: 슬라이더와 같은 단위(dB) */
+const VOLUME_ENTRY: SliderEntry = {
+  ...plainEntry(ko.master.volumeInput, MASTER_VOLUME_MIN_DB, MASTER_VOLUME_MAX_DB, MASTER_VOLUME_STEP_DB),
+  className: "master-number",
+  testId: "master-volume-input",
+};
 
 /** 리미터 표시 막대가 가득 차는 동작량(dB) */
 const REDUCTION_FULL_DB = 12;
@@ -41,6 +50,7 @@ function useLimiterReduction(active: boolean): number {
 export function MasterPanel() {
   const volumeDb = useProject((state) => state.doc.master?.volumeDb ?? MASTER_VOLUME_DEFAULT_DB);
   const setMasterVolumeDb = useDawStore((state) => state.setMasterVolumeDb);
+  const gesture = useHistoryGesture();
   const capturing = useRecordingStore((state) => state.status === "recording");
   const active = useDawStore((state) => state.isPlaying) || capturing;
   const reduction = useLimiterReduction(active);
@@ -56,29 +66,20 @@ export function MasterPanel() {
         </output>
       </div>
       <div className="master-row">
-        <input
+        <Slider
           id="master-volume"
           className="master-slider"
-          type="range"
+          label={text.volumeLabel}
           min={MASTER_VOLUME_MIN_DB}
           max={MASTER_VOLUME_MAX_DB}
           step={MASTER_VOLUME_STEP_DB}
           value={volumeDb}
-          aria-label={text.volumeLabel}
-          aria-valuetext={text.volumeValue(volumeDb)}
-          data-testid="master-volume"
-          onChange={(event) => setMasterVolumeDb(Number(event.target.value))}
-          onDoubleClick={() => setMasterVolumeDb(MASTER_VOLUME_DEFAULT_DB)}
-        />
-        <CommittedNumberInput
-          className="master-number"
-          label={text.volumeInput}
-          testId="master-volume-input"
-          min={MASTER_VOLUME_MIN_DB}
-          max={MASTER_VOLUME_MAX_DB}
-          step={MASTER_VOLUME_STEP_DB}
-          value={volumeDb}
-          onCommit={(value) => setMasterVolumeDb(value)}
+          defaultValue={MASTER_VOLUME_DEFAULT_DB}
+          format={text.volumeValue}
+          testId="master-volume"
+          entry={VOLUME_ENTRY}
+          onChange={setMasterVolumeDb}
+          {...gesture}
         />
         <button
           type="button"

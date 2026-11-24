@@ -418,7 +418,7 @@
   min-width: 0;
 }
 
-.control-stack .clip-gain__number,
+.control-stack input.clip-gain__number,
 .master-number {
   flex: 0 0 auto;
   width: 64px;

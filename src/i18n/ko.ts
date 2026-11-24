@@ -19,6 +19,8 @@ export const ko = {
     mute: "음소거",
     solo: "솔로",
     volume: "볼륨",
+    /** 트랙 이름을 받아 그 트랙 볼륨 숫자 칸의 이름을 만든다 */
+    volumeInput: (trackName: string) => `${trackName} 볼륨 값(%)`,
   },
 
   /** 오른쪽 패널의 트랙 믹스 */
@@ -91,6 +93,7 @@ export const ko = {
     volumeLabel: "모니터 볼륨",
     volumeTitle: "입력 모니터링과 메트로놈 소리의 크기입니다. 믹스와 내보내기에는 섞이지 않습니다.",
     volumeValue: (percent: number) => `${percent}%`,
+    volumeInput: "모니터 볼륨 값(%)",
   },
 
   master: {

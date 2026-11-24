@@ -2001,7 +2001,6 @@ test("C2 휠을 굴려도 콘솔 오류가 쌓이지 않는다", async ({ page }
 });
 
 test("C12·D6 노브를 키보드로 3번 올리면 3단계 오르고 초점이 남아 있다", async ({ page }) => {
-  test.fail(true, "P5-0에서 해결 예정 (11/13 기준 1번만 오르고 초점이 사라짐)");
   await openApp(page);
   const knob = page.locator(S.eqBassKnob);
   await knob.scrollIntoViewIfNeeded();
@@ -3178,5 +3177,325 @@ test.describe("P4-6 도구 동작 표", () => {
     await expect.poll(() => timeSeconds(page), { timeout: 5000 }).toBeGreaterThan(2.2); // 2초에서 시작해 흐른다
     expect(await timeSeconds(page)).toBeLessThan(6);
     await page.click(S.stop);
+  });
+});
+
+const measuredP50 = (name: string, value: unknown) => console.log(`P5-0 측정 ${name}: ${JSON.stringify(value)}`);
+
+test.describe("P5-0 공용 조작부", () => {
+  const knob = (page: Page, name: string) => page.locator(`[role=slider][aria-label="${name}"]`);
+  const entryOpener = (page: Page, name: string) => page.locator(`button[aria-label="${name} 입력"]`);
+  const entryField = (page: Page, name: string) => page.locator(`input[aria-label="${name}"]`);
+  const clickEmpty = (page: Page) => page.mouse.click(700, 650);
+  const BASS = "저음 이퀄라이저";
+
+  /** 노브 한가운데를 눌러 세로로 끈다(dy가 음수면 위로). 끄는 동안 Shift를 누를 수 있다 */
+  async function dragKnob(page: Page, name: string, dy: number, options: { shift?: boolean } = {}) {
+    const target = knob(page, name);
+    await target.scrollIntoViewIfNeeded();
+    const box = (await target.boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    if (options.shift) await page.keyboard.down("Shift");
+    await page.mouse.move(x, y + dy, { steps: 6 });
+    if (options.shift) await page.keyboard.up("Shift");
+    await page.mouse.up();
+  }
+
+  test("노브는 모두 같은 부품이다: 26개가 슬라이더 역할과 이름·범위·현재 값·값 글자를 갖고 이름이 겹치지 않는다", async ({ page }) => {
+    await openApp(page);
+    const knobs = page.locator(`${S.inspector} [role=slider]`);
+    await expect(knobs).toHaveCount(26);
+    const info = await knobs.evaluateAll((elements) =>
+      elements.map((element) => ({
+        name: element.getAttribute("aria-label"),
+        min: Number(element.getAttribute("aria-valuemin")),
+        max: Number(element.getAttribute("aria-valuemax")),
+        now: Number(element.getAttribute("aria-valuenow")),
+        text: element.getAttribute("aria-valuetext"),
+        tabIndex: (element as HTMLElement).tabIndex,
+      })),
+    );
+    for (const k of info) {
+      const where = JSON.stringify(k);
+      expect(k.name, where).toBeTruthy();
+      expect(k.text, where).toBeTruthy();
+      expect(k.min, where).toBeLessThan(k.max);
+      expect(k.now, where).toBeGreaterThanOrEqual(k.min);
+      expect(k.now, where).toBeLessThanOrEqual(k.max);
+      expect(k.tabIndex, where).toBe(0);
+    }
+    expect(new Set(info.map((k) => k.name)).size, "노브 이름이 겹친다").toBe(info.length);
+    measuredP50("노브 수", { 개수: info.length, 이름_수: new Set(info.map((k) => k.name)).size });
+  });
+
+  test("키보드: 화살표 한 칸, PageUp·PageDown 열 칸, Home·End 끝값 — 누를 때마다 초점이 노브에 남는다", async ({ page }) => {
+    await openApp(page);
+    const bass = knob(page, BASS); // −12 ~ +12 dB, 한 칸 0.5dB
+    await bass.scrollIntoViewIfNeeded();
+    await bass.focus();
+    const steps: Array<[string, string]> = [
+      ["ArrowUp", "0.5"],
+      ["ArrowRight", "1"],
+      ["ArrowDown", "0.5"],
+      ["ArrowLeft", "0"],
+      ["PageUp", "5"],
+      ["PageDown", "0"],
+      ["Home", "-12"],
+      ["End", "12"],
+    ];
+    for (const [key, expected] of steps) {
+      await page.keyboard.press(key);
+      await expect(bass, `${key} 다음`).toHaveAttribute("aria-valuenow", expected);
+      await expect(bass, `${key} 다음 초점`).toBeFocused();
+    }
+    await expect(bass).toHaveAttribute("aria-valuetext", "+12dB");
+  });
+
+  test("다른 노브도 같은 약속이다: 딜레이·리버브·컴프레서·트랙 믹스 노브를 화살표로 올리고 내려도 초점이 남는다", async ({ page }) => {
+    await openApp(page);
+    const cases: Array<{ name: string; key: string; times: number; expected: string; text: string }> = [
+      { name: "반복 딜레이", key: "ArrowUp", times: 3, expected: "0.38", text: "38%" },
+      { name: "드라이브 리버브", key: "ArrowUp", times: 3, expected: "0.18", text: "18%" },
+      { name: "압축 비율 컴프레서", key: "ArrowUp", times: 2, expected: "3.2", text: "3.2:1" },
+      { name: "트랙 볼륨", key: "ArrowDown", times: 4, expected: "0.82", text: "82%" },
+      { name: "후단 이퀄라이저 저음", key: "ArrowDown", times: 2, expected: "-1", text: "-1.0 dB" },
+    ];
+    for (const item of cases) {
+      const target = knob(page, item.name);
+      await target.scrollIntoViewIfNeeded();
+      await target.focus();
+      for (let i = 0; i < item.times; i++) await page.keyboard.press(item.key);
+      await expect(target, item.name).toHaveAttribute("aria-valuenow", item.expected);
+      await expect(target, `${item.name} 값 글자`).toHaveAttribute("aria-valuetext", item.text);
+      await expect(target, `${item.name} 초점`).toBeFocused();
+    }
+  });
+
+  test("주파수 노브는 로그 눈금이다: 가장 낮은 값에서도 막히지 않고, 높은 쪽에서는 같은 비율로 움직인다", async ({ page }) => {
+    await openApp(page);
+    const highPass = knob(page, "저음 차단 리버브"); // 20 ~ 2000 Hz, 10Hz 단위
+    await highPass.scrollIntoViewIfNeeded();
+    await highPass.focus();
+    await page.keyboard.press("Home");
+    await expect(highPass).toHaveAttribute("aria-valuenow", "20");
+    await page.keyboard.press("ArrowUp");
+    await expect(highPass).toHaveAttribute("aria-valuenow", "30"); // 로그 한 칸이 단위보다 작아도 최소 한 단위는 오른다
+    await page.keyboard.press("End");
+    await page.keyboard.press("ArrowDown");
+    const nearTop = Number(await highPass.getAttribute("aria-valuenow"));
+    expect(nearTop, "맨 위에서 한 칸 내리면 직선이면 1990Hz, 로그면 그보다 훨씬 내려간다").toBeLessThan(1950);
+    expect(nearTop).toBeGreaterThan(1850);
+    measuredP50("로그 노브", { 처음_20에서_한칸: 30, 맨위에서_한칸_내림: nearTop });
+  });
+
+  test("끌기: 위로 45px은 범위의 1/4, Shift는 1/10, 더블클릭은 기본값, 끌기 한 번은 실행 취소 한 번이다", async ({ page }) => {
+    await openApp(page);
+    const bass = knob(page, BASS); // −12 ~ +12 dB(24dB), 180px = 전체 범위
+    await dragKnob(page, BASS, -45);
+    await expect(bass).toHaveAttribute("aria-valuenow", "6"); // 24 × 45/180
+    await clickEmpty(page);
+    await page.keyboard.press("Control+z"); // 끌기 도중 값이 수십 번 바뀌었어도 한 번에 되돌아간다
+    await expect(bass).toHaveAttribute("aria-valuenow", "0");
+
+    await dragKnob(page, BASS, -45, { shift: true });
+    await expect(bass).toHaveAttribute("aria-valuenow", "0.5"); // 6의 1/10 = 0.6 → 0.5dB 단위로 맞춘다
+
+    await bass.dblclick();
+    await expect(bass).toHaveAttribute("aria-valuenow", "0"); // 기본값
+
+    await dragKnob(page, BASS, 90); // 아래로 끌면 내려간다
+    await expect(bass).toHaveAttribute("aria-valuenow", "-12");
+    await dragKnob(page, BASS, -400); // 범위를 넘게 끌어도 끝에서 멈춘다(포인터가 노브 밖으로 나가도 계속 끌린다)
+    await expect(bass).toHaveAttribute("aria-valuenow", "12");
+    measuredP50("노브 끌기", { 위로_45px: "+6 dB", Shift_45px: "+0.5 dB", 아래로_90px: "-12 dB" });
+  });
+
+  test("숫자 입력: 값 글자를 눌러 치고 Enter로 확정, Esc로 취소, 범위를 넘으면 끝값으로 맞추며 초점은 노브로 돌아온다", async ({ page }) => {
+    await openApp(page);
+    const bass = knob(page, BASS);
+    const entryName = `${BASS} 값(dB)`;
+    const field = entryField(page, entryName);
+    await bass.scrollIntoViewIfNeeded();
+
+    await entryOpener(page, entryName).click();
+    await expect(field).toBeFocused();
+    await field.fill("-4.5");
+    await page.keyboard.press("Enter");
+    await expect(bass).toHaveAttribute("aria-valuenow", "-4.5");
+    await expect(bass).toBeFocused();
+    await expect(field).toHaveCount(0);
+
+    await page.keyboard.press("Enter"); // 노브에서 Enter를 누르면 같은 숫자 칸이 열린다
+    await expect(field).toBeFocused();
+    await page.keyboard.type("9");
+    await page.keyboard.press("Escape"); // 취소: 값은 그대로
+    await expect(field).toHaveCount(0);
+    await expect(bass).toHaveAttribute("aria-valuenow", "-4.5");
+    await expect(bass).toBeFocused();
+
+    await page.keyboard.press("Enter");
+    await field.fill("99"); // 범위(±12)를 넘으면 끝값으로
+    await page.keyboard.press("Enter");
+    await expect(bass).toHaveAttribute("aria-valuenow", "12");
+
+    // 입력 한 번은 실행 취소 한 번(초점이 노브에 있어도 Ctrl+Z가 먹는다)
+    await page.keyboard.press("Control+z");
+    await expect(bass).toHaveAttribute("aria-valuenow", "-4.5");
+    await page.keyboard.press("Control+z");
+    await expect(bass).toHaveAttribute("aria-valuenow", "0");
+  });
+
+  test("퍼센트·밀리초 칸: 단위가 값과 달라도 숫자 입력이 바로 반영된다(트랙 볼륨 %, 반응 시간 ms)", async ({ page }) => {
+    await openApp(page);
+    const volume = knob(page, "트랙 볼륨");
+    await entryOpener(page, "트랙 볼륨 값(%)").click();
+    await entryField(page, "트랙 볼륨 값(%)").fill("40");
+    await page.keyboard.press("Enter");
+    await expect(volume).toHaveAttribute("aria-valuenow", "0.4");
+    await expect(volume).toHaveAttribute("aria-valuetext", "40%");
+    await expect(page.locator(S.trackVolume).first()).toHaveValue("0.4"); // 트랙 헤더 슬라이더가 같은 값을 가리킨다
+
+    const attack = knob(page, "반응 시간 컴프레서"); // 0.012초 = 12ms
+    await attack.scrollIntoViewIfNeeded();
+    await expect(attack).toHaveAttribute("aria-valuetext", "12ms");
+    await entryOpener(page, "반응 시간 값(ms)").click();
+    await entryField(page, "반응 시간 값(ms)").fill("250");
+    await page.keyboard.press("Enter");
+    await expect(attack).toHaveAttribute("aria-valuenow", "0.25");
+    await expect(attack).toHaveAttribute("aria-valuetext", "250ms");
+  });
+
+  test("슬라이더에는 숫자 칸이 붙어 있고, 더블클릭하면 기본값으로 돌아온다(트랙 볼륨·클립 게인·마스터 볼륨·모니터 볼륨)", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await page.locator(S.clip).first().click({ position: { x: 100, y: 40 } }); // 클립 칸(게인)이 보이도록 클립을 고른다
+    await expect(page.locator(S.clip).first()).toHaveClass(/selected/);
+
+    const gain = page.locator(S.clipGain);
+    const gainInput = page.locator(S.clipGainInput);
+    await gainInput.fill("1.5");
+    await gainInput.press("Enter");
+    await expect(gain).toHaveValue("1.5");
+    await gain.dblclick();
+    await expect(gain).toHaveValue("1");
+    await expect(gainInput).toHaveValue("1");
+
+    const master = page.locator(S.masterVolume);
+    const masterInput = page.locator(S.masterVolumeInput);
+    await masterInput.fill("-6");
+    await masterInput.press("Enter");
+    await expect(master).toHaveValue("-6");
+    await expect(page.locator(S.masterVolumeValue)).toHaveText("-6.0 dB");
+    await master.dblclick();
+    await expect(master).toHaveValue("0");
+
+    const monitor = page.locator(monitorVolume);
+    const monitorInput = page.locator('[data-testid="monitor-volume-input"]');
+    await expect(monitorInput).toHaveValue("85");
+    await monitorInput.fill("40");
+    await monitorInput.press("Enter");
+    await expect(monitor).toHaveValue("40");
+    await monitor.dblclick();
+    await expect(monitor).toHaveValue("85");
+
+    // 트랙 헤더를 누르면 트랙이 선택되며 클립 선택이 풀리므로 마지막에 한다
+    const trackVolume = page.locator(S.trackVolume).first();
+    const trackVolumeInput = page.locator('[data-testid="track-volume-input"]').first();
+    await expect(trackVolumeInput).toHaveValue("86");
+    await trackVolumeInput.fill("50");
+    await trackVolumeInput.press("Enter");
+    await expect(trackVolume).toHaveValue("0.5");
+    await trackVolume.dblclick();
+    await expect(trackVolume).toHaveValue("0.86");
+    await expect(trackVolumeInput).toHaveValue("86");
+  });
+
+  test("잔향 길이: 슬라이더를 키보드로 움직이고, 값 글자를 눌러 초 단위로 입력하며, 더블클릭하면 기본값이다", async ({ page }) => {
+    await openApp(page);
+    const decay = page.locator('input[aria-label="잔향 길이"]');
+    await decay.scrollIntoViewIfNeeded();
+    await expect(decay).toHaveValue("2.4");
+    await decay.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(decay).toHaveValue("2.5");
+    await expect(decay).toBeFocused();
+
+    await entryOpener(page, "잔향 길이 값(초)").click();
+    await entryField(page, "잔향 길이 값(초)").fill("5");
+    await page.keyboard.press("Enter");
+    await expect(decay).toHaveValue("5");
+    await expect(decay).toHaveAttribute("aria-valuetext", "5.0초");
+
+    await decay.dblclick();
+    await expect(decay).toHaveValue("2.4");
+  });
+
+  test("템포 동기화를 켜면 딜레이 시간 노브가 잠긴다(키보드·끌기가 먹지 않는다). 끄면 풀린다", async ({ page }) => {
+    await openApp(page);
+    const time = knob(page, "시간 딜레이");
+    await time.scrollIntoViewIfNeeded();
+    await expect(time).toHaveAttribute("aria-disabled", "false");
+    await page.locator("label.dly-toggle").first().click(); // 템포 동기화
+    await expect(time).toHaveAttribute("aria-disabled", "true");
+    await time.focus();
+    await page.keyboard.press("ArrowUp");
+    await dragKnob(page, "시간 딜레이", -60);
+    await expect(time).toHaveAttribute("aria-valuenow", "375");
+
+    await page.locator("label.dly-toggle").first().click();
+    await expect(time).toHaveAttribute("aria-disabled", "false");
+    await time.focus();
+    await page.keyboard.press("ArrowUp");
+    await expect(time).not.toHaveAttribute("aria-valuenow", "375");
+  });
+
+  test("이펙트 전원 단추는 이름과 눌림 상태를 가진다(이퀄라이저·컴프레서·딜레이·리버브)", async ({ page }) => {
+    await openApp(page);
+    for (const [name, initial] of [["이퀄라이저 켜기", "true"], ["컴프레서 켜기", "false"], ["딜레이 켜기", "false"], ["리버브 켜기", "false"]] as const) {
+      const power = page.getByRole("button", { name, exact: true });
+      await power.scrollIntoViewIfNeeded();
+      await expect(power, name).toHaveAttribute("aria-pressed", initial);
+      await power.click();
+      await expect(power, `${name} 누른 뒤`).toHaveAttribute("aria-pressed", initial === "true" ? "false" : "true");
+    }
+  });
+
+  test("딜레이 장비의 노브 다섯 개는 패널이 좁아져도 줄어들어 모두 보인다(예전에는 5번째가 오른쪽에서 잘렸다)", async ({ page }) => {
+    await openApp(page);
+    const widths: Array<[number, number]> = [[1280, 800], [1366, 768], [1440, 900]];
+    const found: Array<Record<string, unknown>> = [];
+    for (const [width, height] of widths) {
+      await page.setViewportSize({ width, height });
+      await knob(page, "시간 딜레이").scrollIntoViewIfNeeded();
+      const result = await page.evaluate(() => {
+        const row = document.querySelector(".dly-knobs-row")!.getBoundingClientRect();
+        const wraps = [...document.querySelectorAll(".dly-knobs-row .dly-knob-wrap")];
+        return {
+          count: wraps.length,
+          rowWidth: Math.round(row.width),
+          knobs: wraps.map((wrap) => {
+            const dial = wrap.querySelector("[role=slider]")!.getBoundingClientRect();
+            const value = wrap.querySelector(".dly-knob-value")!;
+            return {
+              inside: dial.left >= row.left - 0.5 && dial.right <= row.right + 0.5,
+              size: Math.round(dial.width),
+              valueFits: value.scrollWidth <= value.clientWidth + 1,
+            };
+          }),
+        };
+      });
+      const where = `${width}px ${JSON.stringify(result)}`;
+      expect(result.count, where).toBe(5);
+      for (const k of result.knobs) {
+        expect(k.inside, `행 밖으로 나감: ${where}`).toBe(true);
+        expect(k.size, `노브가 너무 작음: ${where}`).toBeGreaterThanOrEqual(36);
+        expect(k.valueFits, `값 글자가 칸보다 넓음: ${where}`).toBe(true);
+      }
+      found.push({ 화면: width, 행폭: result.rowWidth, 노브폭: result.knobs.map((k) => k.size) });
+    }
+    measuredP50("딜레이 노브 줄이기", found);
   });
 });

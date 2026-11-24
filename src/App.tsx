@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { audioEngine } from "./audio/currentEngine";
-import { Inspector } from "./components/Inspector";
+import { Inspector } from "./ui/inspector/Inspector";
 import { Timeline } from "./components/Timeline";
 import { AppShell } from "./app/AppShell";
 import { quantizeSelectedClips, redo, undo, zoomToFit, zoomToSelectedClips, deleteSelectedClips } from "./app/actions";
