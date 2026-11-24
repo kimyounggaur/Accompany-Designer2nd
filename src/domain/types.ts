@@ -14,6 +14,7 @@ export type PlaylistTool =
 export type PlaylistSnap =
   | "main"
   | "line"
+  | "bar"
   | "beat"
   | "halfBeat"
   | "quarterBeat"
@@ -144,7 +145,7 @@ export interface MasterSettings {
   volumeDb: number;
 }
 
-/** 박자표(C13). 지금은 문서에 담기만 하고 화면·소리는 4/4로 동작한다. */
+/** 박자표(C13). 눈금자의 마디 번호·마디 스냅·메트로놈 강박이 이 값을 따른다(P5-5). 템포는 박자표와 상관없이 4분음표 기준이다. */
 export interface TimeSignature {
   beats: number;
   unit: 4 | 8;

@@ -12,14 +12,15 @@
  *  - 정보: 상태 줄만
  *  - 도구·스냅·녹음 옵션·화면 모드처럼 화면이 이미 보여 주는 상태 변화: 안내하지 않음
  */
-import type { Clip } from "../domain/types";
+import { clipsToCutAt } from "../domain/timeline/clipMath";
 import { ko } from "../i18n/ko";
 import { useDawStore } from "../store/useDawStore";
 import { useRecordingStore } from "../state/recordingStore";
 import { history } from "../state/history";
+import { copyClips, readClipboard } from "../services/clipboard";
 import { confirmAction } from "../services/confirm";
 import { notify } from "../services/notify";
-import { createId, findClip, getClipTimelineDuration } from "../utils/audioMath";
+import { findClip } from "../utils/audioMath";
 import { readPlayhead } from "./playhead";
 
 const store = () => useDawStore.getState();
@@ -109,24 +110,34 @@ export function deleteSelectedClips() {
 
 // ───── 클립 메뉴(설계 P5-4) ─────
 
-/** 재생선이 있는 자리에서 클립 하나를 자른다. 재생선이 클립 안에 없으면 자르지 않고 안내만 한다. */
-export function sliceClipAtPlayhead(clipId: string) {
-  const result = store().sliceClipAt(clipId, readPlayhead());
-  if (result.ok) {
-    notify("info", text.clipSliced);
+/**
+ * 재생선(편집 커서)이 있는 자리에서 클립을 자른다(Ctrl+E, 클립 메뉴). 고른 클립이 있으면 그중 재생선이 안쪽에 있는 클립을,
+ * 고른 클립이 없으면 재생선이 지나는 모든 트랙의 클립을 자른다. 자른 클립이 없으면 이유만 안내하고 문서는 바꾸지 않는다.
+ * 여러 클립을 잘라도 실행 취소 한 단계이고, 오른쪽 조각들이 선택된다.
+ */
+export function sliceSelectedClipsAtPlayhead() {
+  const state = store();
+  const position = readPlayhead();
+  const ids = clipsToCutAt(state.tracks, state.bpm, state.selectedClipIds, position);
+  if (!ids.length) {
+    notify("info", state.selectedClipIds.length ? text.playheadOutsideSelection : text.playheadOnNoClip);
     return;
   }
-  notify("info", result.reason === "not-found" ? text.sliceNeedsClip : text.playheadOutsideClip);
+  const result = store().sliceClipsAt(ids, position);
+  if (result.ok) notify("info", result.count === 1 ? text.clipSliced : text.clipsSliced(result.count));
 }
 
-/** 클립 하나를 바로 뒤(끝난 자리)에 복제한다. 복제본이 선택된다. */
-export function duplicateClip(clipId: string) {
-  const state = store();
-  const found = findClip(state.tracks, clipId);
-  if (!found) return;
-  const startTime = found.clip.startTime + getClipTimelineDuration(state.bpm, found.clip);
-  const copyId = state.addClipFromSource(clipId, found.track.id, startTime);
-  if (copyId) notify("info", text.clipDuplicated);
+/**
+ * 고른 클립들을 바로 뒤에 복제한다(Ctrl+D, 클립 메뉴). 고른 클립 전체를 한 덩어리로 보고 덩어리가 끝난 자리에 같은 간격으로 놓는다.
+ * 복제본이 선택된다. 고른 클립이 없으면 안내만 한다.
+ */
+export function duplicateSelectedClips() {
+  const result = store().duplicateSelectedClips();
+  if (!result.ok) {
+    notify("info", text.duplicateNeedsSelection);
+    return;
+  }
+  notify("info", result.count === 1 ? text.clipDuplicated : text.clipsDuplicated(result.count));
 }
 
 /**
@@ -218,39 +229,31 @@ export function resetSelectedClipSource() {
 
 // ───── 복사·붙여넣기 ─────
 
-/** 앱 안 클립보드: 복사한 클립의 사본. (P5-5에서 services/clipboard.ts로 옮겨 트랙 사이 위치를 지키게 한다.) */
-let clipboard: Clip[] = [];
-
 /** 선택한 클립을 복사한다. 선택이 없으면 안내만 하고, 먼저 복사해 둔 것은 그대로 둔다. */
 export function copySelectedClips() {
   const state = store();
-  const copied = state.tracks
-    .flatMap((track) => track.clips.filter((clip) => state.selectedClipIds.includes(clip.id)))
-    .map((clip) => ({ ...clip }));
-  if (!copied.length) {
-    notify("info", text.copyNeedsSelection);
-    return;
-  }
-  clipboard = copied;
-  notify("info", text.clipsCopied(copied.length));
+  const count = copyClips(state.tracks, state.selectedClipIds);
+  notify("info", count ? text.clipsCopied(count) : text.copyNeedsSelection);
 }
 
 /**
- * 복사해 둔 클립을 재생 위치에 붙인다. 복사한 것 중 가장 앞의 클립이 재생 위치에 오고 나머지는 서로의 간격을 지킨다.
- * 원래 트랙이 지금 없으면 그 클립은 붙이지 못한다. 하나도 붙이지 못했으면 붙였다고 알리지 않는다.
+ * 복사해 둔 클립을 재생 위치에 붙인다. 복사한 것 중 가장 앞의 클립이 재생 위치에 오고 나머지는 서로의 시간·트랙 간격을 지킨다.
+ * 트랙은 지금 고른 트랙(클립이 아니라 트랙만 골랐을 때) → 복사한 클립이 있던 트랙 순서로 정하고, 아래로 이어지는 트랙이 모자라면 새 트랙을 만든다.
+ * 붙인 클립들은 실행 취소 한 단계로 되돌아가고, 하나도 붙이지 못했으면 붙였다고 알리지 않는다.
  */
 export function pasteClips() {
-  const state = store();
-  const first = Math.min(...clipboard.map((clip) => clip.startTime));
-  // 재생 중에 붙이면 눈앞에서 흐르는 위치에 붙는다(예전과 같다).
-  const at = readPlayhead();
-  let pasted = 0;
-  for (const clip of clipboard) {
-    if (!state.tracks.some((track) => track.id === clip.trackId)) continue;
-    state.addClip(clip.trackId, { ...clip, id: createId("clip"), startTime: at + clip.startTime - first });
-    pasted += 1;
+  const content = readClipboard();
+  if (!content) {
+    notify("info", text.pasteNeedsCopy);
+    return;
   }
-  notify("info", pasted ? text.clipsPasted(pasted) : text.pasteNeedsCopy);
+  // 재생 중에 붙이면 눈앞에서 흐르는 위치에 붙는다(예전과 같다).
+  const result = store().pasteClips(content, readPlayhead());
+  if (!result.ok) {
+    notify("info", result.reason === "no-source" ? text.pasteNeedsSource : text.pasteNeedsCopy);
+    return;
+  }
+  notify("info", result.newTracks > 0 ? text.clipsPastedToNewTracks(result.count, result.newTracks) : text.clipsPasted(result.count));
 }
 
 // ───── 선택 ─────

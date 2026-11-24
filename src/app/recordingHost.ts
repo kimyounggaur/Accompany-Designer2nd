@@ -4,6 +4,7 @@
  */
 import type { RecordingEvent, RecordingHost } from "../audio/recording/RecordingController";
 import * as placement from "../domain/timeline/placement";
+import { effectiveCountIn, normalizeTimeSignature } from "../domain/timeline/snap";
 import { ko } from "../i18n/ko";
 import { notify, notifyError } from "../services/notify";
 import * as commands from "../state/commands/index";
@@ -47,9 +48,15 @@ export const recordingHost: RecordingHost = {
   settings: () => {
     const { armedTrackId, inputDeviceId, monitoringEnabled, metronomeEnabled, countInBeats, latencyOffsetMs } =
       useRecordingStore.getState();
-    return { armedTrackId, inputDeviceId, monitoringEnabled, metronomeEnabled, countInBeats, latencyOffsetMs };
+    // 카운트인 박 수는 박자표에 맞는 값으로 고른다(박자표를 바꾸면 "1마디"의 박 수가 달라진다). 화면의 선택 칸도 같은 함수로 값을 정한다.
+    const count = effectiveCountIn(countInBeats, getDoc().timeSignature);
+    return { armedTrackId, inputDeviceId, monitoringEnabled, metronomeEnabled, countInBeats: count, latencyOffsetMs };
   },
   bpm: () => getDoc().bpm,
+  timeSignature: () => {
+    const { beats, unit } = normalizeTimeSignature(getDoc().timeSignature);
+    return { beats, unit };
+  },
   playhead: () => useDawStore.getState().cursor,
   update: (patch) => useRecordingStore.getState().setProgress(patch),
   reset: () => useRecordingStore.getState().resetProgress(),

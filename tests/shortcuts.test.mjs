@@ -18,6 +18,7 @@ const { useDawStore } = await import("../src/store/useDawStore.ts");
 const { useDialogStore } = await import("../src/state/dialogStore.ts");
 const { useNoticeStore } = await import("../src/state/noticeStore.ts");
 const { history } = await import("../src/state/history.ts");
+const { clearClipboard } = await import("../src/services/clipboard.ts");
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -49,6 +50,8 @@ test("표: 설계서의 단축키 표와 같다(입력 칸 안에서 듣는 것�
     save: ["Mod+KeyS"],
     copy: ["Mod+KeyC"],
     paste: ["Mod+KeyV"],
+    duplicate: ["Mod+KeyD"],
+    sliceAtPlayhead: ["Mod+KeyE"],
     selectAll: ["Mod+KeyA"],
     deleteClips: ["Delete", "Backspace"],
     "tool:move": ["KeyV"],
@@ -80,11 +83,15 @@ test("표: 설계서의 단축키 표와 같다(입력 칸 안에서 듣는 것�
   for (const shortcut of sc.SHORTCUTS) assert.match(shortcut.label, /[가-힣]/, `${shortcut.id}의 이름이 한국어가 아니다`);
 });
 
-test("표: 브라우저가 막을 수 없는 키(Ctrl+T·W·N)와 기능이 아직 없는 Ctrl+D·E는 쓰지 않는다", () => {
+test("표: 브라우저가 막을 수 없는 키(Ctrl+T·W·N)는 쓰지 않고, Ctrl+D·E는 복제·재생선에서 자르기가 쓴다(P5-5)", () => {
   const used = new Set(sc.SHORTCUTS.flatMap((shortcut) => shortcut.keys));
-  for (const unusable of ["Mod+KeyT", "Mod+KeyW", "Mod+KeyN", "Mod+KeyD", "Mod+KeyE"]) {
-    assert.equal(used.has(unusable), false, `${unusable}는 표에 없다(Ctrl+D·E는 P5-5의 복제·자르기와 함께 들어온다)`);
+  for (const unusable of ["Mod+KeyT", "Mod+KeyW", "Mod+KeyN"]) {
+    assert.equal(used.has(unusable), false, `${unusable}는 표에 없다(브라우저가 먼저 가져간다)`);
   }
+  assert.equal(sc.shortcutOf("duplicate").keys.join(), "Mod+KeyD");
+  assert.equal(sc.shortcutOf("sliceAtPlayhead").keys.join(), "Mod+KeyE");
+  assert.equal(sc.keyLabel("duplicate"), "Ctrl+D");
+  assert.equal(sc.keyLabel("sliceAtPlayhead"), "Ctrl+E");
 });
 
 test("충돌: 같은 키 조합이 두 번 등록되면 실패한다", () => {
@@ -365,6 +372,7 @@ beforeEach(() => {
   history.clear();
   useNoticeStore.getState().reset();
   useDialogStore.setState({ confirm: undefined });
+  clearClipboard(); // 앱 안 클립보드는 모듈에 남으므로 시험마다 비운다
 });
 
 const fire = (event) => sc.handleKeyEvent(event, keyHandlers, isShortcutBlocked);
@@ -396,6 +404,8 @@ test("흐름: 선택 상자·글자 칸에 초점이 있으면 V·P·B·C가 도
 test("흐름: Ctrl+C·Ctrl+V는 앱 안 클립보드로 클립을 하나 더 만든다", () => {
   const store = useDawStore.getState();
   const trackId = store.tracks[0].id;
+  // 붙여넣기는 이 프로젝트에 음원이 있는 클립만 붙인다(음원이 없는 클립은 소리도 파형도 없다).
+  store.addAudioAsset({ id: "asset", fileName: "asset.wav", duration: 10, sampleRate: 48000, channels: 1, source: "upload" });
   store.addClip(trackId, clipOn(trackId, "원본", 3));
   store.setSelectedClips(["원본"]);
   assert.equal(clipCount(), 1);

@@ -3970,7 +3970,7 @@ test.describe("P5-3 화면 갱신 루프 하나", () => {
     await startPlaying(page);
     await page.waitForTimeout(1000);
     const flowing = { x: await playheadX(page), t: await shownSeconds(page) };
-    expect(flowing.t).toBeGreaterThan(cursorSeconds + 1);
+    expect(flowing.t).toBeGreaterThan(cursorSeconds + 0.8); // 재생이 실제로 시작되기까지 수십 ms가 걸려, 1초 기다린 값이 딱 +1초를 넘는지는 동전 던지기(6번 중 1번꼴로 5.98·6.00이 나옴)
     expect(Math.abs(flowing.x - flowing.t * 96)).toBeLessThan(10); // 시간 표시는 초당 30번, 재생선은 매 프레임이라 조금 어긋날 수 있다
 
     await page.click(S.play); // 일시정지
@@ -4560,5 +4560,324 @@ test.describe("P5-4 클립 메뉴와 삭제 안전장치", () => {
     await page.keyboard.press("Control+v");
     await expect(page.locator(S.clip)).toHaveCount(2);
     measuredP54("메뉴 동작", { 복제: "+1", 음소거_전환: "한 단계", 자르기: "2조각", 복사: "Ctrl+V로 붙음" });
+  });
+});
+
+// ───────────────────────── P5-5 기본 편집 기능 ─────────────────────────
+
+const measuredP55 = (name: string, value: unknown) => console.log(`P5-5 측정 ${name}: ${JSON.stringify(value)}`);
+
+/** 메트로놈 클릭(OscillatorNode)의 주파수와 예약 시각을 잡아 두는 훅: 1320Hz가 강박, 880Hz가 약박이다 */
+const CLICK_PROBES = `(() => {
+  window.__clicks = [];
+  const create = BaseAudioContext.prototype.createOscillator;
+  BaseAudioContext.prototype.createOscillator = function (...args) {
+    const node = create.apply(this, args);
+    const set = node.frequency.setValueAtTime.bind(node.frequency);
+    node.frequency.setValueAtTime = (value, time) => { window.__clicks.push([time, value]); return set(value, time); };
+    return node;
+  };
+})();`;
+
+test.describe("P5-5 기본 편집 기능", () => {
+  const clearSelection = async (page: Page) => {
+    await page.locator('button[title="플레이리스트 메뉴"]').click();
+    await page.locator(".menu-dropdown button", { hasText: "선택 해제" }).click();
+  };
+  const pickMenuItem = async (page: Page, label: string) => {
+    await page.locator('button[title="플레이리스트 메뉴"]').click();
+    await page.locator(".menu-dropdown button", { hasText: label }).click();
+  };
+  const timeSignature = (page: Page) => page.locator('select[aria-label="박자표"]');
+  const lanes = (page: Page) => page.locator(".lanes");
+
+  /** 클립마다 [트랙 번호(위에서 0), 왼쪽 px]를 (트랙, 왼쪽) 순서로 정렬해 돌려준다. 트랙 번호는 클립 가운데 높이가 몇째 트랙 머리 줄 안에 드는지로 센다 */
+  async function slots(page: Page): Promise<Array<[number, number]>> {
+    const headers = await page.locator(S.trackHeader).evaluateAll((elements) =>
+      elements.map((element) => {
+        const rect = element.getBoundingClientRect();
+        return [rect.top, rect.bottom];
+      }),
+    );
+    const found = await page.locator(S.clip).evaluateAll(
+      (elements, ranges) =>
+        elements.map((element) => {
+          const rect = element.getBoundingClientRect();
+          const middle = (rect.top + rect.bottom) / 2;
+          return [ranges.findIndex(([top, bottom]) => middle >= top && middle < bottom), Math.round(parseFloat((element as HTMLElement).style.left))] as [number, number];
+        }),
+      headers,
+    );
+    return found.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  }
+
+  /** `index`째 클립의 몸통(가장자리·페이드 손잡이를 피한 자리)을 잡아 (dx, dy)만큼 끈다 */
+  async function dragClip(page: Page, index: number, dx: number, dy = 0) {
+    const box = (await page.locator(S.clip).nth(index).boundingBox())!;
+    const x = box.x + 100;
+    const y = box.y + 40;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y + dy, { steps: 8 });
+    await page.mouse.up();
+  }
+
+  /** 파일을 타임라인 위 (x, y)(화면 좌표)에 끌어다 놓는 사건을 만든다. `drop`을 false로 하면 끌고 있기만 한다. */
+  async function dropFiles(page: Page, names: string[], at: { x: number; y: number }, options: { drop?: boolean; target?: "point" | "body" } = {}) {
+    const base64 = fs.readFileSync(WAV).toString("base64");
+    return page.evaluate(
+      ({ names, base64, at, drop, target }) => {
+        const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+        const transfer = new DataTransfer();
+        for (const name of names) transfer.items.add(new File([bytes], name, { type: "audio/wav" }));
+        const element = target === "body" ? document.body : document.elementFromPoint(at.x, at.y) ?? document.body;
+        const send = (type: string) => element.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, clientX: at.x, clientY: at.y, dataTransfer: transfer }));
+        send("dragenter");
+        send("dragover");
+        // dispatchEvent는 누군가 preventDefault를 불렀으면 false를 돌려준다
+        return drop ? !send("drop") : false;
+      },
+      { names, base64, at, drop: options.drop ?? true, target: options.target ?? "point" },
+    );
+  }
+
+  test("Ctrl+E 재생선에서 자르기: 고른 클립이 없으면 재생선이 지나는 모든 트랙의 클립을, 있으면 고른 클립만 한 번에 자르고, 실행 취소 한 번에 돌아온다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await upload(page); // 둘째 트랙: 같은 자리(0~8초)
+    await expect(page.locator(S.trackHeader)).toHaveCount(2);
+    await clearSelection(page);
+    await page.locator(S.ruler).click({ position: { x: 480, y: 8 } }); // 재생선을 5초로
+
+    await page.keyboard.press("Control+e");
+    await expect(page.locator(S.clip)).toHaveCount(4);
+    await expect(page.locator(S.status)).toContainText("클립 2개 자르기 완료");
+    const cut = await slots(page);
+    expect(cut.filter(([, left]) => Math.abs(left - 480) <= 1).map(([row]) => row)).toEqual([0, 1]); // 두 트랙 모두 5초에서 이어지는 오른쪽 조각
+    await expect(page.locator(`${S.clip}.selected`)).toHaveCount(2); // 오른쪽 조각들이 선택된다
+
+    await page.keyboard.press("Control+z");
+    await expect(page.locator(S.clip)).toHaveCount(2); // 두 트랙을 한 번에 되돌렸다
+
+    await page.locator(S.clip).first().click({ position: { x: 100, y: 40 } }); // 하나만 고르면 그 클립만
+    await page.keyboard.press("Control+e");
+    await expect(page.locator(S.clip)).toHaveCount(3);
+    await expect(page.locator(S.status)).toContainText("클립 자르기 완료");
+
+    await page.locator(S.ruler).click({ position: { x: 0, y: 8 } }); // 재생선이 클립 가장자리(0초)면 자르지 않고 이유를 알린다
+    await clearSelection(page);
+    await page.keyboard.press("Control+e");
+    await expect(page.locator(S.clip)).toHaveCount(3);
+    await expect(page.locator(S.status)).toContainText("재생선이 지나는 클립이 없어");
+    measuredP55("Ctrl+E", { 선택_없음: "재생선이 지나는 2클립", 선택_있음: "고른 1클립", 되돌리기: "한 단계" });
+  });
+
+  test("Ctrl+D 복제: 고른 클립을 바로 뒤에 같은 트랙으로 놓고 복제본을 선택하며, 실행 취소 한 번에 사라진다", async ({ page }) => {
+    await openApp(page);
+    await upload(page); // 8초 클립: 트랙 1의 0~8초
+    await page.locator(S.clip).first().click({ position: { x: 100, y: 40 } });
+    await page.keyboard.press("Control+d");
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    await expect(page.locator(S.status)).toContainText("클립을 복제했습니다.");
+    const [original, copy] = await slots(page);
+    expect(copy[0]).toBe(original[0]); // 같은 트랙
+    expect(Math.abs(copy[1] - original[1] - 8 * 96)).toBeLessThanOrEqual(2); // 원본이 끝난 자리(8초)
+    await expect(page.locator(`${S.clip}.selected`)).toHaveCount(1); // 복제본이 선택된다
+    expect((await slots(page)).length).toBe(2);
+
+    await page.keyboard.press("Control+d"); // 복제본을 다시 복제하면 그 뒤로 이어진다
+    await expect(page.locator(S.clip)).toHaveCount(3);
+    expect((await slots(page)).map(([, left]) => left).map((left) => Math.round(left / 96))).toEqual([0, 8, 16]);
+
+    await page.keyboard.press("Control+z");
+    await page.keyboard.press("Control+z");
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    measuredP55("Ctrl+D", { 복제_위치: "원본이 끝난 자리(8초)", 선택: "복제본", 되돌리기: "복제마다 한 단계" });
+  });
+
+  test("복사·붙여넣기: 트랙 사이 간격을 지켜 재생 위치에 붙이고, 아래 트랙이 모자라면 새 트랙을 만들며, 실행 취소 한 번에 모두 돌아온다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await upload(page); // 트랙 1·2에 하나씩
+    await page.keyboard.press("Control+a");
+    await page.keyboard.press("Control+c");
+    await expect(page.locator(S.status)).toContainText("클립 2개 복사됨");
+    await clearSelection(page);
+    await page.locator(S.trackHeader).nth(1).click({ position: { x: 4, y: 4 } }); // 클립 없이 둘째 트랙만 고른다
+    await page.locator(S.ruler).click({ position: { x: 480, y: 8 } }); // 재생선을 5초로
+
+    await page.keyboard.press("Control+v");
+    await expect(page.locator(S.trackHeader)).toHaveCount(3); // 둘째 트랙부터 두 줄이 필요해서 새 트랙이 하나 생겼다
+    await expect(page.locator(S.clip)).toHaveCount(4);
+    await expect(page.locator(S.status)).toContainText("클립 2개 붙여넣기 완료 (새 트랙 1개)");
+    const pasted = (await slots(page)).filter(([, left]) => Math.abs(left - 480) <= 1);
+    expect(pasted.map(([row]) => row)).toEqual([1, 2]); // 위 클립은 고른 트랙(둘째)에, 아래 클립은 그 아래 새 트랙에
+
+    await page.keyboard.press("Control+z");
+    await expect(page.locator(S.trackHeader)).toHaveCount(2); // 클립과 새 트랙이 한 번에 사라진다
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    measuredP55("복사·붙여넣기", { 붙인_클립: 2, 새_트랙: 1, 되돌리기: "한 단계" });
+  });
+
+  test("여러 클립 함께 옮기기: 고른 클립 하나를 끌면 모두 같은 시간·같은 트랙 칸만큼 움직이고, 실행 취소 한 번에 돌아온다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await upload(page);
+    await upload(page); // 트랙 1~3, 모두 0초
+    await page.keyboard.press("Control+a");
+    const before = await slots(page);
+    expect(before).toEqual([[0, 0], [1, 0], [2, 0]]);
+
+    await dragClip(page, 1, 192); // 가운데 클립을 오른쪽으로 2초(192px)
+    expect(await slots(page)).toEqual([[0, 192], [1, 192], [2, 192]]); // 선택한 셋이 함께 움직였다
+    await page.keyboard.press("Control+z");
+    expect(await slots(page)).toEqual(before); // 끌기 한 번 = 실행 취소 한 단계
+
+    await page.locator(S.clip).nth(0).click({ position: { x: 100, y: 40 } }); // 첫째·둘째만 골라 한 칸 아래로
+    await page.locator(S.clip).nth(1).click({ position: { x: 100, y: 40 }, modifiers: ["Shift"] });
+    await expect(page.locator(`${S.clip}.selected`)).toHaveCount(2);
+    await dragClip(page, 0, 0, 116);
+    expect(await slots(page)).toEqual([[1, 0], [2, 0], [2, 0]]); // 첫째는 2번 트랙으로, 둘째는 3번 트랙으로, 고르지 않은 셋째는 그대로
+    await page.keyboard.press("Control+z");
+    expect(await slots(page)).toEqual(before);
+
+    await dragClip(page, 0, -400); // 곡 시작(0초) 앞으로는 나가지 않는다: 모두 그 자리에 멈춘다
+    expect(await slots(page)).toEqual(before);
+    measuredP55("여러 클립 옮기기", { 선택: 3, 시간_이동_px: 192, 트랙_이동: "2칸 → 한 칸씩 함께", 되돌리기: "끌기 한 단계" });
+  });
+
+  test("그룹 함께 옮기기: 그룹으로 묶은 클립은 하나만 끌어도 같은 그룹이 모두 따라오고, 그룹 해제 뒤에는 따로 움직인다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await upload(page); // 두 트랙, 모두 0초
+    await page.keyboard.press("Control+a");
+    await pickMenuItem(page, "선택 항목 그룹화");
+    await clearSelection(page);
+    await page.locator(S.clip).first().click({ position: { x: 100, y: 40 } }); // 하나만 고른다
+    await expect(page.locator(`${S.clip}.selected`)).toHaveCount(1);
+
+    await dragClip(page, 0, 192);
+    expect(await slots(page)).toEqual([[0, 192], [1, 192]]); // 고르지 않은 같은 그룹 클립도 함께
+    await page.keyboard.press("Control+z");
+    expect(await slots(page)).toEqual([[0, 0], [1, 0]]);
+
+    await page.locator(S.clip).first().click({ position: { x: 100, y: 40 } }); // 그룹 해제
+    await pickMenuItem(page, "선택 항목 그룹 해제");
+    await clearSelection(page);
+    await page.locator(S.clip).first().click({ position: { x: 100, y: 40 } });
+    await dragClip(page, 0, 192);
+    expect(await slots(page)).toEqual([[0, 192], [1, 0]]); // 이번에는 끈 클립만 움직였다
+    measuredP55("그룹 옮기기", { 그룹_클립_수: 2, 하나만_끌어도: "함께", 해제_뒤: "따로" });
+  });
+
+  test("마디 스냅: 클립을 끌면 마디 시작에 붙고(4/4는 2초, 3/4는 1.5초), 박자표를 바꾸면 마디 길이가 따라 바뀐다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await page.locator(".snap-tool").click();
+    await page.locator(".snap-dropdown button", { hasText: "마디" }).first().click();
+    await expect(page.locator(".snap-tool")).toHaveAttribute("title", "스냅: 마디");
+
+    await dragClip(page, 0, 300); // 3.125초 → 가장 가까운 마디 시작(2초 간격)은 4초
+    expect((await slots(page))[0][1]).toBe(384);
+
+    await timeSignature(page).selectOption("3/4"); // 마디 1.5초 = 144px
+    await dragClip(page, 0, 150); // 4초 + 1.5625초 = 5.5625초 → 가장 가까운 마디 시작(1.5초 간격)은 6초
+    expect((await slots(page))[0][1]).toBe(576);
+    expect(576 % 144).toBe(0);
+
+    await page.locator(".snap-tool").click(); // 스냅을 '없음'으로 하면 놓은 자리 그대로
+    await page.locator(".snap-dropdown button", { hasText: "없음" }).first().click();
+    await dragClip(page, 0, 50);
+    expect(Math.abs((await slots(page))[0][1] - (576 + 50))).toBeLessThanOrEqual(2);
+    measuredP55("마디 스냅", { "4/4": "384px(4초)", "3/4": "576px(6초)", 없음: "그대로" });
+  });
+
+  test("파일 끌어다 놓기: 놓은 트랙·시간(스냅 적용)에 클립이 생기고, 트랙 아래 빈 곳이면 새 트랙이 생기며, 앱 밖 파일 놓기는 막는다", async ({ page }) => {
+    await openApp(page);
+    const box = (await lanes(page).boundingBox())!;
+
+    await dropFiles(page, ["끌어다놓기.wav"], { x: box.x + 4 * 96 + 10, y: box.y + 40 }, { drop: false }); // 끌고 있는 동안
+    await expect(page.locator('[data-testid="drop-indicator"]')).toBeVisible();
+    await dropFiles(page, ["끌어다놓기.wav"], { x: box.x + 4 * 96 + 10, y: box.y + 40 }); // 4초 + 10px → 4초(0.25초 스냅)
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 8000 });
+    await expect(page.locator('[data-testid="drop-indicator"]')).toHaveCount(0);
+    expect(await slots(page)).toEqual([[0, 384]]);
+
+    // 트랙 아래 빈 곳(첫 트랙 아래) → 새 트랙, 2초 자리
+    await dropFiles(page, ["새트랙.wav"], { x: box.x + 2 * 96, y: box.y + 116 + 30 });
+    await expect(page.locator(S.clip)).toHaveCount(2, { timeout: 8000 });
+    await expect(page.locator(S.trackHeader)).toHaveCount(2);
+    expect(await slots(page)).toEqual([[0, 384], [1, 192]]);
+
+    // 파일 둘을 한꺼번에: 놓은 트랙부터 한 줄씩 아래로, 모자란 트랙은 새로 만든다
+    await dropFiles(page, ["가.wav", "나.wav"], { x: box.x + 1 * 96, y: box.y + 116 + 30 });
+    await expect(page.locator(S.clip)).toHaveCount(4, { timeout: 12000 });
+    await expect(page.locator(S.trackHeader)).toHaveCount(3);
+    expect(await slots(page)).toEqual([[0, 384], [1, 96], [1, 192], [2, 96]]);
+
+    // 실행 취소: 파일 하나 올리기 = 음원 추가 + 클립 추가(이력 두 단계)가 아니라 클립이 먼저 사라진다
+    await page.keyboard.press("Control+z");
+    await expect(page.locator(S.clip)).toHaveCount(3);
+
+    // 타임라인 밖(문서 전체)에 파일을 놓아도 브라우저가 파일을 열지 않도록 기본 동작이 막힌다
+    const prevented = await dropFiles(page, ["밖.wav"], { x: 5, y: 5 }, { target: "body" });
+    expect(prevented).toBe(true);
+    await page.waitForTimeout(300);
+    await expect(page.locator(S.clip)).toHaveCount(3);
+    measuredP55("파일 끌어다 놓기", { 첫째: "0번 트랙 4초", 빈_곳: "새 트랙 2초", 둘: "한 줄씩 아래로", 앱_밖_놓기: "기본 동작 막힘" });
+  });
+
+  test("박자표: 2/4·3/4·4/4·6/8을 고르면 눈금자의 마디 번호 자리가 따라 바뀌고, 한 번의 실행 취소로 돌아온다", async ({ page }) => {
+    await openApp(page);
+    const select = timeSignature(page);
+    await expect(select).toHaveValue("4/4");
+    expect(await select.locator("option").allInnerTexts()).toEqual(["2/4", "3/4", "4/4", "6/8"]);
+    const barLefts = () =>
+      page.locator(`${S.ruler} .ruler-tick.major`).evaluateAll((elements) => elements.slice(0, 4).map((element) => Math.round(parseFloat((element as HTMLElement).style.left))));
+
+    expect(await barLefts()).toEqual([0, 192, 384, 576]); // 4/4: 2초(192px)마다
+    await select.selectOption("3/4");
+    expect(await barLefts()).toEqual([0, 144, 288, 432]); // 3/4: 1.5초(144px)마다
+    await select.selectOption("2/4");
+    expect(await barLefts()).toEqual([0, 96, 192, 288]); // 2/4: 1초(96px)마다
+    await select.selectOption("6/8");
+    expect(await barLefts()).toEqual([0, 144, 288, 432]); // 6/8: 4분음표 3개 = 1.5초
+    await select.evaluate((element) => (element as HTMLSelectElement).blur());
+    await page.keyboard.press("Control+z");
+    await expect(select).toHaveValue("4/4"); // 한 번의 실행 취소로 처음 박자표
+    expect(await barLefts()).toEqual([0, 192, 384, 576]);
+    measuredP55("박자표 눈금자", { "4/4": "2초", "3/4": "1.5초", "2/4": "1초", "6/8": "1.5초" });
+  });
+
+  test("박자표: 카운트인 메트로놈이 마디 첫 박만 강박으로 울린다(3/4는 4분음표 3개, 6/8은 8분음표 6개가 한 마디)", async ({ page }) => {
+    await page.addInitScript(CLICK_PROBES);
+    await openApp(page, { query: P32_QUERY });
+    await page.click('button[title="녹음 메트로놈"]');
+    const clicks = () => page.evaluate(() => ((window as any).__clicks as Array<[number, number]>).slice());
+    const strongs = (list: Array<[number, number]>) => list.map(([, frequency]) => (frequency === 1320 ? "강" : "약")).join("");
+
+    await timeSignature(page).selectOption("3/4");
+    expect(await page.locator(S.countIn).locator("option").allInnerTexts()).toEqual(["카운트 없음", "1박", "2박", "1마디", "2마디"]);
+    await page.selectOption(S.countIn, "3"); // 1마디 = 클릭 3번
+    await page.click(S.record);
+    await expect(page.locator(S.record)).toHaveClass(/recording/, { timeout: 8000 });
+    await page.waitForTimeout(3200); // 카운트인 1.5초 + 녹음 중 한 마디(1.5초) 분의 클릭이 예약될 때까지
+    await page.click(S.stop);
+    const waltz = await clicks();
+    expect(strongs(waltz.slice(0, 6))).toBe("강약약강약약");
+    expect(Math.abs(waltz[1][0] - waltz[0][0] - 0.5)).toBeLessThan(0.02); // 4분음표 간격(120 BPM)
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 8000 });
+    await page.evaluate(() => ((window as any).__clicks.length = 0));
+
+    await timeSignature(page).selectOption("6/8");
+    await page.selectOption(S.countIn, "6"); // 1마디 = 클릭 6번(8분음표)
+    await page.click(S.record);
+    await expect(page.locator(S.record)).toHaveClass(/recording/, { timeout: 8000 });
+    await page.waitForTimeout(2200);
+    await page.click(S.stop);
+    const compound = await clicks();
+    expect(strongs(compound.slice(0, 7))).toBe("강약약약약약강");
+    expect(Math.abs(compound[1][0] - compound[0][0] - 0.25)).toBeLessThan(0.02); // 8분음표 간격
+    measuredP55("박자표 메트로놈", { "3/4": strongs(waltz.slice(0, 6)), "6/8": strongs(compound.slice(0, 7)) });
   });
 });

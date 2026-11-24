@@ -18,11 +18,13 @@ import { useDawStore } from "../store/useDawStore";
 import {
   copySelectedClips,
   deleteSelectedClips,
+  duplicateSelectedClips,
   pasteClips,
   quantizeSelectedClips,
   quickZoom,
   redo,
   selectAllClips,
+  sliceSelectedClipsAtPlayhead,
   undo,
   zoomIn,
   zoomOut,
@@ -57,6 +59,8 @@ export const keyHandlers: KeyHandlers = {
   },
   copy: copySelectedClips,
   paste: pasteClips,
+  duplicate: duplicateSelectedClips,
+  sliceAtPlayhead: sliceSelectedClipsAtPlayhead,
   selectAll: selectAllClips,
   deleteClips: () => {
     // 고른 클립이 없으면 할 일이 없다(안내도, 키의 기본 동작 막기도 하지 않는다).

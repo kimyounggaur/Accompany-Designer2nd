@@ -86,6 +86,8 @@ export interface RecordingEngine {
 export interface RecordingHost {
   settings(): RecordingSettings;
   bpm(): number;
+  /** 박자표: 마디의 박 수와 한 박이 몇 분음표인가. 메트로놈·카운트인의 클릭 간격과 강박을 정한다. */
+  timeSignature(): { beats: number; unit: number };
   /** 재생·녹음을 시작할 자리(편집 커서) */
   playhead(): number;
   update(patch: RecordingProgress): void;
@@ -140,6 +142,8 @@ interface Session {
   assetId: string;
   clipId: string;
   bpm: number;
+  /** 녹음을 시작할 때의 박자표 */
+  timeSignature: { beats: number; unit: number };
   latencyOffsetMs: number;
   inputLatency: number;
   /** 첫 조각이 도착했을 때 곡 시계가 가리키던 위치(그 조각의 첫 샘플 시각 기준) */
@@ -191,6 +195,7 @@ export class RecordingController {
       assetId: host.newId("asset"),
       clipId: host.newId("clip"),
       bpm: host.bpm(),
+      timeSignature: host.timeSignature(),
       latencyOffsetMs: settings.latencyOffsetMs,
       inputLatency: 0,
       frames: 0,
@@ -223,7 +228,8 @@ export class RecordingController {
       // 이미 재생 중이면 카운트인 없이 지금 흐르는 곡에 맞춰 바로 녹음한다(재생을 다시 시작하지 않는다).
       const playing = engine.isPlaying();
       const context = session.context;
-      const plan = planCountIn({ now: context.currentTime, beats: playing ? 0 : settings.countInBeats, bpm: session.bpm });
+      const { beats: beatsPerBar, unit: beatUnit } = session.timeSignature;
+      const plan = planCountIn({ now: context.currentTime, beats: playing ? 0 : settings.countInBeats, bpm: session.bpm, beatsPerBar, beatUnit });
       session.plan = plan;
       session.from = playing ? engine.getCurrentPlayhead() : host.playhead();
 
@@ -245,6 +251,8 @@ export class RecordingController {
           now: () => context.currentTime,
           click,
           bpm: session.bpm,
+          beatsPerBar,
+          beatUnit,
           anchorTime: plan.startTime,
           anchorBeat: 0,
           firstBeat: 0,

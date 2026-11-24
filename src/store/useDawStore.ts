@@ -16,9 +16,12 @@ import type {
   PlaylistSnap,
   PlaylistTool,
   ProjectDoc,
+  TimeSignature,
   Track,
 } from "../domain/types";
+import { pasteBaseRow, planDuplicate, planPaste } from "../domain/timeline/clipMath";
 import { clampZoom, minZoomFor, zoomToFitValue } from "../domain/timeline/zoom";
+import type { ClipboardContent } from "../services/clipboard";
 import { clamp, createId, getClipTimelineDuration, getProjectDuration } from "../utils/audioMath";
 import { fail, ok, type CommandResult } from "../state/commandResult";
 import * as commands from "../state/commands/index";
@@ -51,6 +54,7 @@ interface DawStore extends ProjectDoc {
   undo: () => CommandResult<"empty" | "recording">;
   redo: () => CommandResult<"empty" | "recording">;
   setBpm: (bpm: number) => void;
+  setTimeSignature: (signature: TimeSignature) => void;
   setMasterVolumeDb: (volumeDb: number) => void;
   setProjectName: (name: string) => void;
   setCursor: (cursor: number) => void;
@@ -87,6 +91,14 @@ interface DawStore extends ProjectDoc {
   deleteSelectedClips: () => CommandResult<"none-selected", { count: number }>;
   toggleClipMuted: (clipId: string) => void;
   sliceClipAt: (clipId: string, splitTime: number) => CommandResult<"not-found" | "outside-clip">;
+  /** 여러 클립을 같은 자리에서 한꺼번에 자른다(Ctrl+E). 오른쪽 조각들이 선택된다. */
+  sliceClipsAt: (clipIds: string[], splitTime: number) => CommandResult<"none-cuttable", { count: number }>;
+  /** 클립 여러 개를 한 번에 옮긴다(여러 클립·그룹 끌기). 마지막 이동이 쥔 클립이며, 선택에 없으면 그 클립을 선택한다. */
+  moveClips: (moves: commands.ClipMove[]) => void;
+  /** 선택한 클립들을 바로 뒤에 복제한다(Ctrl+D). 복제본이 선택된다. */
+  duplicateSelectedClips: () => CommandResult<"none-selected", { count: number }>;
+  /** 복사해 둔 클립을 `at`(초)에 붙인다(Ctrl+V). 붙인 클립이 선택된다. 트랙이 모자라면 새 트랙을 만든다. */
+  pasteClips: (content: ClipboardContent, at: number) => CommandResult<"empty" | "no-source", { count: number; newTracks: number }>;
   selectClip: (clipId?: string, additive?: boolean) => void;
   selectTrack: (trackId?: string) => void;
   setSelectedClips: (clipIds: string[]) => void;
@@ -166,6 +178,11 @@ function freshViewState() {
   };
 }
 
+/** 지금 스냅 설정과 박자표에서 나오는 격자 분할 수(마디 스냅은 박자표를 따른다) */
+function gridDivisionFor(playlistSnap: PlaylistSnap, globalSnap: Exclude<PlaylistSnap, "main">, timeSignature: TimeSignature) {
+  return getSnapDivision(resolveSnap(playlistSnap, globalSnap), timeSignature);
+}
+
 export const useDawStore = create<DawStore>((set, get) => ({
   ...docFields(getDoc()),
   selectedTrackId: undefined,
@@ -197,6 +214,9 @@ export const useDawStore = create<DawStore>((set, get) => ({
   },
   setBpm: (bpm) => {
     commands.setBpm(bpm);
+  },
+  setTimeSignature: (signature) => {
+    commands.setTimeSignature(signature);
   },
   setMasterVolumeDb: (volumeDb) => {
     commands.setMasterVolumeDb(volumeDb);
@@ -237,7 +257,7 @@ export const useDawStore = create<DawStore>((set, get) => ({
       return {
         playlistSnap,
         snapEnabled: effectiveSnap !== "none",
-        gridDivision: getSnapDivision(effectiveSnap),
+        gridDivision: getSnapDivision(effectiveSnap, state.timeSignature),
       };
     }),
   setGlobalSnap: (globalSnap) =>
@@ -246,7 +266,7 @@ export const useDawStore = create<DawStore>((set, get) => ({
       return {
         globalSnap,
         snapEnabled: effectiveSnap !== "none",
-        gridDivision: getSnapDivision(effectiveSnap),
+        gridDivision: getSnapDivision(effectiveSnap, state.timeSignature),
       };
     }),
   addAudioAsset: (asset, options) => {
@@ -301,6 +321,46 @@ export const useDawStore = create<DawStore>((set, get) => ({
     if (!result.ok) return result;
     set({ selectedClipId: result.rightClipId, selectedClipIds: [result.rightClipId] });
     return ok();
+  },
+  sliceClipsAt: (clipIds, splitTime) => {
+    const result = commands.sliceClipsAt(clipIds, splitTime);
+    if (!result.ok) return result;
+    set({ selectedClipId: result.rightClipIds[result.rightClipIds.length - 1], selectedClipIds: result.rightClipIds });
+    return ok({ count: result.rightClipIds.length });
+  },
+  moveClips: (moves) => {
+    if (!commands.moveClips(moves)) return;
+    // 마지막 이동이 사용자가 쥔 클립이다(`movingItems`가 맨 뒤에 둔다). 단일 `moveClip`처럼, 쥔 클립이 선택에 없으면 그 클립을 선택한다.
+    const held = moves[moves.length - 1]?.clipId;
+    if (held === undefined) return;
+    set((state) => ({
+      selectedClipId: held,
+      selectedClipIds: state.selectedClipIds.includes(held) ? state.selectedClipIds : [held],
+    }));
+  },
+  duplicateSelectedClips: () => {
+    const state = get();
+    const chosen = new Set(state.selectedClipIds);
+    const items = state.tracks.flatMap((track, trackIndex) => track.clips.filter((clip) => chosen.has(clip.id)).map((clip) => ({ clip, trackIndex })));
+    if (!items.length) return fail("none-selected");
+    const ids = commands.duplicateClips(planDuplicate(items, state.bpm));
+    set({ selectedClipId: ids[ids.length - 1], selectedClipIds: ids });
+    return ok({ count: ids.length });
+  },
+  pasteClips: (content, at) => {
+    const state = get();
+    // 이 프로젝트에 음원이 없는 클립(다른 프로젝트에서 복사한 것)은 붙이지 않는다: 소리도 파형도 없는 클립이 생기기 때문이다.
+    const items = content.items.filter(({ clip }) => state.assets[clip.audioBufferId] !== undefined);
+    if (!content.items.length) return fail("empty");
+    if (!items.length) return fail("no-source");
+    const baseRow = pasteBaseRow(
+      state.tracks.map((track) => track.id),
+      { selectedTrackId: state.selectedTrackId, clipsSelected: state.selectedClipIds.length > 0, originTrackId: content.originTrackId },
+    );
+    const plan = planPaste(items, at, baseRow);
+    const ids = commands.pasteClips(plan.placements);
+    set({ selectedClipId: ids[ids.length - 1], selectedClipIds: ids });
+    return ok({ count: ids.length, newTracks: Math.max(0, plan.trackCount - state.tracks.length) });
   },
   selectClip: (clipId, additive = false) =>
     set((state) => {
@@ -469,5 +529,13 @@ export const useDawStore = create<DawStore>((set, get) => ({
 
 // 문서가 바뀔 때마다 이 저장소의 문서 필드를 맞춘다(같은 호출 안에서 바로). 화면 부품은 예전처럼 useDawStore로 읽는다.
 projectStore.subscribe((state, previous) => {
-  if (state.doc !== previous.doc) useDawStore.setState(docFields(state.doc));
+  if (state.doc === previous.doc) return;
+  const fields = docFields(state.doc);
+  if (state.doc.timeSignature === previous.doc.timeSignature) {
+    useDawStore.setState(fields);
+    return;
+  }
+  // 박자표가 바뀌면(직접 고르기·실행 취소·프로젝트 열기) 마디 스냅의 칸 길이도 따라 바뀐다.
+  const view = useDawStore.getState();
+  useDawStore.setState({ ...fields, gridDivision: gridDivisionFor(view.playlistSnap, view.globalSnap, state.doc.timeSignature) });
 });

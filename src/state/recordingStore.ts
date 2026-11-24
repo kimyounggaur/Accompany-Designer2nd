@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { LATENCY_OFFSET_DEFAULT_MS, clampLatencyOffsetMs } from "../domain/recording/latency";
+import { COUNT_IN_CLICKS_MAX } from "../domain/timeline/snap";
 import { clamp } from "../utils/audioMath";
 import { fail, ok, type CommandResult } from "./commandResult";
 
@@ -41,7 +42,8 @@ export interface RecordingProgress {
   waveformPeaks: number[];
 }
 
-export const COUNT_IN_BEATS_MAX = 8;
+/** 카운트인 박 수의 위쪽 끝. 6/8의 2마디(8분음표 12번)까지 담도록 메트로놈 계획의 한도(16)를 따른다. */
+export const COUNT_IN_BEATS_MAX = COUNT_IN_CLICKS_MAX;
 
 export const DEFAULT_RECORDING_SETTINGS: RecordingSettings = {
   armedTrackId: undefined,

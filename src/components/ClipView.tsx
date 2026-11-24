@@ -1,6 +1,7 @@
 import type { RefObject } from "react";
 import { useCallback, useRef, useState } from "react";
-import { canSliceAt } from "../domain/timeline/clipMath";
+import { clipsToCutAt, movingItems, planMultiMove } from "../domain/timeline/clipMath";
+import type { MoveItem } from "../domain/timeline/clipMath";
 import { runClipAction, trimHandleActionFor } from "../domain/timeline/toolBehavior";
 import type { AssetMeta, Clip } from "../domain/types";
 import { ko } from "../i18n/ko";
@@ -11,10 +12,10 @@ import {
   copySelectedClips,
   deleteClip,
   deleteSelectedClips,
-  duplicateClip,
+  duplicateSelectedClips,
   renameClip,
   sliceClipAt,
-  sliceClipAtPlayhead,
+  sliceSelectedClipsAtPlayhead,
   toggleSelectedClipsMuted,
   ungroupSelectedClips,
 } from "../app/actions";
@@ -44,11 +45,21 @@ interface ClipViewProps {
   trackIndex: number;
 }
 
+/** 누른 곳에서 이만큼(px) 안쪽의 움직임은 "끌었다"로 치지 않는다(떼면 선택을 이 클립 하나로 줄이는 판단에만 쓴다) */
+const DRAG_THRESHOLD_PX = 3;
+
 interface PointerSession {
   mode: DragMode;
   pointerId: number;
   startClientX: number;
+  startClientY: number;
   originalClip: Clip;
+  /** "move"일 때 함께 움직일 클립들의 처음 자리. 선택한 여러 클립과 같은 그룹의 클립이 들어 있고, 누른 클립이 맨 뒤에 있다. */
+  moving: MoveItem[];
+  /** 여러 클립이 선택된 채 그중 하나를 눌렀다: 끌지 않고 떼면 선택을 이 클립 하나로 줄인다(끌었다면 선택 전체를 함께 옮긴 것) */
+  collapseOnRelease: boolean;
+  /** 눌린 자리에서 문턱(DRAG_THRESHOLD_PX) 넘게 움직였는가 */
+  dragged: boolean;
 }
 
 export function ClipView({
@@ -67,7 +78,7 @@ export function ClipView({
   const selectedClipIds = useDawStore((state) => state.selectedClipIds);
   const playlistTool = useDawStore((state) => state.playlistTool);
   const updateClip = useDawStore((state) => state.updateClip);
-  const moveClip = useDawStore((state) => state.moveClip);
+  const moveClips = useDawStore((state) => state.moveClips);
   const toggleClipMuted = useDawStore((state) => state.toggleClipMuted);
   const selectClip = useDawStore((state) => state.selectClip);
   const setCursor = useDawStore((state) => state.setCursor);
@@ -86,15 +97,17 @@ export function ClipView({
 
   /**
    * 메뉴를 연다. 이 클립이 선택에 없으면 이 클립만 선택하고(메뉴의 일이 눈에 보이는 선택을 대상으로 하도록),
-   * 이미 선택에 들어 있으면 선택은 그대로 둔다(복사·삭제·음소거·그룹 해제는 선택 전체에 한다).
+   * 이미 선택에 들어 있으면 선택은 그대로 둔다(자르기·복제·복사·삭제·음소거·그룹 해제는 선택 전체에 한다).
    */
   function openMenu(anchor: Point) {
     if (!useDawStore.getState().selectedClipIds.includes(clip.id)) selectClip(clip.id);
+    // 길게 눌러 연 메뉴가 선택 전체를 대상으로 하도록, 손가락을 뗄 때 선택을 줄이지 않는다.
+    if (sessionRef.current) sessionRef.current.collapseOnRelease = false;
     const state = useDawStore.getState();
     const chosen = new Set(state.selectedClipIds);
     setMenu({
       anchor,
-      playheadInside: canSliceAt(clip, state.bpm, readPlayhead()),
+      playheadInside: clipsToCutAt(state.tracks, state.bpm, state.selectedClipIds, readPlayhead()).length > 0,
       hasGroupedClip: state.tracks.some((track) => track.clips.some((item) => chosen.has(item.id) && item.groupId !== undefined)),
     });
   }
@@ -125,14 +138,23 @@ export function ClipView({
 
   function beginDrag(mode: DragMode, event: React.PointerEvent<HTMLElement>) {
     event.stopPropagation();
-    selectClip(clip.id, event.shiftKey || event.ctrlKey);
+    const additive = event.shiftKey || event.ctrlKey;
+    // 여러 클립이 선택된 채 그중 하나를 (더하기 키 없이) 누르면 선택을 그대로 둔다: 선택 전체를 함께 끌 수 있어야 한다.
+    const before = useDawStore.getState().selectedClipIds;
+    const keepSelection = mode === "move" && !additive && before.length > 1 && before.includes(clip.id);
+    if (!keepSelection) selectClip(clip.id, additive);
     // 끌기 한 번 = 실행 취소 한 단계. 누르기만 하고 움직이지 않으면 단계가 생기지 않는다.
     history.beginGesture(`clip:${clip.id}:drag`);
+    const state = useDawStore.getState();
     sessionRef.current = {
       mode,
       pointerId: event.pointerId,
       startClientX: event.clientX,
+      startClientY: event.clientY,
       originalClip: clip,
+      moving: mode === "move" ? movingItems(state.tracks, state.selectedClipIds, clip.id) : [],
+      collapseOnRelease: keepSelection,
+      dragged: false,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
@@ -176,28 +198,38 @@ export function ClipView({
     }
 
     const deltaTimeline = (event.clientX - session.startClientX) / zoomPxPerSecond;
+    if (Math.abs(event.clientX - session.startClientX) > DRAG_THRESHOLD_PX || Math.abs(event.clientY - session.startClientY) > DRAG_THRESHOLD_PX) {
+      session.dragged = true;
+    }
     const original = session.originalClip;
     const originalRate = getClipPlaybackRate(bpm, original);
     const assetDuration = asset?.duration ?? original.offset + original.duration;
 
     if (session.mode === "move") {
-      const moved = snapTime(
+      const snapped = snapTime(
         original.startTime + deltaTimeline,
         bpm,
         snapEnabled && !event.altKey,
         gridDivision,
       );
       const lanesRect = lanesRef.current?.getBoundingClientRect();
-      const targetTrackIndex = lanesRect
+      const leadRow = session.moving.find((item) => item.id === original.id)?.trackIndex ?? trackIndex;
+      const targetRow = lanesRect
         ? clamp(
             Math.floor((event.clientY - lanesRect.top) / trackHeight),
             0,
             Math.max(0, trackIds.length - 1),
           )
-        : trackIndex;
-      const targetTrackId = trackIds[targetTrackIndex] ?? original.trackId;
+        : leadRow;
 
-      moveClip(original.id, targetTrackId, { startTime: Math.max(0, moved) });
+      // 누른 클립이 간 만큼(시간·트랙 칸 수) 함께 움직이는 클립 모두가 같이 간다. 누른 클립이 맨 뒤라서 옮긴 뒤 가장 위에 그려진다.
+      const plan = planMultiMove(session.moving, snapped - original.startTime, targetRow - leadRow, trackIds.length);
+      moveClips(
+        plan.flatMap((item) => {
+          const trackId = trackIds[item.trackIndex];
+          return trackId === undefined ? [] : [{ clipId: item.id, trackId, startTime: item.startTime }];
+        }),
+      );
       return;
     }
 
@@ -271,10 +303,12 @@ export function ClipView({
     updateClip(original.id, { duration: nextDuration });
   }
 
-  function endDrag(event: React.PointerEvent<HTMLElement>) {
+  function endDrag(event: React.PointerEvent<HTMLElement>, released = true) {
     const session = sessionRef.current;
     if (session && session.pointerId === event.pointerId) {
       sessionRef.current = undefined;
+      // 여러 클립 중 하나를 끌지 않고 뗐다: 일반적인 선택 규칙대로 이 클립 하나만 남긴다.
+      if (released && session.collapseOnRelease && !session.dragged) selectClip(clip.id);
     }
   }
 
@@ -307,7 +341,7 @@ export function ClipView({
       }}
       onPointerCancel={(event) => {
         longPress.onPointerCancel();
-        endDrag(event);
+        endDrag(event, false);
       }}
     >
       <button
@@ -327,15 +361,20 @@ export function ClipView({
           items={buildClipMenuItems(
             { playheadInside: menu.playheadInside, hasGroupedClip: menu.hasGroupedClip },
             {
-              sliceAtPlayhead: () => sliceClipAtPlayhead(clip.id),
-              duplicate: () => duplicateClip(clip.id),
+              sliceAtPlayhead: sliceSelectedClipsAtPlayhead,
+              duplicate: duplicateSelectedClips,
               copy: copySelectedClips,
               toggleMute: toggleSelectedClipsMuted,
               rename: () => setRenaming(true),
               ungroup: ungroupSelectedClips,
               remove: deleteSelectedClips,
             },
-            { copy: keyLabel("copy"), remove: keyLabel("deleteClips") },
+            {
+              sliceAtPlayhead: keyLabel("sliceAtPlayhead"),
+              duplicate: keyLabel("duplicate"),
+              copy: keyLabel("copy"),
+              remove: keyLabel("deleteClips"),
+            },
           )}
         />
       )}

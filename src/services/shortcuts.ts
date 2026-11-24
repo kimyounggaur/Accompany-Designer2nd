@@ -55,6 +55,8 @@ export type ShortcutId =
   | "save"
   | "copy"
   | "paste"
+  | "duplicate"
+  | "sliceAtPlayhead"
   | "selectAll"
   | "deleteClips"
   | "quantize"
@@ -106,7 +108,8 @@ function row(id: ShortcutId, label: string, keys: string | readonly string[], op
 
 /**
  * 단축키 표(설계서 §P5-2). 입력 칸 안에서 듣는 것은 Ctrl+S 하나뿐이다.
- * Ctrl+D(복제)·Ctrl+E(재생선에서 자르기)는 그 기능이 들어오는 P5-5에서 이 표에 더한다(기능 없는 키가 브라우저 기본 동작만 막지 않도록).
+ * Ctrl+D(복제)·Ctrl+E(재생선에서 자르기)는 그 기능이 들어온 P5-5에서 더했다(기능 없는 키가 브라우저 기본 동작만 막지 않도록 미뤄 두었다).
+ * 이 키를 처리하면 브라우저의 기본 동작(Chrome·Edge의 북마크 추가·주소창 검색)은 막힌다. 실제 브라우저에서 막히는지는 사람이 확인한다(docs/ops-checklist.md).
  */
 export const SHORTCUTS: readonly Shortcut[] = [
   row("playPause", "재생/일시정지", "Space"),
@@ -117,6 +120,8 @@ export const SHORTCUTS: readonly Shortcut[] = [
   row("save", "프로젝트 파일 저장", "Mod+KeyS", { inInputs: true }),
   row("copy", "클립 복사", "Mod+KeyC"),
   row("paste", "클립 붙여넣기", "Mod+KeyV"),
+  row("duplicate", "선택 클립 복제", "Mod+KeyD"),
+  row("sliceAtPlayhead", "재생선에서 자르기", "Mod+KeyE"),
   row("selectAll", "모든 클립 선택", "Mod+KeyA"),
   row("deleteClips", "선택 항목 삭제", ["Delete", "Backspace"]),
   ...TOOLS.map((tool) => row(toolShortcutId(tool), TOOL_LABELS[tool], TOOL_KEYS[tool])),

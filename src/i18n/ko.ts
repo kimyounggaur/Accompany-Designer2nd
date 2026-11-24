@@ -155,6 +155,9 @@ export const ko = {
 
   playlist: { snapFallback: "라인" },
 
+  /** 타임라인 위의 안내(P5-5) */
+  timeline: { dropNewTrack: "새 트랙에 놓기" },
+
   // ───── 안내(토스트·상태 줄) ─────
 
   notice: {
@@ -173,7 +176,12 @@ export const ko = {
     undoDelete: "되돌리기",
     undoDeleteStale: "그 사이에 다른 편집을 해서 이 삭제만 되돌릴 수 없습니다. 실행 취소(Ctrl+Z)로 순서대로 되돌릴 수 있습니다.",
     clipDuplicated: "클립을 복제했습니다.",
+    clipsDuplicated: (count: number) => `클립 ${count}개를 복제했습니다.`,
+    duplicateNeedsSelection: "복제할 클립을 먼저 선택하세요.",
     playheadOutsideClip: "재생선이 이 클립 안에 있어야 자를 수 있습니다.",
+    clipsSliced: (count: number) => `클립 ${count}개 자르기 완료`,
+    playheadOutsideSelection: "재생선이 선택한 클립 안에 있어야 자를 수 있습니다.",
+    playheadOnNoClip: "재생선이 지나는 클립이 없어 자르지 않았습니다.",
     clipNameEmpty: "클립 이름은 비워 둘 수 없습니다.",
     noClipSelected: "선택된 클립이 없습니다.",
     clipSliced: "클립 자르기 완료",
@@ -194,7 +202,9 @@ export const ko = {
     clipsCopied: (count: number) => `클립 ${count}개 복사됨`,
     copyNeedsSelection: "복사할 클립을 먼저 선택하세요.",
     clipsPasted: (count: number) => `클립 ${count}개 붙여넣기 완료`,
+    clipsPastedToNewTracks: (count: number, tracks: number) => `클립 ${count}개 붙여넣기 완료 (새 트랙 ${tracks}개)`,
     pasteNeedsCopy: "붙여넣을 클립이 없습니다. 먼저 클립을 복사하세요.",
+    pasteNeedsSource: "복사한 클립의 음원이 이 프로젝트에 없어 붙이지 못했습니다.",
     markersCleared: "타임 마커 삭제됨",
 
     trackDeleted: (name: string) => `${name} 트랙이 삭제되었습니다. 실행 취소로 되돌릴 수 있습니다.`,

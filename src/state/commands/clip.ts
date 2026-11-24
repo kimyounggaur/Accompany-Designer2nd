@@ -1,7 +1,8 @@
 /** 클립에 대한 문서 변경 함수. 선택(selection) 같은 화면 상태는 다루지 않는다 — 부르는 쪽이 정해서 넘긴다. */
-import { canSliceAt } from "../../domain/timeline/clipMath";
-import type { Clip, ProjectDoc } from "../../domain/types";
-import { clamp, createId, findClip, getClipPlaybackRate, getClipTimelineDuration, snapTime } from "../../utils/audioMath";
+import { createDefaultTrack } from "../../domain/project/defaults";
+import { regroupCopies, splitClip, type ClipPlacement } from "../../domain/timeline/clipMath";
+import type { Clip, ProjectDoc, Track } from "../../domain/types";
+import { createId, findClip, snapTime } from "../../utils/audioMath";
 import { fail, ok, type CommandResult } from "../commandResult";
 import { history, type EditOptions } from "../history";
 import { getDoc } from "../projectStore";
@@ -163,25 +164,120 @@ export function sliceClipAt(clipId: string, splitTime: number, options?: EditOpt
   const location = locateClip(doc, clipId);
   if (!location) return fail("not-found");
   const clip = doc.tracks[location.trackIndex].clips[location.clipIndex];
-  const playbackRate = getClipPlaybackRate(doc.bpm, clip);
-  if (!canSliceAt(clip, doc.bpm, splitTime)) return fail("outside-clip");
-  const localTime = splitTime - clip.startTime;
-
-  const sourceDelta = localTime * playbackRate;
-  const leftDuration = clamp(sourceDelta, 0.03, clip.duration - 0.03);
-  const rightClip: Clip = {
-    ...clip,
-    id: createId("clip"),
-    name: `${clip.name} 조각`,
-    startTime: clip.startTime + leftDuration / playbackRate,
-    offset: clip.offset + leftDuration,
-    duration: clip.duration - leftDuration,
-    groupId: undefined,
-  };
+  const parts = splitClip(clip, doc.bpm, splitTime, createId("clip"));
+  if (!parts) return fail("outside-clip");
   history.edit("클립 자르기", (draft) => {
-    draft.tracks[location.trackIndex].clips.splice(location.clipIndex, 1, { ...clip, duration: leftDuration }, rightClip);
+    draft.tracks[location.trackIndex].clips.splice(location.clipIndex, 1, parts.left, parts.right);
   }, options);
-  return ok({ rightClipId: rightClip.id });
+  return ok({ rightClipId: parts.right.id });
+}
+
+/**
+ * 여러 클립을 같은 자리(splitTime, 타임라인 초)에서 한꺼번에 자른다(재생선에서 자르기, Ctrl+E). 실행 취소 한 단계다.
+ * 그 자리에서 자를 수 없는 클립(클립 밖이거나 가장자리 가까이)은 건너뛰고, 하나도 자르지 못하면 실패한다.
+ * 오른쪽 조각들의 id를 잘린 순서(트랙·클립 순서)대로 돌려준다.
+ */
+export function sliceClipsAt(clipIds: readonly string[], splitTime: number, options?: EditOptions): CommandResult<"none-cuttable", { rightClipIds: string[] }> {
+  const doc = getDoc();
+  const wanted = new Set(clipIds);
+  const cuts: Array<{ trackIndex: number; clipIndex: number; left: Clip; right: Clip }> = [];
+  doc.tracks.forEach((track, trackIndex) => {
+    track.clips.forEach((clip, clipIndex) => {
+      if (!wanted.has(clip.id)) return;
+      const parts = splitClip(clip, doc.bpm, splitTime, createId("clip"));
+      if (parts) cuts.push({ trackIndex, clipIndex, ...parts });
+    });
+  });
+  if (!cuts.length) return fail("none-cuttable");
+  history.edit("클립 자르기", (draft) => {
+    // 한 트랙에서 여러 개를 자를 때는 뒤쪽 번호부터 바꿔야 앞쪽 번호가 밀리지 않는다.
+    for (const cut of [...cuts].reverse()) draft.tracks[cut.trackIndex].clips.splice(cut.clipIndex, 1, cut.left, cut.right);
+  }, options);
+  return ok({ rightClipIds: cuts.map((cut) => cut.right.id) });
+}
+
+/** 클립 하나가 가야 할 자리(트랙과 시작 시간) */
+export interface ClipMove {
+  clipId: string;
+  trackId: string;
+  startTime: number;
+}
+
+/**
+ * 클립 여러 개를 한 번에 옮긴다(여러 클립·그룹 끌기). 옮긴 클립은 대상 트랙의 맨 뒤에 놓인다(`moveClip`과 같음).
+ * 목록에서 뒤에 있는 클립이 더 뒤에(화면에서 더 위에) 놓인다. 하나의 편집이라서 끌기 묶음 안에서는 이력 한 단계에 묶인다.
+ * 이미 그 순서로 놓여 있으면(끌기의 둘째 프레임부터) 바뀐 값만 고쳐 패치를 작게 유지한다.
+ */
+export function moveClips(moves: readonly ClipMove[], options?: EditOptions): boolean {
+  return history.edit("클립 이동", (draft) => {
+    const base = baseOf(draft);
+    const movingIds = new Set<string>();
+    const arrivals = new Map<number, Clip[]>();
+    for (const move of moves) {
+      const location = locateClip(base, move.clipId);
+      const targetIndex = locateTrack(base, move.trackId);
+      if (!location || targetIndex < 0) continue;
+      const clip = base.tracks[location.trackIndex].clips[location.clipIndex];
+      movingIds.add(clip.id);
+      const moved = clip.trackId === move.trackId && clip.startTime === move.startTime ? clip : { ...clip, trackId: move.trackId, startTime: move.startTime };
+      arrivals.set(targetIndex, [...(arrivals.get(targetIndex) ?? []), moved]);
+    }
+    if (!movingIds.size) return;
+
+    const affected = new Set<number>(arrivals.keys());
+    base.tracks.forEach((track, trackIndex) => {
+      if (track.clips.some((clip) => movingIds.has(clip.id))) affected.add(trackIndex);
+    });
+    for (const trackIndex of affected) {
+      const current = base.tracks[trackIndex].clips;
+      const next = [...current.filter((clip) => !movingIds.has(clip.id)), ...(arrivals.get(trackIndex) ?? [])];
+      const sameOrder = next.length === current.length && next.every((clip, index) => clip.id === current[index].id);
+      if (sameOrder) {
+        next.forEach((clip, index) => {
+          if (clip !== current[index]) draft.tracks[trackIndex].clips[index].startTime = clip.startTime;
+        });
+      } else {
+        draft.tracks[trackIndex].clips = next;
+      }
+    }
+  }, options);
+}
+
+/**
+ * 계획대로 새 클립들을 놓는다. 계획이 가리키는 트랙 칸이 지금 트랙 수를 넘으면 모자란 트랙을 같은 편집 안에서 만든다(실행 취소 한 단계).
+ * 같은 그룹이던 클립이 사본에도 둘 이상 있으면 사본끼리 새 그룹으로 묶는다. 놓은 클립들의 id를 계획 순서대로 돌려준다.
+ */
+function placeClips(label: string, placements: readonly ClipPlacement[], rename: (name: string) => string, options?: EditOptions): string[] {
+  if (!placements.length) return [];
+  const doc = getDoc();
+  const needed = Math.max(...placements.map((placement) => placement.trackIndex)) + 1;
+  const created: Track[] = [];
+  for (let index = doc.tracks.length; index < needed; index += 1) created.push(createDefaultTrack(index + 1));
+  const trackIdAt = (index: number) => (doc.tracks[index] ?? created[index - doc.tracks.length]).id;
+  const groups = regroupCopies(placements.map((placement) => placement.source), () => createId("group"));
+  const clips: Clip[] = placements.map((placement) => ({
+    ...placement.source,
+    id: createId("clip"),
+    name: rename(placement.source.name),
+    trackId: trackIdAt(placement.trackIndex),
+    startTime: placement.startTime,
+    groupId: placement.source.groupId === undefined ? undefined : groups.get(placement.source.groupId),
+  }));
+  history.edit(label, (draft) => {
+    if (created.length) draft.tracks.push(...created);
+    clips.forEach((clip, index) => draft.tracks[placements[index].trackIndex].clips.push(clip));
+  }, options);
+  return clips.map((clip) => clip.id);
+}
+
+/** 복제(Ctrl+D): 계획대로 클립 사본을 놓는다. 사본 이름 끝에 "복사본"이 붙는다. 새로 놓은 클립 id들을 돌려준다. */
+export function duplicateClips(placements: readonly ClipPlacement[], options?: EditOptions): string[] {
+  return placeClips("클립 복제", placements, (name) => `${name} 복사본`, options);
+}
+
+/** 붙여넣기(Ctrl+V): 계획대로 복사해 둔 클립을 놓는다. 이름은 그대로. 새로 놓은 클립 id들을 돌려준다. */
+export function pasteClips(placements: readonly ClipPlacement[], options?: EditOptions): string[] {
+  return placeClips("클립 붙여넣기", placements, (name) => name, options);
 }
 
 /** 클립 시작 위치를 격자(division: 1박을 몇 칸으로 나눌지)에 맞춘다. */

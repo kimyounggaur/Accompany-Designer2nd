@@ -43,6 +43,7 @@ const toolButtons: Array<{
 
 const snapOptions: Array<{ value: PlaylistSnap; label: string }> = [
   { value: "main", label: "메인" },
+  { value: "bar", label: "마디" },
   { value: "line", label: "라인" },
   { value: "beat", label: "박" },
   { value: "halfBeat", label: "1/2박" },
