@@ -375,12 +375,13 @@ test("음소거 전환: 고른 클립이 없으면 아무 일도 없다", () => 
 
 // ───── 복제 ─────
 
-test("복제: 원본 바로 뒤, 같은 트랙에 '복사본'이 생기고 선택되며, 한 번의 실행 취소로 없어진다", () => {
+test("복제: 선택한 클립 바로 뒤, 같은 트랙에 '복사본'이 생기고 선택되며, 한 번의 실행 취소로 없어진다", () => {
   const trackId = threeClips();
   const original = clipById("b");
   const length = getClipTimelineDuration(store().bpm, original);
 
-  actions.duplicateClip("b");
+  store().selectClip("b");
+  actions.duplicateSelectedClips();
   assert.equal(clipCount(), 4);
   const copy = allClips().find((clip) => clip.name === "b 복사본");
   assert.ok(copy, "복사본이 생겼다");
@@ -394,37 +395,43 @@ test("복제: 원본 바로 뒤, 같은 트랙에 '복사본'이 생기고 선�
   assert.equal(clipCount(), 3);
 });
 
-test("복제: 없는 클립은 아무 일도 없다", () => {
+test("복제: 고른 클립이 없으면 안내만 하고 바꾸지 않는다", () => {
   threeClips();
+  store().selectClip(undefined);
   const top = history.topId();
-  actions.duplicateClip("없는 클립");
+  actions.duplicateSelectedClips();
   assert.equal(clipCount(), 3);
   assert.equal(history.topId(), top);
+  assert.equal(status(), "복제할 클립을 먼저 선택하세요.");
 });
 
 // ───── 재생선에서 자르기 ─────
 
-test("재생선에서 자르기: 클립 안이면 둘로 나뉘고, 밖이면 안내만 하고 바꾸지 않는다", () => {
+test("재생선에서 자르기: 선택한 클립 안이면 둘로 나뉘고, 밖이면 안내만 하고 바꾸지 않는다", () => {
   threeClips(); // b: 3초부터 2초 길이(원음 길이 기준 — 아래에서 실제 길이를 읽는다)
   const clip = clipById("b");
   const length = getClipTimelineDuration(store().bpm, clip);
 
+  store().selectClip("b");
   store().setCursor(clip.startTime + length / 2);
-  actions.sliceClipAtPlayhead("b");
+  actions.sliceSelectedClipsAtPlayhead();
   assert.equal(clipCount(), 4);
   assert.equal(status(), "클립 자르기 완료");
   assert.equal(store().selectedClipIds.length, 1, "오른쪽 조각이 선택된다");
 
   const top = history.topId();
+  store().selectClip("c");
   store().setCursor(100);
-  actions.sliceClipAtPlayhead("c");
+  actions.sliceSelectedClipsAtPlayhead();
   assert.equal(clipCount(), 4);
-  assert.equal(status(), "재생선이 이 클립 안에 있어야 자를 수 있습니다.");
+  assert.equal(status(), "재생선이 선택한 클립 안에 있어야 자를 수 있습니다.");
   assert.equal(history.topId(), top);
 
-  actions.sliceClipAtPlayhead("없는 클립");
-  assert.equal(status(), "자를 클립을 선택하세요.");
+  store().selectClip(undefined);
+  actions.sliceSelectedClipsAtPlayhead();
+  assert.equal(status(), "재생선이 지나는 클립이 없어 자르지 않았습니다.");
   assert.equal(clipCount(), 4);
+  assert.equal(history.topId(), top);
 });
 
 test("자를 수 있는 자리: 양쪽 끝에서 0.03초 안쪽만(클립이 어디서 시작해도 같다)", () => {

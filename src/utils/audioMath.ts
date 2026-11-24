@@ -35,7 +35,9 @@ export function snapTime(
     return seconds;
   }
 
-  const step = getBeatSeconds(bpm) / division;
+  // 마디 스냅처럼 분할 수가 1보다 작을 때(예: 1/3)는 나누지 않고 그 역수를 곱한다. 0.5 ÷ (1/3) 같은 계산은 끝자리가 어긋난다.
+  const beat = getBeatSeconds(bpm);
+  const step = division < 1 ? beat * (1 / division) : beat / division;
   return Math.round(seconds / step) * step;
 }
 

@@ -1,5 +1,6 @@
 import { audioEngine } from "../audio/currentEngine";
 import { findMissingByHash, listMissingAssets } from "../domain/project/relink";
+import { dropRowAt, type DropPlacement } from "../domain/timeline/drop";
 import type { Clip } from "../domain/types";
 import { ko } from "../i18n/ko";
 import { attachAudio, planUpload, readAudioFile, type DecodedUpload } from "../services/importer";
@@ -34,12 +35,27 @@ const defaultDeps: ImportDeps = { decode: decodeUpload };
  * 이미 프로젝트에 있었지만 데이터가 빠진 음원과 해시가 같은 파일이면(같은 파일) 새 클립을 만들지 않고 그 음원에 다시 연결한다.
  * (이름·길이만 비슷한 파일은 새 음원이다. 그런 파일은 "음원 다시 연결" 대화상자에서 확인한 뒤 연결한다.)
  */
-export async function importAudioFiles(files: FileList | File[], deps: ImportDeps = defaultDeps): Promise<void> {
+export function importAudioFiles(files: FileList | File[], deps: ImportDeps = defaultDeps): Promise<void> {
+  return importFiles(files, deps);
+}
+
+/**
+ * 타임라인에 끌어다 놓은 파일(P5-5): 올리는 일은 `importAudioFiles`와 같고, 클립을 놓는 자리만 다르다.
+ * 놓은 곳의 트랙·시간(`placement`, 스냅 적용됨)에 놓고, 파일이 여럿이면 그 트랙부터 차례로 아래 트랙에 같은 시간으로 놓는다.
+ * 트랙 아래 빈 곳에 놓았거나 트랙이 모자라면 새 트랙을 만든다.
+ */
+export function importDroppedFiles(files: FileList | File[], placement: DropPlacement, deps: ImportDeps = defaultDeps): Promise<void> {
+  return importFiles(files, deps, placement);
+}
+
+async function importFiles(files: FileList | File[], deps: ImportDeps, drop?: DropPlacement): Promise<void> {
   const fileArray = Array.from(files);
   if (!fileArray.length) return;
 
   notify("info", ko.notice.decoding(fileArray.length));
   let uploaded = 0;
+  /** 끌어다 놓기에서, 지금까지 새 클립을 놓은 파일 수(다음 파일이 갈 트랙 칸을 정한다) */
+  let placed = 0;
 
   for (let i = 0; i < fileArray.length; i++) {
     const file = fileArray[i];
@@ -64,13 +80,18 @@ export async function importAudioFiles(files: FileList | File[], deps: ImportDep
       const { asset } = read;
       const state = useDawStore.getState();
       // 어느 트랙에 놓을지는 배치 규칙이 정한다(선택한 트랙의 그 구간이 비어 있으면 그 트랙, 아니면 새 트랙. 겹침은 템포 맞춤을 반영한 길이로 본다).
+      // 끌어다 놓은 파일은 사용자가 고른 자리(트랙·시간)에 그대로 놓는다.
       const plan = planUpload(getProjectSnapshot(), asset, {
         clipId: createId("clip"),
-        startTime: readPlayhead(),
+        startTime: drop ? drop.time : readPlayhead(),
         selectedTrackId: state.selectedTrackId,
       });
       let trackId: string;
-      if ("trackId" in plan.target) {
+      if (drop) {
+        const row = dropRowAt(drop, placed);
+        while (useDawStore.getState().tracks.length <= row) useDawStore.getState().addTrack();
+        trackId = useDawStore.getState().tracks[row].id;
+      } else if ("trackId" in plan.target) {
         trackId = plan.target.trackId;
       } else {
         state.addTrack();
@@ -84,6 +105,7 @@ export async function importAudioFiles(files: FileList | File[], deps: ImportDep
       state.addClip(trackId, clip);
       void ensurePeaks(asset); // 파형은 Worker가 만든다. 끝나면 저절로 그려진다.
       uploaded += 1;
+      placed += 1;
       if (fileArray.length > 1) notify("info", ko.notice.uploadProgress(i + 1, fileArray.length, asset.fileName));
       else notify("success", ko.notice.uploadDone(asset.fileName));
     } catch (error) {

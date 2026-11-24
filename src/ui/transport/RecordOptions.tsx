@@ -6,9 +6,11 @@ import { CommittedNumberInput } from "../controls/CommittedNumberInput";
 import { plainEntry } from "../controls/entries";
 import { Slider, type SliderEntry } from "../controls/Slider";
 import { LATENCY_OFFSET_MAX_MS, LATENCY_OFFSET_MIN_MS } from "../../domain/recording/latency";
+import { countInOptions, effectiveCountIn, type CountInOption } from "../../domain/timeline/snap";
 import { ko } from "../../i18n/ko";
 import { readMonitorVolume, writeMonitorVolume } from "../../services/monitorVolume";
 import { useRecordingStore } from "../../state/recordingStore";
+import { useDawStore } from "../../store/useDawStore";
 import { useDismiss } from "../useDismiss";
 
 /** 모니터 볼륨 숫자 칸: 슬라이더와 같은 단위(퍼센트, 5씩) */
@@ -17,6 +19,12 @@ const MONITOR_ENTRY: SliderEntry = {
   className: "monitor-volume-number",
   testId: "monitor-volume-input",
 };
+
+/** 카운트인 선택지의 이름: 카운트 없음 · n박 · n마디 */
+function countInLabel(option: CountInOption): string {
+  if (option.unit === "none") return "카운트 없음";
+  return `${option.count}${option.unit === "beat" ? "박" : "마디"}`;
+}
 
 interface RecordOptionsProps {
   isRecording: boolean;
@@ -28,7 +36,8 @@ interface RecordOptionsProps {
 export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
   const monitoringEnabled = useRecordingStore((state) => state.monitoringEnabled);
   const metronomeEnabled = useRecordingStore((state) => state.metronomeEnabled);
-  const countInBeats = useRecordingStore((state) => state.countInBeats);
+  const storedCountIn = useRecordingStore((state) => state.countInBeats);
+  const timeSignature = useDawStore((state) => state.timeSignature);
   const inputDeviceId = useRecordingStore((state) => state.inputDeviceId);
   const latencyOffsetMs = useRecordingStore((state) => state.latencyOffsetMs);
   const setRecordingInputDevice = useRecordingStore((state) => state.setInputDevice);
@@ -49,6 +58,9 @@ export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
   }, [monitorVolume]);
 
   const monitorPercent = Math.round(monitorVolume * 100);
+  // 카운트인 선택지는 박자표를 따른다(3/4의 "1마디"는 3박). 화면의 값과 녹음이 실제로 세는 박 수는 같은 함수로 정한다.
+  const countInChoices = countInOptions(timeSignature);
+  const countInBeats = effectiveCountIn(storedCountIn, timeSignature);
 
   useEffect(() => {
     let mounted = true;
@@ -117,11 +129,11 @@ export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
           onChange={(event) => setRecordingCountIn(Number(event.target.value))}
           value={countInBeats}
         >
-          <option value={0}>카운트 없음</option>
-          <option value={1}>1박</option>
-          <option value={2}>2박</option>
-          <option value={4}>1마디</option>
-          <option value={8}>2마디</option>
+          {countInChoices.map((option) => (
+            <option key={option.value} value={option.value}>
+              {countInLabel(option)}
+            </option>
+          ))}
         </select>
       </label>
       <label className="latency-control" title={ko.record.latencyTitle}>

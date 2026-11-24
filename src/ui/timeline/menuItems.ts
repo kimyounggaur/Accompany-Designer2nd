@@ -9,7 +9,7 @@ import type { ContextMenuItem } from "../controls/ContextMenu";
 export interface ClipMenuContext {
   /** 지금 선택된 클립 중 그룹에 묶인 것이 있는가("그룹 해제"를 쓸 수 있는가) */
   hasGroupedClip: boolean;
-  /** 메뉴를 열 때 재생선이 이 클립 안에 있었는가("재생선에서 자르기"를 쓸 수 있는가) */
+  /** 메뉴를 열 때 재생선이 자를 수 있는 선택 클립 안에 있었는가("재생선에서 자르기"를 쓸 수 있는가) */
   playheadInside: boolean;
 }
 
@@ -25,6 +25,8 @@ export interface ClipMenuActions {
 
 /** 항목 오른쪽에 적는 단축키 글자(단축키가 있는 항목만) */
 export interface ClipMenuHints {
+  sliceAtPlayhead?: string;
+  duplicate?: string;
   copy?: string;
   remove?: string;
 }
@@ -32,8 +34,8 @@ export interface ClipMenuHints {
 export function buildClipMenuItems(context: ClipMenuContext, actions: ClipMenuActions, hints: ClipMenuHints = {}): ContextMenuItem[] {
   const text = ko.menu.clip;
   return [
-    { id: "slice", label: text.sliceAtPlayhead, onSelect: actions.sliceAtPlayhead, disabled: !context.playheadInside },
-    { id: "duplicate", label: text.duplicate, onSelect: actions.duplicate },
+    { id: "slice", label: text.sliceAtPlayhead, onSelect: actions.sliceAtPlayhead, disabled: !context.playheadInside, hint: hints.sliceAtPlayhead },
+    { id: "duplicate", label: text.duplicate, onSelect: actions.duplicate, hint: hints.duplicate },
     { id: "copy", label: text.copy, onSelect: actions.copy, hint: hints.copy },
     { id: "mute", label: text.toggleMute, onSelect: actions.toggleMute },
     { id: "rename", label: text.rename, onSelect: actions.rename },

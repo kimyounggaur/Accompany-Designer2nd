@@ -309,6 +309,16 @@ test("클립 메뉴: 삭제는 빨갛게, 맨 아래에 줄을 긋고, 단축키
   assert.equal(buildClipMenuItems(clipContext(), clipActions()).filter((item) => item.hint).length, 0);
 });
 
+test("클립 메뉴: 재생선에서 자르기·복제 항목에도 단축키 글자(Ctrl+E·Ctrl+D)를 붙일 수 있다(P5-5)", () => {
+  const list = buildClipMenuItems(clipContext(), clipActions(), { sliceAtPlayhead: "Ctrl+E", duplicate: "Ctrl+D", copy: "Ctrl+C", remove: "Delete" });
+  assert.equal(byId(list, "slice").hint, "Ctrl+E");
+  assert.equal(byId(list, "duplicate").hint, "Ctrl+D");
+  assert.equal(list.filter((item) => item.hint).length, 4);
+  const disabled = buildClipMenuItems(clipContext({ playheadInside: false }), clipActions(), { sliceAtPlayhead: "Ctrl+E" });
+  assert.equal(byId(disabled, "slice").disabled, true, "잘 수 없을 때도 단축키 글자는 그대로 보인다");
+  assert.equal(byId(disabled, "slice").hint, "Ctrl+E");
+});
+
 const trackActions = () => ({ rename: noop, moveUp: noop, moveDown: noop, remove: noop });
 
 test("트랙 메뉴: 이름 바꾸기·위로·아래로·삭제 순서", () => {

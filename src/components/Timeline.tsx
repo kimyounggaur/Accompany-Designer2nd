@@ -8,6 +8,7 @@ import { history } from "../state/history";
 import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
 import { useDawStore } from "../store/useDawStore";
 import { addClipFromSource, deleteTrack, setSelectedClips, toggleRecordingArm } from "../app/actions";
+import { importDroppedFiles } from "../app/importing";
 import { readPlayhead } from "../app/playhead";
 import { DEFAULT_TRACK_VOLUME } from "../domain/project/defaults";
 import type { PlaylistTool } from "../domain/types";
@@ -17,8 +18,10 @@ import type { Point } from "../ui/controls/menuMath";
 import { useLongPress } from "../ui/controls/useLongPress";
 import { countRender } from "../ui/debug/renderCount";
 import { Slider } from "../ui/controls/Slider";
+import { DropIndicator } from "../ui/timeline/DropIndicator";
 import { buildTrackMenuItems } from "../ui/timeline/menuItems";
 import { PlayheadOverlay } from "../ui/timeline/PlayheadOverlay";
+import { useFileDrop } from "../ui/timeline/useFileDrop";
 import {
   clamp,
   getBeatSeconds,
@@ -26,7 +29,9 @@ import {
   getProjectDuration,
   snapTime,
 } from "../utils/audioMath";
+import type { DropPlacement } from "../domain/timeline/drop";
 import { INITIAL_RULER_WINDOW, gridTileWidth, nextRulerWindow, planRulerTicks, type RulerWindow } from "../domain/timeline/ruler";
+import { quarterBeatsPerBar } from "../domain/timeline/snap";
 import { followScrollLeft } from "../domain/timeline/follow";
 import { runEmptyAreaAction } from "../domain/timeline/toolBehavior";
 import { playlistToolIcons } from "../utils/playlistToolIcons";
@@ -36,6 +41,11 @@ import { PlaylistToolbar } from "./PlaylistToolbar";
 
 const TRACK_HEIGHT = 116;
 const CLIP_TOP_OFFSET = 15;
+
+/** 타임라인에 파일을 놓았을 때: 놓은 자리(트랙·시간)에 올린다 */
+function uploadDropped(files: File[], placement: DropPlacement) {
+  void importDroppedFiles(files, placement);
+}
 
 interface PointerPosition {
   x: number;
@@ -98,6 +108,7 @@ export function Timeline() {
   const assets = useDawStore((state) => state.assets);
   const markers = useDawStore((state) => state.markers);
   const bpm = useDawStore((state) => state.bpm);
+  const timeSignature = useDawStore((state) => state.timeSignature);
   const zoomPxPerSecond = useDawStore((state) => state.zoomPxPerSecond);
   const snapEnabled = useDawStore((state) => state.snapEnabled);
   const gridDivision = useDawStore((state) => state.gridDivision);
@@ -221,10 +232,13 @@ export function Timeline() {
   const subdivisionWidth = beatWidth / gridDivision;
 
   // projectDuration 대신 실제 표시 너비 기준으로 눈금을 만든다(트랙 끝까지 번호 표시). 곡이 길어 한 박이 좁아지면 눈금을 솎는다.
+  // 마디 번호는 박자표에 따라 마디가 시작하는 자리에 붙는다(2/4·3/4·4/4·6/8).
+  const barBeats = quarterBeatsPerBar(timeSignature);
   const rulerTicks = useMemo(
-    () => planRulerTicks(beatSeconds, zoomPxPerSecond, width / zoomPxPerSecond, rulerWindow).ticks,
-    [beatSeconds, width, zoomPxPerSecond, rulerWindow],
+    () => planRulerTicks(beatSeconds, zoomPxPerSecond, width / zoomPxPerSecond, rulerWindow, barBeats).ticks,
+    [beatSeconds, width, zoomPxPerSecond, rulerWindow, barBeats],
   );
+  const { hint: dropHint, dragHandlers } = useFileDrop({ lanesRef, trackHeight: TRACK_HEIGHT, onFiles: uploadDropped });
   const timelineClips = useMemo(
     () =>
       tracks.flatMap((track, trackIndex) =>
@@ -626,7 +640,12 @@ export function Timeline() {
         ))}
       </div>
 
-      <div className="timeline-scroll" ref={scrollRef} onScroll={(event) => { if (headersRef.current) headersRef.current.scrollTop = event.currentTarget.scrollTop; syncRulerWindow(); }}>
+      <div
+        className={`timeline-scroll ${dropHint ? "drop-active" : ""}`}
+        ref={scrollRef}
+        onScroll={(event) => { if (headersRef.current) headersRef.current.scrollTop = event.currentTarget.scrollTop; syncRulerWindow(); }}
+        {...dragHandlers}
+      >
         <div
           className="ruler"
           data-testid="ruler"
@@ -679,6 +698,9 @@ export function Timeline() {
             />
           ))}
           <PlayheadOverlay height={tracks.length * TRACK_HEIGHT} />
+          {dropHint && (
+            <DropIndicator placement={dropHint} trackCount={tracks.length} trackHeight={TRACK_HEIGHT} zoomPxPerSecond={zoomPxPerSecond} />
+          )}
           {tracks.map((track, index) => (
             <div
               className="track-lane"

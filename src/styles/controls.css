@@ -144,6 +144,11 @@
   z-index: 1500;
   display: flex;
   flex-direction: column;
+  /*
+   * 너비는 놓인 자리에 따라 달라지면 안 된다: 자리를 정하려고 재는 순간의 자리(누른 곳)가 화면 오른쪽 끝이면
+   * 남은 폭만큼만 줄어든 너비로 재어지고, 안쪽으로 옮긴 뒤에는 다시 넓어져 오른쪽 끝이 화면 밖으로 나갔다(P5-5에서 항목 글자가 길어져 드러남).
+   */
+  width: max-content;
   min-width: 176px;
   max-width: min(320px, calc(100vw - 16px));
   max-height: calc(100vh - 16px);

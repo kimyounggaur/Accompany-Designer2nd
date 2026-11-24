@@ -1,7 +1,8 @@
 /** 프로젝트 전체(이름·템포·음원·마커·통째로 바꾸기)에 대한 문서 변경 함수 */
 import { MASTER_VOLUME_DEFAULT_DB, normalizeMasterVolumeDb } from "../../domain/master/volume";
 import { createEmptyDoc } from "../../domain/project/defaults";
-import type { AssetMeta, ProjectDoc } from "../../domain/types";
+import { normalizeTimeSignature, sameTimeSignature } from "../../domain/timeline/snap";
+import type { AssetMeta, ProjectDoc, TimeSignature } from "../../domain/types";
 import { clamp, createId } from "../../utils/audioMath";
 import { history, type EditOptions } from "../history";
 import { getDoc } from "../projectStore";
@@ -11,6 +12,19 @@ import { baseOf } from "./locate";
 export function setBpm(bpm: number, options?: EditOptions): boolean {
   const value = clamp(Number(bpm) || 120, 20, 300);
   return history.edit("템포 변경", (doc) => { doc.bpm = value; }, { key: "project:bpm", ...options });
+}
+
+/**
+ * 박자표를 바꾼다(P5-5). 눈금자의 마디 번호·마디 스냅·메트로놈 강박이 이 값을 따른다(소리·재생 위치는 그대로).
+ * 윗수는 1~32 정수, 아랫수는 4 또는 8로 맞추고, 값이 그대로면 이력에 남기지 않는다.
+ */
+export function setTimeSignature(signature: TimeSignature, options?: EditOptions): boolean {
+  const next = normalizeTimeSignature(signature);
+  return history.edit("박자표 변경", (doc) => {
+    const current = baseOf(doc).timeSignature;
+    if (current && sameTimeSignature(current, next)) return;
+    doc.timeSignature = next;
+  }, { key: "project:timeSignature", ...options });
 }
 
 /** 프로젝트 이름을 바꾼다. 글자를 이어서 치는 동안은 한 단계로 묶인다(초점 묶음이 없는 곳에서도). */

@@ -34,6 +34,8 @@ export function createHarness(options = {}) {
   const config = {
     now: 1,
     bpm: 120,
+    /** 박자표(기본 4/4) */
+    timeSignature: { beats: 4, unit: 4 },
     /** 편집 커서 */
     playhead: 3,
     alreadyPlaying: false,
@@ -167,6 +169,7 @@ export function createHarness(options = {}) {
       ...config.settings,
     }),
     bpm: () => config.bpm,
+    timeSignature: () => config.timeSignature,
     playhead: () => config.playhead,
     update: (patch) => log.updates.push(patch),
     reset: () => {

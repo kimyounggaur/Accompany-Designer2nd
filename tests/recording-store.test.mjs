@@ -104,12 +104,14 @@ test("새 프로젝트를 열면 녹음 대기만 풀고 진행을 처음으로 
   assert.equal(store().latencyOffsetMs, 35);
 });
 
-test("카운트인 박 수는 0~8 정수로 맞춘다", () => {
-  assert.equal(COUNT_IN_BEATS_MAX, 8);
+test("카운트인 박 수는 0~16 정수로 맞춘다(6/8의 2마디 = 8분음표 12번까지 담는다)", () => {
+  assert.equal(COUNT_IN_BEATS_MAX, 16);
   store().setCountIn(4);
   assert.equal(store().countInBeats, 4);
+  store().setCountIn(12);
+  assert.equal(store().countInBeats, 12);
   store().setCountIn(99);
-  assert.equal(store().countInBeats, 8);
+  assert.equal(store().countInBeats, 16);
   store().setCountIn(-2);
   assert.equal(store().countInBeats, 0);
   store().setCountIn(2.6);
