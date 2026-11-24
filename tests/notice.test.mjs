@@ -182,7 +182,6 @@ test("도구·스냅·녹음 옵션을 바꿔도 안내하지 않는다(화면�
   notify("info", "이전 안내");
   store.setPlaylistTool("slice");
   store.setPlaylistSnap("beat");
-  store.setGlobalSnap("beat");
   useRecordingStore.getState().setMetronome(true);
   useRecordingStore.getState().setCountIn(2);
   store.togglePerformanceMode();

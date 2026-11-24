@@ -11,14 +11,8 @@ export type PlaylistTool =
   | "select"
   | "zoom"
   | "play-selected";
-export type PlaylistSnap =
-  | "main"
-  | "line"
-  | "bar"
-  | "beat"
-  | "halfBeat"
-  | "quarterBeat"
-  | "none";
+/** 스냅 선택지 다섯 개(설계서 P5-6). 마디는 박자표를 따르고 "none"은 잡지 않는다. */
+export type PlaylistSnap = "bar" | "beat" | "halfBeat" | "quarterBeat" | "none";
 export type DelaySyncDivision =
   | "1/1"
   | "1/2"

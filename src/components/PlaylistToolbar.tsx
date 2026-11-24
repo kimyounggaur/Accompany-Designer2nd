@@ -1,6 +1,5 @@
 import { ChevronDown } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ko } from "../i18n/ko";
+import { useEffect, useRef, useState } from "react";
 import { useDawStore } from "../store/useDawStore";
 import {
   clearSelection,
@@ -41,20 +40,14 @@ const toolButtons: Array<{
   { tool: "play-selected", label: "선택 재생", icon: playlistToolIcons["play-selected"] },
 ];
 
+/** 스냅 선택지(설계서 P5-6): 마디 · 박 · 1/2박 · 1/4박 · 없음. 간격은 모두 다르고 로컬·글로벌 구분은 없다(`PLAYLIST_SNAPS`와 같은 순서). */
 const snapOptions: Array<{ value: PlaylistSnap; label: string }> = [
-  { value: "main", label: "메인" },
   { value: "bar", label: "마디" },
-  { value: "line", label: "라인" },
   { value: "beat", label: "박" },
   { value: "halfBeat", label: "1/2박" },
   { value: "quarterBeat", label: "1/4박" },
   { value: "none", label: "없음" },
 ];
-
-const globalSnapOptions = snapOptions.filter(
-  (option): option is { value: Exclude<PlaylistSnap, "main">; label: string } =>
-    option.value !== "main",
-);
 
 interface CommandItem {
   label: string;
@@ -74,14 +67,12 @@ export function PlaylistToolbar() {
   const toolbarRef = useRef<HTMLDivElement>(null);
   const playlistTool = useDawStore((state) => state.playlistTool);
   const playlistSnap = useDawStore((state) => state.playlistSnap);
-  const globalSnap = useDawStore((state) => state.globalSnap);
   const performanceMode = useDawStore((state) => state.performanceMode);
   const playlistDetached = useDawStore((state) => state.playlistDetached);
   const selectedClipIds = useDawStore((state) => state.selectedClipIds);
   const tracks = useDawStore((state) => state.tracks);
   const setPlaylistTool = useDawStore((state) => state.setPlaylistTool);
   const setPlaylistSnap = useDawStore((state) => state.setPlaylistSnap);
-  const setGlobalSnap = useDawStore((state) => state.setGlobalSnap);
   const addTimeMarker = useDawStore((state) => state.addTimeMarker);
   const togglePerformanceMode = useDawStore(
     (state) => state.togglePerformanceMode,
@@ -91,15 +82,7 @@ export function PlaylistToolbar() {
   );
   const setCursor = useDawStore((state) => state.setCursor);
 
-  const selectedSnapLabel = useMemo(() => {
-    const localLabel =
-      snapOptions.find((option) => option.value === playlistSnap)?.label ?? ko.playlist.snapFallback;
-    const globalLabel =
-      globalSnapOptions.find((option) => option.value === globalSnap)?.label ??
-      "라인";
-
-    return playlistSnap === "main" ? `메인: ${globalLabel}` : localLabel;
-  }, [globalSnap, playlistSnap]);
+  const selectedSnapLabel = snapOptions.find((option) => option.value === playlistSnap)?.label ?? "없음";
 
   useEffect(() => {
     if (!openMenu) {
@@ -298,7 +281,6 @@ export function PlaylistToolbar() {
           </button>
           {openMenu === "snap" && (
             <div className="toolbar-dropdown snap-dropdown">
-              <div className="toolbar-dropdown-label">로컬 스냅</div>
               {snapOptions.map((option) => (
                 <button
                   className={playlistSnap === option.value ? "selected" : ""}
@@ -307,16 +289,6 @@ export function PlaylistToolbar() {
                     setPlaylistSnap(option.value);
                     setOpenMenu(undefined);
                   }}
-                >
-                  <span>{option.label}</span>
-                </button>
-              ))}
-              <div className="toolbar-dropdown-label">글로벌 스냅</div>
-              {globalSnapOptions.map((option) => (
-                <button
-                  className={globalSnap === option.value ? "selected" : ""}
-                  key={`global-${option.value}`}
-                  onClick={() => setGlobalSnap(option.value)}
                 >
                   <span>{option.label}</span>
                 </button>

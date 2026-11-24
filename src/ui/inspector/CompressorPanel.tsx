@@ -1,15 +1,15 @@
+import { NEEDLE_SCALE_DB } from "../../domain/compressor/needle";
 import { DEFAULT_COMPRESSOR_SETTINGS } from "../../domain/project/defaults";
 import { effectPatch } from "../../domain/project/effectPatch";
 import type { CompressorSettings, Track } from "../../domain/types";
 import { ko } from "../../i18n/ko";
 import { useDawStore } from "../../store/useDawStore";
 import { plainEntry, scaledEntry } from "../controls/entries";
+import { CompressorNeedle } from "./CompressorNeedle";
 import { Knob, type KnobEntry } from "../controls/Knob";
 import { PanelSection } from "./PanelSection";
 import { Toggle } from "../controls/Toggle";
 import { useHistoryGesture } from "./useHistoryGesture";
-
-const VU_SCALE = ["20", "15", "10", "7", "5", "3", "1", "0"];
 
 const formatMs = (seconds: number) => `${Math.round(seconds * 1000)}ms`;
 
@@ -59,19 +59,12 @@ export function CompressorPanel({ track }: { track: Track }) {
           <span className="comp-title">{ko.compressor.title}</span>
           <div className="comp-vu-meter">
             <div className="comp-vu-scale">
-              {VU_SCALE.map((v) => (
-                <span key={v}>{v}</span>
+              {NEEDLE_SCALE_DB.map((db) => (
+                <span key={db}>{db}</span>
               ))}
             </div>
             <div className="comp-vu-needle-wrap">
-              <div
-                className="comp-vu-needle"
-                style={{
-                  transform: `rotate(${compressor.enabled
-                    ? Math.min(80, Math.max(-80, ((compressor.threshold + 60) / 60) * -80))
-                    : -80}deg)`,
-                }}
-              />
+              <CompressorNeedle trackId={track.id} enabled={compressor.enabled} />
             </div>
             <div className="comp-vu-label">{ko.compressor.gainReduction}</div>
           </div>

@@ -20,6 +20,7 @@ import type {
   Track,
 } from "../domain/types";
 import { pasteBaseRow, planDuplicate, planPaste } from "../domain/timeline/clipMath";
+import { DEFAULT_SNAP, snapDivisionOf, snapSettings } from "../domain/timeline/snap";
 import { clampZoom, minZoomFor, zoomToFitValue } from "../domain/timeline/zoom";
 import type { ClipboardContent } from "../services/clipboard";
 import { clamp, createId, getClipTimelineDuration, getProjectDuration } from "../utils/audioMath";
@@ -28,7 +29,6 @@ import * as commands from "../state/commands/index";
 import { history, type EditOptions } from "../state/history";
 import { getDoc, projectStore } from "../state/projectStore";
 import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
-import { getSnapDivision, resolveSnap } from "../state/snap";
 
 type HistoryOptions = {
   history?: boolean;
@@ -48,7 +48,6 @@ interface DawStore extends ProjectDoc {
   gridDivision: number;
   playlistTool: PlaylistTool;
   playlistSnap: PlaylistSnap;
-  globalSnap: Exclude<PlaylistSnap, "main">;
   performanceMode: boolean;
   playlistDetached: boolean;
   undo: () => CommandResult<"empty" | "recording">;
@@ -66,7 +65,6 @@ interface DawStore extends ProjectDoc {
   setSnapEnabled: (enabled: boolean) => void;
   setPlaylistTool: (tool: PlaylistTool) => void;
   setPlaylistSnap: (snap: PlaylistSnap) => void;
-  setGlobalSnap: (snap: Exclude<PlaylistSnap, "main">) => void;
   addAudioAsset: (asset: AssetMeta, options?: HistoryOptions) => void;
   updateAudioAsset: (
     assetId: string,
@@ -171,16 +169,16 @@ function freshViewState() {
     cursor: 0,
     snapEnabled: true,
     playlistTool: "move" as PlaylistTool,
-    playlistSnap: "line" as PlaylistSnap,
-    globalSnap: "line" as const,
+    playlistSnap: DEFAULT_SNAP,
     performanceMode: false,
     playlistDetached: false,
   };
 }
 
-/** 지금 스냅 설정과 박자표에서 나오는 격자 분할 수(마디 스냅은 박자표를 따른다) */
-function gridDivisionFor(playlistSnap: PlaylistSnap, globalSnap: Exclude<PlaylistSnap, "main">, timeSignature: TimeSignature) {
-  return getSnapDivision(resolveSnap(playlistSnap, globalSnap), timeSignature);
+/** 스냅 선택과 박자표에서 나오는 화면 설정: 잡을지(`snapEnabled`)와 격자 분할 수(`gridDivision`, 마디 스냅은 박자표를 따른다) */
+function snapView(snap: PlaylistSnap, timeSignature: TimeSignature) {
+  const { enabled, division } = snapSettings(snap, timeSignature);
+  return { snapEnabled: enabled, gridDivision: division };
 }
 
 export const useDawStore = create<DawStore>((set, get) => ({
@@ -195,8 +193,7 @@ export const useDawStore = create<DawStore>((set, get) => ({
   snapEnabled: true,
   gridDivision: 2,
   playlistTool: "move",
-  playlistSnap: "line",
-  globalSnap: "line",
+  playlistSnap: DEFAULT_SNAP,
   performanceMode: false,
   playlistDetached: false,
   undo: () => {
@@ -245,30 +242,13 @@ export const useDawStore = create<DawStore>((set, get) => ({
     return ok();
   },
   setSnapEnabled: (snapEnabled) =>
-    set({
-      snapEnabled,
-      playlistSnap: snapEnabled ? "line" : "none",
-      gridDivision: snapEnabled ? getSnapDivision("line") : 2,
+    set((state) => {
+      const playlistSnap = snapEnabled ? DEFAULT_SNAP : "none";
+      return { playlistSnap, ...snapView(playlistSnap, state.timeSignature) };
     }),
   setPlaylistTool: (playlistTool) => set({ playlistTool }),
   setPlaylistSnap: (playlistSnap) =>
-    set((state) => {
-      const effectiveSnap = resolveSnap(playlistSnap, state.globalSnap);
-      return {
-        playlistSnap,
-        snapEnabled: effectiveSnap !== "none",
-        gridDivision: getSnapDivision(effectiveSnap, state.timeSignature),
-      };
-    }),
-  setGlobalSnap: (globalSnap) =>
-    set((state) => {
-      const effectiveSnap = resolveSnap(state.playlistSnap, globalSnap);
-      return {
-        globalSnap,
-        snapEnabled: effectiveSnap !== "none",
-        gridDivision: getSnapDivision(effectiveSnap, state.timeSignature),
-      };
-    }),
+    set((state) => ({ playlistSnap, ...snapView(playlistSnap, state.timeSignature) })),
   addAudioAsset: (asset, options) => {
     commands.addAudioAsset(asset, editOptions(options));
   },
@@ -430,7 +410,7 @@ export const useDawStore = create<DawStore>((set, get) => ({
     const state = get();
     const selected = new Set(state.selectedClipIds);
     if (!selected.size) return fail("none-selected");
-    const division = state.snapEnabled ? state.gridDivision : getSnapDivision("line");
+    const division = state.snapEnabled ? state.gridDivision : snapDivisionOf(DEFAULT_SNAP);
     commands.quantizeClips([...selected], division);
     return ok({ count: selected.size });
   },
@@ -518,12 +498,12 @@ export const useDawStore = create<DawStore>((set, get) => ({
   importProject: (project) => {
     commands.replaceDoc(project);
     useRecordingStore.getState().resetForNewProject();
-    set({ ...freshViewState(), gridDivision: getSnapDivision("line") });
+    set({ ...freshViewState(), ...snapView(DEFAULT_SNAP, getDoc().timeSignature) });
   },
   resetProject: () => {
     commands.resetDoc();
     useRecordingStore.getState().resetForNewProject();
-    set({ ...freshViewState(), zoomPxPerSecond: 96, gridDivision: 2 });
+    set({ ...freshViewState(), zoomPxPerSecond: 96, ...snapView(DEFAULT_SNAP, getDoc().timeSignature) });
   },
 }));
 
@@ -537,5 +517,5 @@ projectStore.subscribe((state, previous) => {
   }
   // 박자표가 바뀌면(직접 고르기·실행 취소·프로젝트 열기) 마디 스냅의 칸 길이도 따라 바뀐다.
   const view = useDawStore.getState();
-  useDawStore.setState({ ...fields, gridDivision: gridDivisionFor(view.playlistSnap, view.globalSnap, state.doc.timeSignature) });
+  useDawStore.setState({ ...fields, ...snapView(view.playlistSnap, state.doc.timeSignature) });
 });

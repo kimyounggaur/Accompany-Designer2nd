@@ -153,8 +153,6 @@ export const ko = {
     },
   },
 
-  playlist: { snapFallback: "라인" },
-
   /** 타임라인 위의 안내(P5-5) */
   timeline: { dropNewTrack: "새 트랙에 놓기" },
 
