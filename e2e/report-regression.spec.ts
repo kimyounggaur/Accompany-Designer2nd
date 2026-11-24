@@ -5,6 +5,7 @@
  *   실패하므로, 그때 test.fail 줄을 지우면 된다(=해결 확인).
  * - 선택자는 S 한 곳에만 둔다. 화면 부품에는 data-testid를 붙여 두었으므로 CSS 이름이 바뀌어도(6단계) 깨지지 않는다.
  */
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Download, type Locator, type Page, type TestInfo } from "@playwright/test";
 import { strToU8, unzipSync, zipSync } from "fflate";
 import { createHash } from "node:crypto";
@@ -5009,5 +5010,154 @@ test.describe("P5-6 동작하지 않는 조작부 정리", () => {
     await magnet.click();
     await expect(tool).toHaveAttribute("title", "스냅: 없음");
     measuredP56("스냅 메뉴", { 선택지: ["마디", "박", "1/2박", "1/4박", "없음"], 처음: "1/2박", "130px을 끌었을 때 놓인 자리(px)": found });
+  });
+});
+
+const measuredP61 = (name: string, value: unknown) => console.log(`P6-1 측정 ${name}: ${JSON.stringify(value)}`);
+
+/**
+ * P6-1 스타일 정리: 색 대비(axe)·장비 화면 넘침·단위 글자·슬라이더 손잡이를 실제 화면에서 잰다.
+ * 파일 구성·토큰 값·명암비 계산은 tests/styles-structure.test.mjs가 글자로 본다.
+ */
+test.describe("P6-1 스타일 정리", () => {
+  /** axe의 color-contrast 규칙만 돌려 위반 요소를 "선택자 — 설명" 글로 돌려준다(배경이 그림이라 계산할 수 없는 곳은 incomplete로 빠지며 사람이 본다). */
+  async function contrastViolations(page: Page) {
+    const result = await new AxeBuilder({ page }).withRules(["color-contrast"]).analyze();
+    return result.violations.flatMap((rule) => rule.nodes.map((node) => `${node.target.join(" ")} — ${node.any[0]?.message ?? ""}`));
+  }
+
+  test("axe color-contrast 위반 0건: 첫 화면·올린 뒤·클립을 고른 뒤·파일 메뉴·클립 메뉴·스냅 메뉴(1440×900)와 장비 화면까지 다 보이는 높이 3200", async ({ page }) => {
+    await openApp(page);
+    const found: Record<string, number> = {};
+    const check = async (label: string) => {
+      const violations = await contrastViolations(page);
+      found[label] = violations.length;
+      expect(violations, label).toEqual([]);
+    };
+    await check("첫 화면");
+    await upload(page);
+    await check("올린 뒤");
+    await page.locator(S.clip).first().click();
+    await check("클립을 고른 뒤");
+
+    await page.locator(S.fileMenuTrigger).click();
+    await expect(page.locator(S.fileMenuPanel)).toBeVisible();
+    await check("파일 메뉴");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(S.fileMenuPanel)).toHaveCount(0);
+
+    await page.locator(S.clip).first().click({ button: "right" });
+    await expect(page.locator(S.contextMenu)).toBeVisible();
+    await check("클립 메뉴");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(S.contextMenu)).toHaveCount(0);
+
+    await page.locator(".snap-tool").click();
+    await expect(page.locator(".snap-dropdown")).toBeVisible();
+    await check("스냅 메뉴");
+
+    // 높이를 늘려 오른쪽 패널의 장비 화면(이퀄라이저·컴프레서·딜레이·리버브·분석기)까지 모두 보이게 한 화면.
+    // 900px 높이에서는 아래쪽이 접혀 있어 점검되지 않던 곳이고, 옛 빌드의 위반(컴프레서 이름·프리셋 입력칸 등)이 이쪽에 더 있었다.
+    await page.locator(".snap-tool").click();
+    await expect(page.locator(".snap-dropdown")).toHaveCount(0);
+    await page.setViewportSize({ width: 1440, height: 3200 });
+    await expect.poll(async () => (await page.locator(S.inspector).boundingBox())?.height ?? 0).toBeGreaterThan(2500);
+    await check("높이 3200(장비 화면까지)");
+    measuredP61("axe color-contrast 위반 수", found);
+  });
+
+  test("장비 화면(이퀄라이저·딜레이·리버브·컴프레서·분석기)이 인스펙터 폭 안에 들어오고 잘리지 않는다 — 폭 1024·1280·1440·1920", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await page.locator(S.clip).first().click();
+    const found: Record<string, { 인스펙터_폭: number; 문제: string[] }> = {};
+    for (const width of [1024, 1280, 1440, 1920]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(400); // 분석기 캔버스가 폭에 맞춰 다시 그려질 때까지
+      const result = await page.evaluate((selector) => {
+        const root = document.querySelector(selector)!;
+        const panel = root.getBoundingClientRect();
+        const label = (element: Element) =>
+          element.tagName.toLowerCase() + (typeof element.className === "string" && element.className ? "." + element.className.trim().split(/\s+/).slice(0, 2).join(".") : "");
+        const hidden = (element: Element) => {
+          const style = getComputedStyle(element);
+          return style.display === "none" || style.visibility === "hidden" || style.opacity === "0" || (element.closest("[aria-hidden=true]") !== null && style.position === "absolute");
+        };
+        const problems: string[] = [];
+        for (const element of root.querySelectorAll("*")) {
+          if (hidden(element)) continue;
+          const rect = element.getBoundingClientRect();
+          if (rect.width < 1 || rect.height < 1) continue;
+          // 가까운 조상 중 가로로 잘라 내는 상자(overflow-x가 visible이 아닌 것)가 있으면 그 안에서도 벗어나지 않아야 한다.
+          let clip: Element = root;
+          for (let ancestor = element.parentElement; ancestor && ancestor !== root; ancestor = ancestor.parentElement) {
+            if (getComputedStyle(ancestor).overflowX !== "visible") {
+              clip = ancestor;
+              break;
+            }
+          }
+          const bound = clip.getBoundingClientRect();
+          const over = Math.max(rect.right - panel.right, panel.left - rect.left, rect.right - bound.right, bound.left - rect.left);
+          if (over > 0.75) problems.push(`${label(element)} 넘침 ${over.toFixed(1)}px (${label(clip)} 안)`);
+        }
+        for (const element of root.querySelectorAll("*")) {
+          if (hidden(element)) continue;
+          const style = getComputedStyle(element);
+          if (element.scrollWidth - element.clientWidth > 1 && !["visible", "auto", "scroll"].includes(style.overflowX)) {
+            problems.push(`${label(element)} 안쪽이 ${element.scrollWidth - element.clientWidth}px 잘림`);
+          }
+        }
+        return { panel: Math.round(panel.width), problems: [...new Set(problems)] };
+      }, S.inspector);
+      found[String(width)] = { 인스펙터_폭: result.panel, 문제: result.problems.slice(0, 6) };
+      expect(result.problems, `폭 ${width}px (인스펙터 ${result.panel}px)`).toEqual([]);
+    }
+    measuredP61("장비 화면 넘침", found);
+  });
+
+  test("값을 보여 주는 글자는 단위를 그대로 보여 준다(375 ms·8000 Hz·0.0 dB가 MS·HZ·DB로 바뀌지 않는다)", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await page.locator(S.clip).first().click();
+    const shown = await page.evaluate(() => {
+      const found: Record<string, string> = {};
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const text = (node.nodeValue ?? "").trim();
+        const element = node.parentElement;
+        if (!text || !element) continue;
+        // 숫자 + 단위(ms·Hz·dB·kHz·s)로 끝나는 글자
+        if (/\d\s*(ms|Hz|kHz|dB|s)$/.test(text)) found[text] = getComputedStyle(element).textTransform;
+      }
+      return found;
+    });
+    expect(Object.keys(shown).length, "단위가 붙은 값이 화면에 있어야 이 시험이 뜻이 있다").toBeGreaterThan(5);
+    const upper = Object.entries(shown).filter(([, transform]) => transform === "uppercase").map(([text]) => text);
+    expect(upper, "대문자로 바뀌어 보이는 값").toEqual([]);
+    for (const text of ["375 ms", "8000 Hz"]) expect(Object.keys(shown), text).toContain(text);
+    // 마스터의 0 dB 되돌리기 단추도 같다
+    await expect(page.locator(".master-reset")).toHaveCSS("text-transform", "none");
+    measuredP61("단위가 붙은 값", { 개수: Object.keys(shown).length, 예: Object.keys(shown).slice(0, 8) });
+  });
+
+  test("리버브 잔향 길이 슬라이더: 손잡이가 보이고, 값을 바꾸면 그림이 달라진다(예전엔 투명이라 그림이 그대로였다)", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await page.locator(S.clip).first().click();
+    const fader = page.locator(".reverb-decay-fader");
+    const input = fader.locator("input");
+    await fader.scrollIntoViewIfNeeded();
+    await expect(input).toHaveCSS("opacity", "1");
+    const picture = async (value: number) => {
+      await setRange(page, ".reverb-decay-fader input", value);
+      await expect(input).toHaveValue(String(value));
+      return fader.screenshot({ animations: "disabled" });
+    };
+    const shortest = await picture(0.5);
+    const longest = await picture(11);
+    const middle = await picture(5);
+    expect(shortest.equals(longest), "짧게 ↔ 길게").toBe(false);
+    expect(middle.equals(longest) || middle.equals(shortest), "가운데 값이 양 끝과 같은 그림").toBe(false);
+    measuredP61("리버브 손잡이", { 불투명도: 1, "짧게·가운데·길게 그림이 서로 다름": true });
   });
 });

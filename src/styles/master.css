@@ -1,32 +1,27 @@
-/*
- * 마스터 칸 — P3-4
- * 마스터 볼륨 슬라이더와 리미터 동작량 표시. 색은 기존 토큰만 쓴다.
- */
-
 .master-panel .panel-section__body {
   display: grid;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .master-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
 .master-label {
   flex: 0 0 auto;
-  color: var(--mistral-black);
-  font-size: 12px;
+  color: var(--color-text);
+  font-size: var(--font-size-1);
   font-weight: 700;
 }
 
 .master-value {
   margin-left: auto;
   min-width: 64px;
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-1);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -39,14 +34,15 @@
 .master-slider {
   flex: 1 1 auto;
   min-width: 0;
-  accent-color: var(--mistral-orange);
+  accent-color: var(--color-brand);
 }
 
 .master-reset {
   flex: 0 0 auto;
   min-height: 28px;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: var(--font-size-1);
+  text-transform: none;
 }
 
 .master-limiter .master-label {
@@ -58,18 +54,17 @@
   flex: 1 1 auto;
   height: 8px;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--surface-2);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-1);
+  background: var(--color-surface-raised);
 }
 
-/* 막대는 오른쪽 끝에서 왼쪽으로 차오른다(0 dB = 비어 있음) */
 .master-reduction-bar > span {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  background: var(--mistral-sunshine);
+  background: var(--color-amber);
   transition: width 80ms linear;
 }
 
@@ -77,17 +72,16 @@
   background: #c8261a;
 }
 
-/* 모니터 볼륨(상단 바 녹음 옵션) */
 .monitor-volume-control {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   height: 34px;
   padding: 0 8px;
-  color: var(--text-muted);
-  border: 1px solid var(--line-soft);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-line-soft);
   border-radius: 7px;
-  background: var(--surface-2);
+  background: var(--color-surface-raised);
 }
 
 .topbar .monitor-volume-control {
@@ -97,20 +91,19 @@
 .monitor-volume-control input[type="range"] {
   width: 64px;
   min-width: 0;
-  accent-color: var(--mistral-orange);
+  accent-color: var(--color-brand);
 }
 
-/* 녹음 지연 보정(ms) — 상단 바 녹음 옵션 */
 .latency-control {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   height: 34px;
   padding: 0 8px;
-  color: var(--text-muted);
-  border: 1px solid var(--line-soft);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-line-soft);
   border-radius: 7px;
-  background: var(--surface-2);
+  background: var(--color-surface-raised);
   font-size: 11px;
   font-weight: 800;
 }
@@ -125,7 +118,7 @@
   height: 24px;
   padding: 0 4px;
   color: #f3f5ee;
-  border: 1px solid var(--line-soft);
+  border: 1px solid var(--color-line-soft);
   border-radius: 5px;
   background: #101311;
   font-size: 11px;
@@ -135,19 +128,17 @@
 }
 
 .latency-control input:focus {
-  border-color: var(--mint);
+  border-color: var(--color-brand);
 }
 
 .latency-control:has(input:disabled) {
   opacity: 0.6;
 }
 
-/* 녹음을 준비하는 동안(마이크 허락·워크렛 준비): 아직 녹음 중은 아니다 */
 .record-button.preparing {
   opacity: 0.75;
 }
 
-/* 녹음하는 동안 보이는 임시 클립: 클릭·끌기를 받지 않는다 */
 .recording-preview {
   pointer-events: none;
 }

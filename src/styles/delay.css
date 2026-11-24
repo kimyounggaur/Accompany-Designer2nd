@@ -1,0 +1,302 @@
+.dly-rack {
+  opacity: 0.85;
+  transition: opacity 0.18s ease;
+}
+
+.dly-rack.on {
+  opacity: 1;
+}
+
+.dly-wood {
+  padding: 9px;
+}
+
+.dly-face {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dly-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dly-brand-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dly-brand {
+  font-size: var(--font-size-2);
+}
+
+.dly-sub {
+  font-size: 8px;
+}
+
+.dly-power {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 27px;
+  padding: 0 9px;
+  cursor: pointer;
+}
+
+.dly-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.65);
+}
+
+.dly-knobs-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-around;
+  gap: var(--space-2);
+  padding: 10px 4px 6px;
+}
+
+.dly-knob-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.dly-knob-label {
+  font-size: 8px;
+  text-align: center;
+}
+
+.dly-knob-value {
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  min-width: 40px;
+}
+
+.dly-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.dly-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 110px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.dly-section-label {
+  font-size: 8px;
+}
+
+.dly-section-body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.dly-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.dly-toggle input[type="checkbox"] {
+  display: none;
+}
+
+.dly-toggle-track {
+  position: relative;
+  width: 32px;
+  height: 16px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.dly-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  transition: transform 0.18s ease;
+}
+
+.dly-toggle-text {
+  font-size: 9px;
+}
+
+.dly-select {
+  padding: 4px 6px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.dly-select:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.dly-time-display {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dly-select {
+  font-weight: 400;
+}
+
+.dly-power {
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.dly-power:hover {
+  border-color: transparent;
+}
+
+.dly-toggle input:checked + .dly-toggle-track .dly-toggle-thumb {
+  transform: translateX(16px);
+  background: #ffffff;
+}
+
+.dly-select {
+  color: var(--color-text);
+  border: 1px solid hsl(240, 5.9%, 90%);
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.dly-select:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(250, 82, 15, 0.16);
+}
+
+.dly-power {
+  color: var(--color-text);
+  border: 0;
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.dly-power:hover {
+  color: var(--color-text);
+  background: var(--color-surface-strong);
+}
+
+.dly-power.on {
+  color: #ffffff;
+  background: var(--color-dark);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.dly-toggle input:checked + .dly-toggle-track {
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: none;
+  background: var(--color-brand);
+}
+
+.dly-brand,
+.dly-sub,
+.dly-knob-label,
+.dly-knob-value,
+.dly-section-label,
+.dly-toggle-text,
+.dly-time-display {
+  font-weight: 400;
+  letter-spacing: 0.5px;
+}
+
+/* 이름표만 대문자로 한다. 값(375 ms·8000 Hz)은 단위 글자를 그대로 둔다. */
+.dly-brand,
+.dly-sub,
+.dly-knob-label,
+.dly-section-label,
+.dly-toggle-text {
+  text-transform: uppercase;
+}
+
+.dly-wood {
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.dly-face {
+  border: 1px solid rgba(127, 99, 21, 0.16);
+  border-radius: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: none;
+}
+
+.dly-knobs-row,
+.dly-section {
+  border: 1px solid rgba(127, 99, 21, 0.14);
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.dly-brand,
+.dly-knob-value,
+.dly-toggle-text,
+.dly-time-display {
+  color: var(--color-text);
+}
+
+.dly-sub,
+.dly-knob-label,
+.dly-section-label {
+  color: var(--color-text-muted);
+}
+
+.dly-toggle-track {
+  border: 0;
+  border-radius: 0;
+  background: var(--color-surface-strong);
+}
+
+.dly-toggle-thumb {
+  border-radius: 0;
+  background: var(--color-dark);
+}
+
+.dly-led {
+  background: #ffb83e;
+}
+
+.dly-power.on .dly-led {
+  background: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(250, 82, 15, 0.16);
+}
+
+.dly-knob-wrap svg:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: 50%;
+}

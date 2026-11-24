@@ -1,11 +1,3 @@
-/*
- * 공용 조작부(ui/controls) — P5-0
- *
- * 노브의 눈에 보이는 요소(svg 또는 span)는 모양이 달라도 모두 `.knob`을 가진다.
- * 끌기 표시·초점 링·꺼짐 표시를 여기서 한 번만 정하고, 모양별 CSS는 그리는 일만 맡는다.
- * 값 글자를 눌러 숫자 칸으로 바꾸는 `.knob-value`·`.knob-entry`도 여기서 정한다.
- */
-
 .knob {
   cursor: ns-resize;
   touch-action: none;
@@ -18,12 +10,11 @@
 }
 
 .knob:focus-visible {
-  outline: 2px solid var(--mistral-orange);
+  outline: 2px solid var(--color-brand);
   outline-offset: 2px;
   border-radius: 50%;
 }
 
-/* 값 글자: 평소에는 글자처럼 보이고, 누르면 숫자 칸이 된다 */
 .knob-value {
   appearance: none;
   margin: 0;
@@ -34,7 +25,7 @@
   font: inherit;
   letter-spacing: inherit;
   text-align: inherit;
-  text-transform: inherit;
+  text-transform: none;
   cursor: text;
 }
 
@@ -51,7 +42,7 @@
   border: 1px solid rgba(0, 0, 0, 0.45);
   border-radius: 3px;
   background: #fff;
-  color: #1f1f1f;
+  color: var(--color-text);
   font: inherit;
   letter-spacing: 0;
   text-align: center;
@@ -66,14 +57,13 @@
   -webkit-appearance: none;
 }
 
-/* 슬라이더 옆 숫자 칸: 슬라이더가 남는 폭을 쓰고, 숫자 칸은 글자 몇 개만큼만 쓴다 */
 .topbar .monitor-volume-control input.monitor-volume-number {
   flex: 0 0 auto;
   width: 40px;
   min-width: 0;
   height: 22px;
   padding: 0 4px;
-  font-size: 12px;
+  font-size: var(--font-size-1);
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -99,11 +89,10 @@
   font-size: 11px;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  border-color: var(--line-soft);
+  border-color: var(--color-line-soft);
   background: rgba(255, 255, 255, 0.7);
 }
 
-/* 잔향 길이 값 글자: 예전 배치에서는 옆 모듈에 가려 보이지 않았다. 슬라이더 바로 아래에 두고, 누르면 숫자 칸으로 바뀐다 */
 .reverb-decay-module > strong {
   grid-column: 1 / 3;
   grid-row: 3;
@@ -111,14 +100,11 @@
   align-self: start;
 }
 
-/* 잔향 길이 슬라이더(투명하게 눕혀 둔 입력) 위의 장식이 눌림을 가로채지 않게 한다 — 예전에는 가운데를 눌러도 슬라이더에 닿지 않았다 */
 .reverb-decay-scale,
 .reverb-decay-scale::after {
   pointer-events: none;
 }
 
-/* 딜레이 장비의 호 노브 다섯 개: 패널이 좁으면 노브도 같이 줄어든다.
-   예전에는 노브마다 56px 고정이라 패널 폭이 346px 이하이면 5번째가 오른쪽에서 잘렸다(1440px 화면의 기본 폭이 345px). */
 .dly-knobs-row .dly-knob-wrap {
   flex: 1 1 0;
   min-width: 0;
@@ -135,29 +121,21 @@
   white-space: nowrap;
 }
 
-/*
- * 우클릭 메뉴(ui/controls/ContextMenu) — P5-4
- * 화면 맨 위(body)에 고정으로 그린다. 토스트(2000)보다 아래, 패널·팝오버보다 위.
- */
 .context-menu {
   position: fixed;
-  z-index: 1500;
+  z-index: var(--z-menu);
   display: flex;
   flex-direction: column;
-  /*
-   * 너비는 놓인 자리에 따라 달라지면 안 된다: 자리를 정하려고 재는 순간의 자리(누른 곳)가 화면 오른쪽 끝이면
-   * 남은 폭만큼만 줄어든 너비로 재어지고, 안쪽으로 옮긴 뒤에는 다시 넓어져 오른쪽 끝이 화면 밖으로 나갔다(P5-5에서 항목 글자가 길어져 드러남).
-   */
   width: max-content;
   min-width: 176px;
   max-width: min(320px, calc(100vw - 16px));
   max-height: calc(100vh - 16px);
   overflow-y: auto;
-  padding: 4px;
-  border: 1px solid var(--line);
+  padding: var(--space-1);
+  border: 1px solid var(--color-line);
   border-radius: 6px;
-  background: var(--surface-2);
-  color: var(--text);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
   box-shadow: 0 8px 24px rgba(31, 31, 31, 0.22);
 }
 
@@ -165,11 +143,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-4);
   min-height: 32px;
   padding: 4px 10px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-1);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -178,13 +156,13 @@
 }
 
 .context-menu button:hover:not(:disabled) {
-  background: var(--surface-3);
+  background: var(--color-surface-strong);
 }
 
 .context-menu button:focus-visible {
-  outline: 2px solid var(--mistral-orange);
+  outline: 2px solid var(--color-brand);
   outline-offset: -2px;
-  background: var(--surface-3);
+  background: var(--color-surface-strong);
 }
 
 .context-menu button:disabled {
@@ -193,16 +171,20 @@
 }
 
 .context-menu button.danger {
-  color: #a1121a;
+  color: var(--color-danger);
 }
 
 .context-menu__hint {
-  font-size: 12px;
-  opacity: 0.7;
+  font-size: var(--font-size-1);
+  color: var(--color-text-muted);
+}
+
+.context-menu button.danger .context-menu__hint {
+  color: var(--color-danger);
 }
 
 .context-menu__separator {
   height: 1px;
   margin: 4px 2px;
-  background: var(--line);
+  background: var(--color-line);
 }

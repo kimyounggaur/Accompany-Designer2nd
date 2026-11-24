@@ -1,0 +1,211 @@
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.transport-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.session-name {
+  width: min(260px, 18vw);
+}
+
+.session-name input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 9px;
+  outline: none;
+}
+
+.number-control input {
+  min-width: 0;
+  padding: 8px 9px;
+  outline: none;
+}
+
+.number-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-1);
+}
+
+.number-control input {
+  width: 76px;
+}
+
+.record-options-group {
+  gap: 6px;
+}
+
+.count-in-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  min-width: 104px;
+  padding: 0 8px;
+}
+
+.count-in-control select {
+  width: 72px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 800;
+  outline: none;
+}
+
+.input-select-control {
+  display: grid;
+  gap: 3px;
+  min-width: 140px;
+  font-size: 10px;
+}
+
+.input-select-control select {
+  width: 100%;
+  min-width: 0;
+  height: 27px;
+  padding: 0 7px;
+  font-size: 11px;
+  outline: none;
+}
+
+.time-display {
+  min-width: 76px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 980px) {
+  .transport {
+    flex-wrap: wrap;
+  }
+
+  .session-name {
+    width: 100%;
+  }
+}
+
+.transport {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.session-name input,
+.input-select-control select,
+.count-in-control {
+  font-weight: 400;
+}
+
+.transport {
+  position: relative;
+  min-height: 64px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-line);
+  background: rgba(255, 250, 235, 0.92);
+  color: var(--color-text);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.transport::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient( 90deg, #ffd900 0 16%, var(--color-surface-strong) 16% 32%, #ffa110 32% 50%, #ff8105 50% 68%, #fb6424 68% 84%, #fa520f 84% 100% );
+}
+
+.transport-group {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 6px;
+  border: 1px solid rgba(127, 99, 21, 0.14);
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: none;
+}
+
+.session-name input {
+  color: var(--color-text);
+  border: 1px solid hsl(240, 5.9%, 90%);
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.number-control input {
+  font-weight: 400;
+  color: var(--color-text);
+  border: 1px solid hsl(240, 5.9%, 90%);
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.input-select-control select,
+.count-in-control {
+  color: var(--color-text);
+  border: 1px solid hsl(240, 5.9%, 90%);
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.session-name input:focus,
+.number-control input:focus,
+.input-select-control select:focus,
+.count-in-control:focus-within {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(250, 82, 15, 0.16);
+}
+
+.number-control,
+.input-select-control {
+  color: var(--color-text-muted);
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.time-display {
+  color: var(--color-accent);
+  font-weight: 400;
+}
+
+.transport .icon-button.primary,
+.transport .icon-button.active:not(.monitor-button):not(.metronome-button) {
+  color: var(--color-text);
+  background: transparent;
+  box-shadow: none;
+}
+
+.transport .icon-button.primary:hover,
+.transport .icon-button.active:not(.monitor-button):not(.metronome-button):hover {
+  color: var(--color-accent);
+  background: transparent;
+}
+
+.transport .icon-button.primary svg,
+.transport .icon-button.active:not(.monitor-button):not(.metronome-button) svg {
+  filter: none;
+}
+
+@media (max-width: 980px) {
+  .transport {
+    align-content: flex-start;
+    background: rgba(255, 250, 235, 0.96);
+  }
+}
+
+.count-in-control select,
+.count-in-control select option {
+  color: var(--color-text);
+  background-color: #fff8e3;
+}

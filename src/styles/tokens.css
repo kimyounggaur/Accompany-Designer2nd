@@ -1,0 +1,47 @@
+/* 디자인 토큰 — 색·간격·모양·글자 크기·층의 값은 여기서만 정한다.
+   글자에 쓰는 색은 아래 --color-* 만 쓴다(명암비는 WCAG 계산식으로 확인한 값, 본문은 4.5 이상).
+   --color-brand 계열은 면·테두리·표시등 같은 장식용이라 글자에 쓰지 않는다. */
+:root {
+  color-scheme: light;
+  font-family: Arial, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+
+  /* 바탕·글자 */
+  --color-bg: #fffaeb;
+  --color-surface: #fff0c2;
+  --color-text: #242018;        /* surface 위 명암비 14.3 */
+  --color-text-muted: #5c4514;  /* 8.0 */
+  --color-accent: #8b2b08;      /* 7.6 (흰 바탕 8.6) — ARM·패널 제목 */
+  --color-danger: #a1121a;      /* 7.1 */
+  --color-ok: #1f6b3a;          /* 5.7 */
+
+  /* 면·선(글자 아님) */
+  --color-surface-raised: #ffffff;
+  --color-surface-strong: #ffe295;
+  --color-dark: #1f1f1f;
+  --color-brand: #fa520f;
+  --color-brand-soft: rgba(250, 82, 15, 0.13);
+  --color-amber: #ffa110;
+  --color-line: rgba(127, 99, 21, 0.18);
+  --color-line-soft: rgba(127, 99, 21, 0.1);
+  --shadow-card: -8px 16px 39px rgba(127, 99, 21, 0.12), -33px 64px 72px rgba(127, 99, 21, 0.1), -73px 144px 97px rgba(127, 99, 21, 0.06), -130px 255px 115px rgba(127, 99, 21, 0.02);
+
+  /* 간격·모양·글자 크기 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --radius-1: 4px;
+  --font-size-1: 12px;
+  --font-size-2: 13px;
+  --font-size-3: 15px;
+
+  /* 층 */
+  --z-menu: 900;
+  --z-toast: 1000;
+  --z-cursor: 9999;             /* 포인터를 따라다니는 표시. 알림·메뉴 위 */
+}

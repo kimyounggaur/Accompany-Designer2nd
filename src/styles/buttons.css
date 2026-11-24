@@ -1,0 +1,151 @@
+.icon-button,
+.text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0 11px;
+  cursor: pointer;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.icon-button.danger {
+  color: #fff6f4;
+  background: rgba(242, 109, 101, 0.2);
+}
+
+.text-button.full {
+  width: 100%;
+}
+
+.text-button:disabled,
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.toggle {
+  height: 28px;
+  min-width: 34px;
+  padding: 0 9px;
+}
+
+.arm-toggle {
+  min-width: 48px;
+  border-color: rgba(242, 109, 101, 0.35);
+}
+
+.icon-button.mini {
+  width: 24px;
+  height: 24px;
+}
+
+.icon-button,
+.text-button,
+.toggle {
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.icon-button:hover,
+.text-button:hover,
+.toggle:hover,
+.record-button.recording,
+.arm-toggle.active,
+.toggle.danger.active {
+  border-color: transparent;
+}
+
+.icon-button,
+.text-button,
+.toggle {
+  color: var(--color-text);
+  border: 0;
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.icon-button:hover,
+.text-button:hover,
+.toggle:hover {
+  color: var(--color-text);
+  background: var(--color-surface-strong);
+}
+
+.icon-button.primary {
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.icon-button.active,
+.toggle.active {
+  color: #ffffff;
+  background: var(--color-dark);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.monitor-button.active,
+.metronome-button.active {
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.monitor-button.active,
+.metronome-button.active {
+  background: var(--color-brand);
+}
+
+.icon-button.primary {
+  background: var(--color-dark);
+}
+
+.record-button.recording {
+  color: #ffffff;
+  background: var(--color-brand);
+  box-shadow: none;
+}
+
+.arm-toggle.active {
+  background: var(--color-brand);
+  box-shadow: none;
+}
+
+.toggle.danger.active {
+  color: var(--color-text);
+  background: var(--color-brand);
+  box-shadow: none;
+}
+
+.icon-button.primary svg,
+.icon-button.active svg,
+.toggle.active svg,
+.monitor-button.active svg,
+.metronome-button.active svg {
+  filter: invert(1);
+}
+
+.record-button,
+.arm-toggle {
+  color: var(--color-accent);
+}
+
+.arm-toggle.active {
+  color: #fff;
+  background-color: var(--color-accent);
+}
