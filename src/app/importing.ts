@@ -2,7 +2,7 @@ import { audioEngine } from "../audio/currentEngine";
 import { findMissingByHash, listMissingAssets } from "../domain/project/relink";
 import type { Clip } from "../domain/types";
 import { ko } from "../i18n/ko";
-import { attachAudio, readAudioFile, type DecodedUpload } from "../services/importer";
+import { attachAudio, planUpload, readAudioFile, type DecodedUpload } from "../services/importer";
 import { notify, notifyError } from "../services/notify";
 import { hasRememberedAudio, rememberAudio } from "../services/persistence/audioBlobs";
 import { useDawStore } from "../store/useDawStore";
@@ -62,37 +62,25 @@ export async function importAudioFiles(files: FileList | File[], deps: ImportDep
 
       const { asset } = read;
       const state = useDawStore.getState();
-      const startTime = state.playhead;
-      const selected = state.tracks.find((track) => track.id === state.selectedTrackId);
-      let targetTrack = selected ?? state.tracks[0];
-      const overlaps = (track: typeof targetTrack) =>
-        track.clips.some((clip) => clip.startTime < startTime + asset.duration && clip.startTime + clip.duration > startTime);
-      if (!targetTrack || overlaps(targetTrack)) {
+      // 어느 트랙에 놓을지는 배치 규칙이 정한다(선택한 트랙의 그 구간이 비어 있으면 그 트랙, 아니면 새 트랙. 겹침은 템포 맞춤을 반영한 길이로 본다).
+      const plan = planUpload(getProjectSnapshot(), asset, {
+        clipId: createId("clip"),
+        startTime: state.playhead,
+        selectedTrackId: state.selectedTrackId,
+      });
+      let trackId: string;
+      if ("trackId" in plan.target) {
+        trackId = plan.target.trackId;
+      } else {
         state.addTrack();
         const allTracks = useDawStore.getState().tracks;
-        targetTrack = allTracks[allTracks.length - 1];
+        trackId = allTracks[allTracks.length - 1].id;
       }
-
-      const clip: Clip = {
-        id: createId("clip"),
-        audioBufferId: asset.id,
-        name: asset.fileName,
-        trackId: targetTrack.id,
-        startTime,
-        offset: 0,
-        duration: asset.duration,
-        sourceBpm: state.bpm,
-        stretchMode: "none",
-        gain: 1,
-        fadeIn: 0,
-        fadeOut: 0,
-        fadeCurve: "equalPower",
-        muted: false,
-      };
+      const clip: Clip = { ...plan.clip, trackId };
 
       rememberAudio(asset.id, file);
       state.addAudioAsset(asset);
-      state.addClip(targetTrack.id, clip);
+      state.addClip(trackId, clip);
       void ensurePeaks(asset); // 파형은 Worker가 만든다. 끝나면 저절로 그려진다.
       uploaded += 1;
       if (fileArray.length > 1) notify("info", ko.notice.uploadProgress(i + 1, fileArray.length, asset.fileName));
