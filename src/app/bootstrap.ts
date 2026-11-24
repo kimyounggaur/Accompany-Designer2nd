@@ -14,6 +14,7 @@ import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
 import { useDawStore } from "../store/useDawStore";
 import { registerAutosave } from "./autosaveControl";
 import { connectEngineSync } from "./engineSync";
+import { installKeyboard } from "./keyboard";
 import { cancelAllPeaks, ensurePeaksForAssets } from "./peaks";
 import { decodeStoredAudio, saveProjectFile } from "./projectFile";
 import { getProjectSnapshot } from "./projectSnapshot";
@@ -21,7 +22,7 @@ import { consumeSkipRecover } from "./recoverFlag";
 import { openRelinkDialog } from "./relinking";
 
 /**
- * 앱이 켜질 때 한 번 하는 일: 자동 저장을 시작하고, 저장해 둔 프로젝트가 있으면 복구한다.
+ * 앱이 켜질 때 한 번 하는 일: 자동 저장을 시작하고, 키보드 단축키를 켜고, 저장해 둔 프로젝트가 있으면 복구한다.
  * 돌려주는 함수를 부르면 모두 거둔다(화면이 사라질 때).
  *
  * 복구 규칙(예전 App.tsx와 같다):
@@ -40,6 +41,9 @@ export function startApp(): () => void {
 
   // 끌기·입력 묶음(실행 취소 한 단계)이 뗌 신호를 놓쳐 열린 채로 남지 않게, 문서 전체의 뗌·창 blur에서도 닫는다.
   const offGestureGuards = installGestureGuards(history);
+
+  // 키보드 단축키: 창 전체에서 키를 듣는 곳은 여기서 켜는 이 하나뿐이다(표는 services/shortcuts.ts, 연결은 app/keyboard.ts).
+  const offKeyboard = installKeyboard();
 
   // 문서가 바뀌면 재생 중인 소리 경로를 바뀐 부분만 맞춘다(예전 App.tsx의 schedulingSignature 효과를 대체).
   const offEngineSync = connectEngineSync(audioEngine);
@@ -115,6 +119,7 @@ export function startApp(): () => void {
     registerAutosave(undefined);
     offLatencySync();
     offGestureGuards();
+    offKeyboard();
     offEngineSync();
     autosave.dispose();
   };

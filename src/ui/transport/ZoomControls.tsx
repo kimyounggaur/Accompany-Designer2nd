@@ -1,26 +1,23 @@
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
-import { zoomToFit } from "../../app/actions";
-import { useDawStore } from "../../store/useDawStore";
+import { zoomIn, zoomOut, zoomToFit } from "../../app/actions";
+import { ariaKeys, keyLabel } from "../../services/shortcuts";
 
-/** 확대 · 축소 · 전체 보기 */
+/** 확대 · 축소 · 전체 보기. 단추에 적는 키는 단축키 표(services/shortcuts.ts)에서 읽는다. */
 export function ZoomControls() {
-  const zoomPxPerSecond = useDawStore((state) => state.zoomPxPerSecond);
-  const setZoom = useDawStore((state) => state.setZoom);
-
   return (
     <div className="transport-group">
-      <button className="icon-button" onClick={() => setZoom(zoomPxPerSecond - 16)} title="축소" type="button">
+      <button aria-keyshortcuts={ariaKeys("zoomOut")} className="icon-button" onClick={zoomOut} title="축소" type="button">
         <ZoomOut size={17} />
       </button>
-      <button className="icon-button" onClick={() => setZoom(zoomPxPerSecond + 16)} title="확대" type="button">
+      <button aria-keyshortcuts={ariaKeys("zoomIn")} className="icon-button" onClick={zoomIn} title="확대" type="button">
         <ZoomIn size={17} />
       </button>
       <button
-        aria-keyshortcuts="Shift+0"
+        aria-keyshortcuts={ariaKeys("zoomFit")}
         className="text-button"
         data-testid="zoom-fit"
         onClick={zoomToFit}
-        title="프로젝트 전체가 보이게 줄이기 (시프트+0)"
+        title={`프로젝트 전체가 보이게 줄이기 (${keyLabel("zoomFit")})`}
         type="button"
       >
         <Maximize2 size={16} />

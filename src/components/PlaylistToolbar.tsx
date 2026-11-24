@@ -8,36 +8,35 @@ import {
   deleteSelectedClips,
   groupSelectedClips,
   quantizeSelectedClips,
+  quickZoom,
   resetSelectedClipSource,
   selectAllClips,
   ungroupSelectedClips,
+  zoomIn,
+  zoomOut,
   zoomToFit,
   zoomToSelectedClips,
 } from "../app/actions";
 import type { PlaylistSnap, PlaylistTool } from "../domain/types";
+import { ariaKeys, keyLabel, toolShortcutId } from "../services/shortcuts";
 import { menuIcon, playlistToolIcons, snapIcon } from "../utils/playlistToolIcons";
 
+/** 도구 단추. 단추에 적는 키는 단축키 표(services/shortcuts.ts)에서 읽는다. */
 const toolButtons: Array<{
   tool: PlaylistTool;
   label: string;
-  shortcut: string;
   icon: string;
 }> = [
-  { tool: "move", label: "이동", shortcut: "V", icon: playlistToolIcons.move },
-  { tool: "draw", label: "그리기", shortcut: "P", icon: playlistToolIcons.draw },
-  { tool: "paint", label: "페인트", shortcut: "B", icon: playlistToolIcons.paint },
-  { tool: "delete", label: "삭제", shortcut: "D", icon: playlistToolIcons.delete },
-  { tool: "mute", label: "음소거", shortcut: "T", icon: playlistToolIcons.mute },
-  { tool: "slip", label: "슬립 편집", shortcut: "S", icon: playlistToolIcons.slip },
-  { tool: "slice", label: "자르기", shortcut: "C", icon: playlistToolIcons.slice },
-  { tool: "select", label: "선택", shortcut: "E", icon: playlistToolIcons.select },
-  { tool: "zoom", label: "확대/축소", shortcut: "Z", icon: playlistToolIcons.zoom },
-  {
-    tool: "play-selected",
-    label: "선택 재생",
-    shortcut: "Y",
-    icon: playlistToolIcons["play-selected"],
-  },
+  { tool: "move", label: "이동", icon: playlistToolIcons.move },
+  { tool: "draw", label: "그리기", icon: playlistToolIcons.draw },
+  { tool: "paint", label: "페인트", icon: playlistToolIcons.paint },
+  { tool: "delete", label: "삭제", icon: playlistToolIcons.delete },
+  { tool: "mute", label: "음소거", icon: playlistToolIcons.mute },
+  { tool: "slip", label: "슬립 편집", icon: playlistToolIcons.slip },
+  { tool: "slice", label: "자르기", icon: playlistToolIcons.slice },
+  { tool: "select", label: "선택", icon: playlistToolIcons.select },
+  { tool: "zoom", label: "확대/축소", icon: playlistToolIcons.zoom },
+  { tool: "play-selected", label: "선택 재생", icon: playlistToolIcons["play-selected"] },
 ];
 
 const snapOptions: Array<{ value: PlaylistSnap; label: string }> = [
@@ -88,7 +87,6 @@ export function PlaylistToolbar() {
     (state) => state.togglePlaylistDetached,
   );
   const setPlayhead = useDawStore((state) => state.setPlayhead);
-  const setZoom = useDawStore((state) => state.setZoom);
 
   const selectedSnapLabel = useMemo(() => {
     const localLabel =
@@ -147,34 +145,28 @@ export function PlaylistToolbar() {
     {
       title: "편집",
       items: [
-        { label: "선택 항목 퀀타이즈", shortcut: "Alt+Q", action: quantizeSelectedClips },
-        { label: "선택 항목 삭제", shortcut: "Delete", action: deleteSelectedClips },
+        { label: "선택 항목 퀀타이즈", shortcut: keyLabel("quantize"), action: quantizeSelectedClips },
+        { label: "선택 항목 삭제", shortcut: keyLabel("deleteClips"), action: deleteSelectedClips },
       ],
     },
     {
       title: "도구",
-      items: [
-        { label: "이동", shortcut: "V", selected: playlistTool === "move", action: () => setPlaylistTool("move") },
-        { label: "그리기", shortcut: "P", selected: playlistTool === "draw", action: () => setPlaylistTool("draw") },
-        { label: "페인트", shortcut: "B", selected: playlistTool === "paint", action: () => setPlaylistTool("paint") },
-        { label: "삭제", shortcut: "D", selected: playlistTool === "delete", action: () => setPlaylistTool("delete") },
-        { label: "음소거", shortcut: "T", selected: playlistTool === "mute", action: () => setPlaylistTool("mute") },
-        { label: "슬립 편집", shortcut: "S", selected: playlistTool === "slip", action: () => setPlaylistTool("slip") },
-        { label: "자르기", shortcut: "C", selected: playlistTool === "slice", action: () => setPlaylistTool("slice") },
-        { label: "선택", shortcut: "E", selected: playlistTool === "select", action: () => setPlaylistTool("select") },
-        { label: "확대/축소", shortcut: "Z", selected: playlistTool === "zoom", action: () => setPlaylistTool("zoom") },
-        { label: "선택 재생", shortcut: "Y", selected: playlistTool === "play-selected", action: () => setPlaylistTool("play-selected") },
-      ],
+      items: toolButtons.map((button) => ({
+        label: button.label,
+        shortcut: keyLabel(toolShortcutId(button.tool)),
+        selected: playlistTool === button.tool,
+        action: () => setPlaylistTool(button.tool),
+      })),
     },
     {
       title: "보기",
       items: [
-        { label: "확대", shortcut: "Page Up", action: () => setZoom(useDawStore.getState().zoomPxPerSecond + 16) },
-        { label: "축소", shortcut: "Page Down", action: () => setZoom(useDawStore.getState().zoomPxPerSecond - 16) },
-        { label: "빠른 줌 1", shortcut: "Shift+1", action: () => setZoom(72) },
-        { label: "빠른 줌 2", shortcut: "Shift+2", action: () => setZoom(132) },
-        { label: "빠른 줌 3", shortcut: "Shift+3", action: () => setZoom(220) },
-        { label: "전체 보기", shortcut: "Shift+0", action: zoomToFit },
+        { label: "확대", shortcut: keyLabel("zoomIn"), action: zoomIn },
+        { label: "축소", shortcut: keyLabel("zoomOut"), action: zoomOut },
+        { label: "빠른 줌 1", shortcut: keyLabel("zoomPreset1"), action: () => quickZoom("preset1") },
+        { label: "빠른 줌 2", shortcut: keyLabel("zoomPreset2"), action: () => quickZoom("preset2") },
+        { label: "빠른 줌 3", shortcut: keyLabel("zoomPreset3"), action: () => quickZoom("preset3") },
+        { label: "전체 보기", shortcut: keyLabel("zoomFit"), action: zoomToFit },
       ],
     },
     {
@@ -189,7 +181,7 @@ export function PlaylistToolbar() {
     {
       title: "선택",
       items: [
-        { label: "모든 클립 선택", action: selectAllClips },
+        { label: "모든 클립 선택", shortcut: keyLabel("selectAll"), action: selectAllClips },
         { label: "선택 해제", action: clearSelection },
       ],
     },
@@ -203,8 +195,8 @@ export function PlaylistToolbar() {
     {
       title: "확대/축소",
       items: [
-        { label: "선택 항목으로 확대", shortcut: "Shift+5", action: zoomToSelectedClips },
-        { label: "축소", shortcut: "Shift+4", action: () => setZoom(72) },
+        { label: "선택 항목으로 확대", shortcut: keyLabel("zoomSelection"), action: zoomToSelectedClips },
+        { label: "축소", shortcut: keyLabel("zoomOutQuick"), action: () => quickZoom("out") },
       ],
     },
     {
@@ -338,8 +330,9 @@ export function PlaylistToolbar() {
               playlistTool === tool.tool ? "active" : ""
             }`}
             key={tool.tool}
+            aria-keyshortcuts={ariaKeys(toolShortcutId(tool.tool))}
             onClick={() => setPlaylistTool(tool.tool)}
-            title={`${tool.label} (${tool.shortcut})`}
+            title={`${tool.label} (${keyLabel(toolShortcutId(tool.tool))})`}
           >
             <img alt="" src={tool.icon} />
           </button>

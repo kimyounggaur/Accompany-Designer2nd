@@ -3681,3 +3681,227 @@ test.describe("P5-1 실행 취소 엔진", () => {
     await expect(vol, "위의 조작들이 단계를 만들었다면 값이 그대로 남는다").toHaveValue(before);
   });
 });
+
+const measuredP52 = (name: string, value: unknown) => console.log(`P5-2 측정 ${name}: ${JSON.stringify(value)}`);
+
+test.describe("P5-2 단축키 관리자", () => {
+  const knob = (page: Page, name: string) => page.locator(`[role=slider][aria-label="${name}"]`);
+  const clickEmpty = (page: Page) => page.mouse.click(700, 650);
+  const tool = (page: Page, label: string) => page.locator(`.playlist-tool-button[title^="${label} ("]`);
+  const projectName = (page: Page) => page.locator('input[aria-label="프로젝트 이름"]');
+
+  /** 키 이벤트를 직접 만들어 보낸다(한글 입력 상태·조합 중처럼 Playwright 키보드로는 흉내 낼 수 없는 경우). */
+  function dispatchKey(page: Page, init: { code: string; key: string; keyCode?: number; isComposing?: boolean }, selector?: string) {
+    return page.evaluate(
+      ({ init, selector }) => {
+        const target = selector ? (document.querySelector(selector) as HTMLElement) : document.body;
+        const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, code: init.code, key: init.key, isComposing: init.isComposing ?? false });
+        if (init.keyCode !== undefined) Object.defineProperty(event, "keyCode", { value: init.keyCode });
+        target.dispatchEvent(event);
+        return event.defaultPrevented;
+      },
+      { init, selector },
+    );
+  }
+
+  async function saveWith(page: Page, testInfo: TestInfo, press: () => Promise<void>) {
+    const [download] = await Promise.all([page.waitForEvent("download"), press()]);
+    const saved = path.join(os.tmpdir(), `ad2-p52-${testInfo.workerIndex}-${Date.now()}.adproj`);
+    await download.saveAs(saved);
+    return JSON.parse(strFromBytes(unzipSync(new Uint8Array(fs.readFileSync(saved)))["project.json"])).doc;
+  }
+
+  test("Ctrl+S는 프로젝트 파일 저장을 시작한다", async ({ page }, testInfo) => {
+    await openApp(page);
+    await upload(page);
+    const doc = await saveWith(page, testInfo, () => page.keyboard.press("Control+s"));
+    await expect(page.locator(S.status)).toContainText("프로젝트 파일을 저장했습니다");
+    expect(doc.tracks[0].clips).toHaveLength(1);
+    measuredP52("Ctrl+S 저장", { 클립_수: doc.tracks[0].clips.length });
+  });
+
+  test("Ctrl+S는 글자 칸에 초점이 있어도 저장하고, 아직 Enter를 누르지 않은 값(템포)도 저장에 들어간다", async ({ page }, testInfo) => {
+    await openApp(page);
+    await upload(page);
+    const tempo = page.locator(S.tempo);
+    await tempo.click();
+    await tempo.press("Control+a");
+    await tempo.pressSequentially("133"); // Enter 전
+    const doc = await saveWith(page, testInfo, () => tempo.press("Control+s"));
+    expect(doc.bpm).toBe(133);
+    await expect(tempo).toHaveValue("133");
+    measuredP52("글자 칸 안의 Ctrl+S", { 저장된_템포: doc.bpm });
+  });
+
+  test("Ctrl+C·Ctrl+V: 클립이 하나 늘고, 붙인 클립은 재생 위치에 놓인다", async ({ page }) => {
+    await openApp(page);
+    await upload(page); // 올린 클립은 선택된 상태
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    await page.keyboard.press("Control+c");
+    await expect(page.locator(S.status)).toContainText("클립 1개 복사됨");
+    await page.locator(S.ruler).click({ position: { x: 480, y: 8 } }); // 재생 위치를 앞으로
+    await page.keyboard.press("Control+v");
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    await expect(page.locator(S.status)).toContainText("클립 1개 붙여넣기 완료");
+    const lefts = (await clipLefts(page)).sort((a, b) => a - b);
+    expect(lefts[1]).toBeGreaterThan(lefts[0] + 100); // 처음 클립은 0, 붙인 클립은 재생 위치 쪽
+    measuredP52("복사·붙여넣기", { 클립_수: 2, 클립_left_px: lefts });
+  });
+
+  test("Ctrl+A는 모든 클립을 고르고 Delete는 고른 클립을 지운다. 고른 것이 없으면 Delete는 아무 일도 하지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await upload(page);
+    await expect(page.locator(S.clip)).toHaveCount(2);
+    await page.locator('button[title="플레이리스트 메뉴"]').click();
+    await page.locator(".menu-dropdown button", { hasText: "선택 해제" }).click();
+    await page.keyboard.press("Delete");
+    await expect(page.locator(S.clip)).toHaveCount(2); // 고른 것이 없다
+    await page.keyboard.press("Control+a");
+    await expect(page.locator(S.status)).toContainText("클립 2개 선택됨");
+    await page.keyboard.press("Delete");
+    await expect(page.locator(S.clip)).toHaveCount(0);
+  });
+
+  test("선택 상자·글자 칸에 초점이 있으면 V·P·B·C·Space는 도구도 재생도 바꾸지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await expect(tool(page, "이동")).toHaveClass(/active/);
+    const base = await starts(page);
+
+    await page.locator(S.countIn).focus(); // 선택 상자
+    for (const key of ["v", "p", "b", "c"]) await page.keyboard.press(key);
+    await expect(tool(page, "이동")).toHaveClass(/active/);
+    await expect(tool(page, "그리기")).not.toHaveClass(/active/);
+
+    await projectName(page).click(); // 글자 칸
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("pvb c"); // 도구 키와 스페이스가 그대로 글자로 들어간다
+    await expect(projectName(page)).toHaveValue("pvb c");
+    await expect(tool(page, "이동")).toHaveClass(/active/);
+    expect(await starts(page)).toBe(base); // 재생도 시작되지 않았다
+
+    await clickEmpty(page);
+    await page.keyboard.press("p"); // 칸 밖에서는 같은 키가 도구를 바꾼다
+    await expect(tool(page, "그리기")).toHaveClass(/active/);
+    measuredP52("선택 상자 안의 도구 키", { V_P_B_C_눌러도_도구: "이동", 칸_밖에서_P: "그리기" });
+  });
+
+  test("한글 입력 상태: 글자는 'ㅔ'여도 P 자리 키가 도구를 고르고, 한글 조합 중에는 무시한다", async ({ page }) => {
+    await openApp(page);
+    expect(await dispatchKey(page, { code: "KeyP", key: "ㅔ" })).toBe(true);
+    await expect(tool(page, "그리기")).toHaveClass(/active/);
+    expect(await dispatchKey(page, { code: "KeyB", key: "ㅠ", keyCode: 229 })).toBe(true); // 입력기가 처리 중이라는 표시(229)가 와도 글자 칸이 아니면 동작
+    await expect(tool(page, "페인트")).toHaveClass(/active/);
+    expect(await dispatchKey(page, { code: "KeyC", key: "ㅊ" })).toBe(true);
+    await expect(tool(page, "자르기")).toHaveClass(/active/);
+    expect(await dispatchKey(page, { code: "KeyV", key: "ㅍ" })).toBe(true);
+    await expect(tool(page, "이동")).toHaveClass(/active/);
+
+    // 한글 조합 중: 어디서든 무시한다
+    expect(await dispatchKey(page, { code: "KeyP", key: "ㅔ", isComposing: true })).toBe(false);
+    await expect(tool(page, "이동")).toHaveClass(/active/);
+    // 글자 칸에서 입력기가 처리 중인 키(229)도 무시한다
+    await projectName(page).click();
+    expect(await dispatchKey(page, { code: "KeyP", key: "Process", keyCode: 229 }, 'input[aria-label="프로젝트 이름"]')).toBe(false);
+    await expect(tool(page, "이동")).toHaveClass(/active/);
+    measuredP52("한글 입력 상태", { P자리_ㅔ: "그리기", 입력기_229_글자칸밖: "동작", 조합중: "무시" });
+  });
+
+  test("입력 칸 안의 Ctrl+Z는 앱 실행 취소를 하지 않고(칸 자체에 맡김), 칸 밖의 Ctrl+Z는 한다", async ({ page }) => {
+    await openApp(page);
+    const vol = page.locator(S.trackVolume).first();
+    const before = await vol.inputValue();
+    await setRange(page, S.trackVolume, 0.42);
+    await clickEmpty(page);
+    await projectName(page).click();
+    await page.keyboard.press("Control+z");
+    await expect(vol).toHaveValue("0.42"); // 칸 안에서는 앱이 되돌리지 않는다
+    await clickEmpty(page);
+    await page.keyboard.press("Control+z");
+    await expect(vol).toHaveValue(before);
+  });
+
+  test("Space는 재생·일시정지, Shift+Space는 정지(처음으로). 키를 누르고 있어도 재생이 깜빡이지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    const base = await starts(page);
+    await page.keyboard.press("Space");
+    await expect.poll(() => starts(page)).toBeGreaterThan(base);
+    await page.waitForTimeout(500);
+    await page.keyboard.press("Space"); // 일시정지: 재생 위치는 그대로 남는다
+    await expect(page.locator(S.timeDisplay)).not.toHaveText("0:00.00");
+    const paused = await page.locator(S.timeDisplay).innerText();
+    await page.waitForTimeout(300);
+    await expect(page.locator(S.timeDisplay)).toHaveText(paused);
+
+    await page.keyboard.press("Space"); // 이어서 재생
+    await page.waitForTimeout(300);
+    await page.keyboard.press("Shift+Space"); // 정지: 처음으로
+    await expect(page.locator(S.timeDisplay)).toHaveText("0:00.00");
+
+    // 누르고 있기: Playwright는 이미 눌린 키의 down을 되풀이 입력(repeat)으로 보낸다.
+    const beforeHold = await starts(page);
+    await page.keyboard.down("Space");
+    await page.keyboard.down("Space");
+    await page.keyboard.down("Space");
+    await page.keyboard.down("Space");
+    await page.keyboard.up("Space");
+    await page.waitForTimeout(600);
+    await expect(page.locator(S.timeDisplay)).not.toHaveText("0:00.00"); // 재생 중이다(켰다 껐다 하지 않았다)
+    expect(await starts(page) - beforeHold).toBe(1); // 소리 시작은 한 번
+    measuredP52("스페이스 누르고 있기", { 눌린_횟수: 4, 재생_시작: 1 });
+  });
+
+  test("R은 녹음을 시작하고 한 번 더 누르면 끝낸다(클립이 하나 생긴다)", async ({ page }) => {
+    await openApp(page);
+    const before = await page.locator(S.clip).count();
+    await page.keyboard.press("r");
+    await expect(page.locator(S.record)).toHaveClass(/recording/, { timeout: 8000 });
+    await page.waitForTimeout(1200);
+    await page.keyboard.press("r");
+    await expect(page.locator(S.clip)).toHaveCount(before + 1, { timeout: 8000 });
+  });
+
+  test("PageUp·PageDown: 노브에 초점이 있으면 노브만 움직이고 확대는 바뀌지 않는다. 그 밖에서는 확대·축소한다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    const width = async () => (await page.locator(S.clip).first().boundingBox())!.width;
+    const bass = knob(page, "저음 이퀄라이저");
+    await bass.scrollIntoViewIfNeeded();
+    await bass.focus();
+    const zoomBefore = await width();
+    const valueBefore = Number(await bass.getAttribute("aria-valuenow"));
+    await page.keyboard.press("PageUp");
+    await expect.poll(async () => Number(await bass.getAttribute("aria-valuenow"))).toBeGreaterThan(valueBefore);
+    await expect(bass).toBeFocused();
+    expect(await width()).toBeCloseTo(zoomBefore, 0); // 노브를 움직여도 타임라인은 그대로
+    const knobWidthChange = (await width()) - zoomBefore;
+
+    await clickEmpty(page);
+    await page.keyboard.press("PageUp");
+    await expect.poll(width).toBeGreaterThan(zoomBefore + 10); // 초점이 노브가 아니면 확대된다
+    measuredP52("노브 위의 PageUp", { 클립_폭_변화_px: Math.round(knobWidthChange), 노브_값: `${valueBefore} → 올라감` });
+  });
+
+  test("메뉴·단추에 적힌 키는 단축키 표와 같다", async ({ page }) => {
+    await openApp(page);
+    const expectedTitles: Array<[string, string]> = [["이동", "V"], ["그리기", "P"], ["페인트", "B"], ["삭제", "D"], ["음소거", "T"], ["슬립 편집", "S"], ["자르기", "C"], ["선택", "E"], ["확대/축소", "Z"], ["선택 재생", "Y"]];
+    for (const [label, key] of expectedTitles) {
+      const button = page.locator(`.playlist-tool-button[title="${label} (${key})"]`);
+      await expect(button, label).toHaveCount(1);
+      await expect(button, label).toHaveAttribute("aria-keyshortcuts", key);
+    }
+    await expect(page.locator(S.zoomFit)).toHaveAttribute("title", /\(Shift\+0\)$/);
+    await expect(page.locator(S.zoomFit)).toHaveAttribute("aria-keyshortcuts", "Shift+0");
+
+    await page.locator('button[title="플레이리스트 메뉴"]').click();
+    const menuKey = (label: string) => page.locator(".menu-dropdown button", { has: page.locator("span", { hasText: new RegExp(`^${label}$`) }) }).locator("small");
+    await expect(menuKey("선택 항목 퀀타이즈")).toHaveText("Alt+Q");
+    await expect(menuKey("선택 항목 삭제")).toHaveText("Delete");
+    await expect(menuKey("모든 클립 선택")).toHaveText("Ctrl+A");
+    await expect(menuKey("전체 보기")).toHaveText("Shift+0");
+    await expect(menuKey("선택 항목으로 확대")).toHaveText("Shift+5");
+    await expect(menuKey("확대")).toHaveText("Page Up");
+  });
+});
