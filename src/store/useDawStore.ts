@@ -47,10 +47,6 @@ interface DawStore extends ProjectDoc {
   globalSnap: Exclude<PlaylistSnap, "main">;
   performanceMode: boolean;
   playlistDetached: boolean;
-  /** 지금 문서를 한 단계로 남긴다(끌기 시작처럼, 이어지는 편집이 history:false일 때) */
-  captureHistory: () => void;
-  beginHistoryGroup: () => void;
-  endHistoryGroup: () => void;
   undo: () => CommandResult<"empty" | "recording">;
   redo: () => CommandResult<"empty" | "recording">;
   setBpm: (bpm: number) => void;
@@ -185,9 +181,6 @@ export const useDawStore = create<DawStore>((set, get) => ({
   globalSnap: "line",
   performanceMode: false,
   playlistDetached: false,
-  captureHistory: () => history.capture(),
-  beginHistoryGroup: () => history.beginGesture("group"),
-  endHistoryGroup: () => history.endGesture(),
   undo: () => {
     // 녹음하는 동안에는 문서를 되돌리지 않는다(녹음할 트랙이 사라질 수 있다).
     if (isRecordingBusy()) return fail("recording");

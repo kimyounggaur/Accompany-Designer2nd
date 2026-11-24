@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ko } from "../i18n/ko";
 import { notify } from "../services/notify";
+import { history } from "../state/history";
 import { isRecordingBusy, useRecordingStore } from "../state/recordingStore";
 import { useDawStore } from "../store/useDawStore";
 import { addClipFromSource, deleteTrackWithConfirm, setSelectedClips, toggleRecordingArm } from "../app/actions";
@@ -93,21 +94,13 @@ export function Timeline() {
   const recordingStatus = useRecordingStore((state) => state.status);
   const recordingTrackId = useRecordingStore((state) => state.trackId);
   const isPlaying = useDawStore((state) => state.isPlaying);
-  const captureHistory = useDawStore((state) => state.captureHistory);
   const setPlayhead = useDawStore((state) => state.setPlayhead);
   const clearSelection = useDawStore((state) => state.clearSelection);
   const moveClip = useDawStore((state) => state.moveClip);
   const addTrack = useDawStore((state) => state.addTrack);
   const reorderTrack = useDawStore((state) => state.reorderTrack);
-  const beginHistoryGroup = useDawStore((state) => state.beginHistoryGroup);
-  const endHistoryGroup = useDawStore((state) => state.endHistoryGroup);
   const isRecording = recordingStatus !== "idle";
   const recordingTrackIndex = recordingStatus === "recording" ? tracks.findIndex((track) => track.id === recordingTrackId) : -1;
-  useEffect(() => {
-    document.addEventListener("pointerup", endHistoryGroup);
-    document.addEventListener("pointercancel", endHistoryGroup);
-    return () => { document.removeEventListener("pointerup", endHistoryGroup); document.removeEventListener("pointercancel", endHistoryGroup); };
-  }, [endHistoryGroup]);
   const updateTrack = useDawStore((state) => state.updateTrack);
   const selectTrack = useDawStore((state) => state.selectTrack);
   const setZoom = useDawStore((state) => state.setZoom);
@@ -330,15 +323,12 @@ export function Timeline() {
   ) {
     event.preventDefault();
     const sourceClipId = selectedClipId;
-    captureHistory();
-    const clipId = addClipFromSource(
-      sourceClipId,
-      position.trackId,
-      position.time,
-      { history: false },
-    );
+    // 누름 ~ 뗌에 놓은 클립(끌어서 옮기기·페인트로 칸마다 하나씩)을 실행 취소 한 단계로 묶는다.
+    history.beginGesture(`clips:${mode}`);
+    const clipId = addClipFromSource(sourceClipId, position.trackId, position.time);
 
     if (!clipId) {
+      history.endGesture();
       return;
     }
 
@@ -401,24 +391,14 @@ export function Timeline() {
     }
 
     if (session.mode === "draw" && session.clipId) {
-      moveClip(
-        session.clipId,
-        position.trackId,
-        { startTime: position.time },
-        { history: false },
-      );
+      moveClip(session.clipId, position.trackId, { startTime: position.time });
       return;
     }
 
     if (session.mode === "paint") {
       const paintKey = getPaintKey(position);
       if (paintKey !== session.lastPaintKey) {
-        addClipFromSource(
-          session.sourceClipId,
-          position.trackId,
-          position.time,
-          { history: false },
-        );
+        addClipFromSource(session.sourceClipId, position.trackId, position.time);
         session.lastPaintKey = paintKey;
       }
       return;
@@ -500,8 +480,8 @@ export function Timeline() {
                 aria-label={`${track.name} 트랙 이름`}
                 data-testid="track-name"
                 value={track.name}
-                onFocus={beginHistoryGroup}
-                onBlur={endHistoryGroup}
+                onFocus={() => history.beginGesture(`track:${track.id}:name`, "focus")}
+                onBlur={() => history.endGesture({ kind: "focus" })}
                 onChange={(event) => updateTrack(track.id, { name: event.target.value })}
               />
               <button type="button" className="track-order-button" disabled={index === 0 || isRecording}
@@ -566,9 +546,9 @@ export function Timeline() {
                     className: "track-volume-number",
                     testId: "track-volume-input",
                   }}
-                  onChangeStart={beginHistoryGroup}
+                  onChangeStart={() => history.beginGesture(`track:${track.id}:volume`)}
                   onChange={(volume) => updateTrack(track.id, { volume })}
-                  onChangeEnd={endHistoryGroup}
+                  onChangeEnd={() => history.endGesture()}
                 />
               </span>
             </label>

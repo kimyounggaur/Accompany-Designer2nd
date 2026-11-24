@@ -12,7 +12,7 @@ import { toggleTempoMatch } from "../../app/tempoMatch";
 import { CommittedNumberInput } from "../controls/CommittedNumberInput";
 import { plainEntry } from "../controls/entries";
 import { Slider, type SliderEntry } from "../controls/Slider";
-import { useHistoryGesture } from "./useHistoryGesture";
+import { useHistoryGesture, useTextGesture } from "./useHistoryGesture";
 import { DEFAULT_CLIP_GAIN } from "../../domain/project/defaults";
 import { BPM_RANGE, CLIP_GAIN_RANGE, CLIP_SOURCE_BPM_RANGE } from "../../domain/project/ranges";
 import { formatPlaybackRate, formatSemitones, rateToSemitones } from "../../domain/timeline/pitch";
@@ -44,7 +44,8 @@ export function ClipPanel() {
   const selectedClipId = useDawStore((state) => state.selectedClipId);
   const bpm = useDawStore((state) => state.bpm);
   const updateClip = useDawStore((state) => state.updateClip);
-  const gesture = useHistoryGesture();
+  const gesture = useHistoryGesture(`clip:${selectedClipId ?? "none"}:panel`);
+  const nameGesture = useTextGesture(`clip:${selectedClipId ?? "none"}:name`);
   const detection = useBpmStore((state) => state.detection);
   const text = ko.clip;
 
@@ -97,8 +98,7 @@ export function ClipPanel() {
             이름
             <input
               value={selectedClip.name}
-              onFocus={gesture.onChangeStart}
-              onBlur={gesture.onChangeEnd}
+              {...nameGesture}
               onChange={(event) => updateClip(selectedClip.id, { name: event.target.value })}
             />
           </label>

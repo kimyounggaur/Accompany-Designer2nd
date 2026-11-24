@@ -1898,7 +1898,6 @@ test.describe("B12 실행 취소 묶음", () => {
   });
 
   test("키보드 화살표 5번 조정도 Ctrl+Z 한 번으로 되돌아간다", async ({ page }) => {
-    test.fail(true, "P5-1에서 해결 예정 (11/13 기준 한 단계씩 되돌아감)");
     await openApp(page);
     const vol = page.locator(S.trackVolume).first();
     const before = await vol.inputValue();
@@ -3497,5 +3496,188 @@ test.describe("P5-0 공용 조작부", () => {
       found.push({ 화면: width, 행폭: result.rowWidth, 노브폭: result.knobs.map((k) => k.size) });
     }
     measuredP50("딜레이 노브 줄이기", found);
+  });
+});
+
+const measuredP51 = (name: string, value: unknown) => console.log(`P5-1 측정 ${name}: ${JSON.stringify(value)}`);
+
+test.describe("P5-1 실행 취소 엔진", () => {
+  const knob = (page: Page, name: string) => page.locator(`[role=slider][aria-label="${name}"]`);
+  const clickEmpty = (page: Page) => page.mouse.click(700, 650);
+  const undo = (page: Page) => page.keyboard.press("Control+z");
+  const redo = (page: Page) => page.keyboard.press("Control+Shift+z");
+  const BASS = "저음 이퀄라이저";
+  const MID_LOW = "중저음 이퀄라이저";
+
+  async function dragKnob(page: Page, name: string, dy: number) {
+    const target = knob(page, name);
+    await target.scrollIntoViewIfNeeded();
+    const box = (await target.boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y + dy, { steps: 8 });
+    await page.mouse.up();
+  }
+
+  test("트랙 볼륨 슬라이더를 실제 마우스로 끌면 Ctrl+Z 한 번에 처음 값으로, Ctrl+Shift+Z로 끌어 둔 값으로 돌아간다", async ({ page }) => {
+    await openApp(page);
+    const vol = page.locator(S.trackVolume).first();
+    const before = await vol.inputValue();
+    const box = (await vol.boundingBox())!;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(box.x + box.width * 0.2, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.75, y, { steps: 14 });
+    await page.mouse.up();
+    const dragged = await vol.inputValue();
+    expect(dragged).not.toBe(before);
+
+    await clickEmpty(page);
+    await undo(page);
+    await expect(vol).toHaveValue(before);
+    await redo(page);
+    await expect(vol).toHaveValue(dragged);
+    measuredP51("슬라이더 끌기", { 처음: before, 끌어_둔_값: dragged, 되돌리기_횟수: 1 });
+  });
+
+  test("노브를 두 번 따로 끌면 실행 취소도 두 번이다(앞 끌기에 이어 붙지 않는다)", async ({ page }) => {
+    await openApp(page);
+    const bass = knob(page, BASS); // 180px = 24dB
+    await dragKnob(page, BASS, -45);
+    await expect(bass).toHaveAttribute("aria-valuenow", "6");
+    await dragKnob(page, BASS, -45);
+    await expect(bass).toHaveAttribute("aria-valuenow", "12");
+
+    await clickEmpty(page);
+    await undo(page);
+    await expect(bass).toHaveAttribute("aria-valuenow", "6");
+    await undo(page);
+    await expect(bass).toHaveAttribute("aria-valuenow", "0");
+    await redo(page);
+    await redo(page);
+    await expect(bass).toHaveAttribute("aria-valuenow", "12");
+  });
+
+  test("키보드로 노브를 이어서 올리면 한 단계, 다른 노브로 옮기면 새 단계다", async ({ page }) => {
+    await openApp(page);
+    const bass = knob(page, BASS);
+    const midLow = knob(page, MID_LOW);
+    await bass.scrollIntoViewIfNeeded();
+    await bass.focus();
+    for (let i = 0; i < 5; i += 1) await page.keyboard.press("ArrowUp"); // 0.5dB씩 5번 = +2.5
+    await expect(bass).toHaveAttribute("aria-valuenow", "2.5");
+    await midLow.focus();
+    for (let i = 0; i < 3; i += 1) await page.keyboard.press("ArrowUp");
+    await expect(midLow).toHaveAttribute("aria-valuenow", "1.5");
+
+    await page.waitForTimeout(900);
+    await clickEmpty(page);
+    await undo(page);
+    await expect(midLow).toHaveAttribute("aria-valuenow", "0");
+    await expect(bass).toHaveAttribute("aria-valuenow", "2.5");
+    await undo(page);
+    await expect(bass).toHaveAttribute("aria-valuenow", "0");
+  });
+
+  test("클립을 끌어 옮기면 Ctrl+Z 한 번에 제자리로 돌아오고, 눌러 보기만 한 클릭은 단계를 만들지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    const clip = page.locator(S.clip).first();
+    const left = () => clip.evaluate((element) => (element as HTMLElement).style.left);
+    const before = await left();
+    const box = (await clip.boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 200, y, { steps: 16 });
+    await page.mouse.up();
+    const moved = await left();
+    expect(parseFloat(moved), "오른쪽으로 옮겨졌다").toBeGreaterThan(parseFloat(before) + 100);
+
+    // 움직이지 않고 눌렀다 뗌: 이력에 단계가 생기지 않는다
+    await page.mouse.click(x + 200, y);
+    await expect(clip).toHaveClass(/selected/);
+    expect(await left()).toBe(moved);
+
+    await undo(page);
+    await expect.poll(left, { message: "끌기 한 번이 한 단계(클릭이 끼어들지 않았다)" }).toBe(before);
+    await redo(page);
+    await expect.poll(left).toBe(moved);
+    measuredP51("클립 끌기", { 처음_left: before, 옮긴_left: moved, 되돌리기_횟수: 1 });
+  });
+
+  test("글자 입력: 트랙 이름을 1초씩 쉬며 쳐도(초점이 있는 동안) 한 단계이고, 칸을 벗어난 뒤 Ctrl+Z 한 번에 처음 이름으로 돌아온다", async ({ page }) => {
+    await openApp(page);
+    const name = page.locator(S.trackName).first();
+    const before = await name.inputValue();
+    await name.click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("가", { delay: 30 });
+    await page.waitForTimeout(1100); // 800ms를 넘게 쉬어도 초점 묶음은 이어진다
+    await page.keyboard.type("나", { delay: 30 });
+    await page.waitForTimeout(1100);
+    await page.keyboard.type("다", { delay: 30 });
+    await expect(name).toHaveValue("가나다");
+
+    await clickEmpty(page); // 초점이 칸을 벗어난다
+    await undo(page);
+    await expect(name).toHaveValue(before);
+    await redo(page);
+    await expect(name).toHaveValue("가나다");
+  });
+
+  test("프로젝트 이름도 같다: 쳐 넣는 동안은 한 단계, 칸을 벗어나면 끝난다", async ({ page }) => {
+    await openApp(page);
+    const input = page.locator('input[aria-label="프로젝트 이름"]');
+    const before = await input.inputValue();
+    await input.click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("새 곡", { delay: 40 });
+    await page.waitForTimeout(1100);
+    await page.keyboard.type(" 제목", { delay: 40 });
+    await expect(input).toHaveValue("새 곡 제목");
+    await clickEmpty(page);
+    await undo(page);
+    await expect(input).toHaveValue(before);
+  });
+
+  test("뗌 신호를 놓쳐도 2초 동안 편집이 없으면 묶음이 끝나, 다음 편집은 새 단계다", async ({ page }) => {
+    await openApp(page);
+    const vol = page.locator(S.trackVolume).first();
+    const before = await vol.inputValue();
+    await vol.dispatchEvent("pointerdown"); // 끌기가 시작되었지만 pointerup은 오지 않는다
+    await setRange(page, S.trackVolume, 0.3);
+    await setRange(page, S.trackVolume, 0.35);
+    await page.waitForTimeout(2300);
+    await setRange(page, S.trackVolume, 0.6);
+    await clickEmpty(page);
+
+    await undo(page);
+    await expect(vol).toHaveValue("0.35"); // 뒤의 편집만 되돌아간다
+    await undo(page);
+    await expect(vol).toHaveValue(before);
+    measuredP51("pointerup 없는 끌기", { 제한_초: 2, 단계_수: 2 });
+  });
+
+  test("선택·도구·확대·재생 위치는 실행 취소 단계를 만들지 않는다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    const vol = page.locator(S.trackVolume).first();
+    const before = await vol.inputValue();
+    await setRange(page, S.trackVolume, 0.42); // 기록되는 편집 1개
+    await clickEmpty(page);
+
+    await page.locator(S.clip).first().click(); // 선택
+    await page.locator(S.zoomOut).click(); // 확대
+    await page.locator(S.ruler).click({ position: { x: 240, y: 8 } }); // 재생 위치
+    await page.locator(S.trackHeader).first().click({ position: { x: 4, y: 4 } }); // 트랙 선택(가운데는 볼륨 슬라이더라 눌러서 값이 바뀐다)
+    await clickEmpty(page);
+
+    await undo(page);
+    await expect(vol, "위의 조작들이 단계를 만들었다면 값이 그대로 남는다").toHaveValue(before);
   });
 });

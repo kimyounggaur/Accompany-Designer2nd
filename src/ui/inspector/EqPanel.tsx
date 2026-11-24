@@ -32,7 +32,7 @@ function formatGain(value: number): string {
 /** 이퀄라이저 칸: 다섯 대역의 노브(−12 ~ +12 dB)와 켜고 끄는 단추 */
 export function EqPanel({ track }: { track: Track }) {
   const updateTrack = useDawStore((state) => state.updateTrack);
-  const gesture = useHistoryGesture();
+  const gesture = useHistoryGesture(`track:${track.id}:eq`);
   const { eq } = track;
 
   return (

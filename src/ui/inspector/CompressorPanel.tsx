@@ -48,7 +48,7 @@ const KNOBS: ReadonlyArray<{
 /** 컴프레서 칸: 줄어든 음량 표시와 네 노브(기준 음량·압축 비율·반응 시간·회복 시간) */
 export function CompressorPanel({ track }: { track: Track }) {
   const updateTrack = useDawStore((state) => state.updateTrack);
-  const gesture = useHistoryGesture();
+  const gesture = useHistoryGesture(`track:${track.id}:compressor`);
   const { compressor } = track;
 
   return (

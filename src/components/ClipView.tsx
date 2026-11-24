@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 import { useRef, useState } from "react";
 import { runClipAction, trimHandleActionFor } from "../domain/timeline/toolBehavior";
 import type { AssetMeta, Clip } from "../domain/types";
+import { history } from "../state/history";
 import { useDawStore } from "../store/useDawStore";
 import { deleteClip, sliceClipAt } from "../app/actions";
 import { WaveformCanvas } from "../ui/timeline/WaveformCanvas";
@@ -43,7 +44,6 @@ export function ClipView({
   const sessionRef = useRef<PointerSession | undefined>(undefined);
   const selectedClipIds = useDawStore((state) => state.selectedClipIds);
   const playlistTool = useDawStore((state) => state.playlistTool);
-  const captureHistory = useDawStore((state) => state.captureHistory);
   const updateClip = useDawStore((state) => state.updateClip);
   const moveClip = useDawStore((state) => state.moveClip);
   const toggleClipMuted = useDawStore((state) => state.toggleClipMuted);
@@ -86,7 +86,8 @@ export function ClipView({
   function beginDrag(mode: DragMode, event: React.PointerEvent<HTMLElement>) {
     event.stopPropagation();
     selectClip(clip.id, event.shiftKey || event.ctrlKey);
-    captureHistory();
+    // 끌기 한 번 = 실행 취소 한 단계. 누르기만 하고 움직이지 않으면 단계가 생기지 않는다.
+    history.beginGesture(`clip:${clip.id}:drag`);
     sessionRef.current = {
       mode,
       pointerId: event.pointerId,
@@ -156,7 +157,7 @@ export function ClipView({
         : trackIndex;
       const targetTrackId = trackIds[targetTrackIndex] ?? original.trackId;
 
-      moveClip(original.id, targetTrackId, { startTime: Math.max(0, moved) }, { history: false });
+      moveClip(original.id, targetTrackId, { startTime: Math.max(0, moved) });
       return;
     }
 
@@ -167,7 +168,7 @@ export function ClipView({
         Math.max(0, assetDuration - original.duration),
       );
 
-      updateClip(original.id, { offset: nextOffset }, { history: false });
+      updateClip(original.id, { offset: nextOffset });
       return;
     }
 
@@ -177,7 +178,7 @@ export function ClipView({
       updateClip(original.id, {
         fadeIn: Math.round(clamp(original.fadeIn + deltaTimeline, 0, maxFade) * 100) / 100,
         fadeCurve: original.fadeCurve ?? "equalPower",
-      }, { history: false });
+      });
       return;
     }
 
@@ -187,7 +188,7 @@ export function ClipView({
       updateClip(original.id, {
         fadeOut: Math.round(clamp(original.fadeOut - deltaTimeline, 0, maxFade) * 100) / 100,
         fadeCurve: original.fadeCurve ?? "equalPower",
-      }, { history: false });
+      });
       return;
     }
 
@@ -211,7 +212,7 @@ export function ClipView({
         startTime: original.startTime + deltaSource / originalRate,
         offset: nextOffset,
         duration: nextDuration,
-      }, { history: false });
+      });
       return;
     }
 
@@ -227,7 +228,7 @@ export function ClipView({
       MIN_CLIP_SOURCE_DURATION,
       assetDuration - original.offset,
     );
-    updateClip(original.id, { duration: nextDuration }, { history: false });
+    updateClip(original.id, { duration: nextDuration });
   }
 
   function endDrag(event: React.PointerEvent<HTMLElement>) {
