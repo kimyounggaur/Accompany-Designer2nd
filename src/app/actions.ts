@@ -16,9 +16,10 @@ import type { Clip } from "../domain/types";
 import { ko } from "../i18n/ko";
 import { useDawStore } from "../store/useDawStore";
 import { useRecordingStore } from "../state/recordingStore";
+import { history } from "../state/history";
 import { confirmAction } from "../services/confirm";
 import { notify } from "../services/notify";
-import { createId } from "../utils/audioMath";
+import { createId, findClip, getClipTimelineDuration } from "../utils/audioMath";
 import { readPlayhead } from "./playhead";
 
 const store = () => useDawStore.getState();
@@ -63,14 +64,98 @@ export function addClipFromSource(
   return clipId;
 }
 
+// ───── 삭제 안전장치(설계 P5-4) ─────
+
+/** 클립을 지운 뒤 "되돌리기" 안내가 떠 있는 시간(ms) */
+export const DELETE_UNDO_MS = 5000;
+
+/**
+ * 클립 삭제 안내: 5초 동안 [되돌리기]가 붙은 토스트.
+ * 되돌리기는 방금 지운 그 단계가 이력의 맨 위일 때만 한다. 그 사이에 다른 편집을 했다면 실행 취소가 엉뚱한 편집을 되돌리게 되므로
+ * 하지 않고 안내만 한다(실행 취소 단축키로 순서대로 되돌릴 수 있다).
+ */
+function announceDeletion(message: string) {
+  const step = history.topId();
+  notify("success", message, {
+    durationMs: DELETE_UNDO_MS,
+    action: { label: text.undoDelete, run: () => undoDeletion(step) },
+  });
+}
+
+/** 지운 직후의 이력 단계(step)가 아직 맨 위일 때만 되돌린다. 되돌렸으면 true. */
+export function undoDeletion(step: number | undefined): boolean {
+  if (step === undefined || history.topId() !== step) {
+    notify("warning", text.undoDeleteStale);
+    return false;
+  }
+  undo();
+  return true;
+}
+
 export function deleteClip(clipId: string) {
+  if (!findClip(store().tracks, clipId)) return; // 이미 없는 클립: 지운 일이 없으니 안내도 없다
   store().deleteClip(clipId);
-  notify("info", text.clipDeleted);
+  announceDeletion(text.clipDeleted);
 }
 
 export function deleteSelectedClips() {
   const result = store().deleteSelectedClips();
-  notify("info", result.ok ? text.clipsDeleted(result.count) : text.noClipSelected);
+  if (!result.ok) {
+    notify("info", text.noClipSelected);
+    return;
+  }
+  announceDeletion(result.count === 1 ? text.clipDeleted : text.clipsDeleted(result.count));
+}
+
+// ───── 클립 메뉴(설계 P5-4) ─────
+
+/** 재생선이 있는 자리에서 클립 하나를 자른다. 재생선이 클립 안에 없으면 자르지 않고 안내만 한다. */
+export function sliceClipAtPlayhead(clipId: string) {
+  const result = store().sliceClipAt(clipId, readPlayhead());
+  if (result.ok) {
+    notify("info", text.clipSliced);
+    return;
+  }
+  notify("info", result.reason === "not-found" ? text.sliceNeedsClip : text.playheadOutsideClip);
+}
+
+/** 클립 하나를 바로 뒤(끝난 자리)에 복제한다. 복제본이 선택된다. */
+export function duplicateClip(clipId: string) {
+  const state = store();
+  const found = findClip(state.tracks, clipId);
+  if (!found) return;
+  const startTime = found.clip.startTime + getClipTimelineDuration(state.bpm, found.clip);
+  const copyId = state.addClipFromSource(clipId, found.track.id, startTime);
+  if (copyId) notify("info", text.clipDuplicated);
+}
+
+/**
+ * 고른 클립들의 음소거를 한꺼번에 바꾼다: 하나라도 소리가 나면 모두 음소거하고, 모두 음소거 상태였으면 모두 푼다.
+ * 여러 클립이어도 실행 취소 한 단계로 되돌아간다.
+ */
+export function toggleSelectedClipsMuted() {
+  const state = store();
+  const chosen = new Set(state.selectedClipIds);
+  const clips = state.tracks.flatMap((track) => track.clips).filter((clip) => chosen.has(clip.id));
+  if (!clips.length) return;
+  const muteAll = clips.some((clip) => !clip.muted);
+  history.beginGesture("clips:mute");
+  try {
+    for (const clip of clips) if (Boolean(clip.muted) !== muteAll) state.toggleClipMuted(clip.id);
+  } finally {
+    history.endGesture();
+  }
+}
+
+/** 클립 이름을 바꾼다. 앞뒤 공백은 지우고, 비어 있으면 바꾸지 않고 안내한다. 바꿨으면 true. */
+export function renameClip(clipId: string, name: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    notify("info", text.clipNameEmpty);
+    return false;
+  }
+  store().updateClip(clipId, { name: trimmed });
+  return true;
 }
 
 export function sliceClipAt(clipId: string, splitTime: number) {
@@ -198,18 +283,23 @@ export function clearTimeMarkers() {
 
 // ───── 트랙 ─────
 
-/** 확인창을 거쳐 트랙을 지운다. 지웠으면 true. */
-export async function deleteTrackWithConfirm(trackId: string): Promise<boolean> {
+/**
+ * 트랙을 지운다. 클립이 들어 있는 트랙만 확인창을 거치고(설계 P5-4), 빈 트랙은 바로 지운다(실행 취소로 되돌릴 수 있다).
+ * 지웠으면 true.
+ */
+export async function deleteTrack(trackId: string): Promise<boolean> {
   const track = store().tracks.find((item) => item.id === trackId);
   if (!track) return false;
 
-  const confirmed = await confirmAction({
-    title: ko.confirm.deleteTrack.title,
-    message: ko.confirm.deleteTrack.message(track.name, track.clips.length),
-    confirmLabel: ko.confirm.deleteTrack.confirmLabel,
-    tone: "danger",
-  });
-  if (!confirmed) return false;
+  if (track.clips.length > 0) {
+    const confirmed = await confirmAction({
+      title: ko.confirm.deleteTrack.title,
+      message: ko.confirm.deleteTrack.message(track.name, track.clips.length),
+      confirmLabel: ko.confirm.deleteTrack.confirmLabel,
+      tone: "danger",
+    });
+    if (!confirmed) return false;
+  }
 
   const result = store().deleteTrack(trackId);
   if (result.ok) {

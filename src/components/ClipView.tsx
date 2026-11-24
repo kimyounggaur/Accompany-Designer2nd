@@ -1,10 +1,29 @@
 import type { RefObject } from "react";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { canSliceAt } from "../domain/timeline/clipMath";
 import { runClipAction, trimHandleActionFor } from "../domain/timeline/toolBehavior";
 import type { AssetMeta, Clip } from "../domain/types";
+import { ko } from "../i18n/ko";
+import { keyLabel } from "../services/shortcuts";
 import { history } from "../state/history";
 import { useDawStore } from "../store/useDawStore";
-import { deleteClip, sliceClipAt } from "../app/actions";
+import {
+  copySelectedClips,
+  deleteClip,
+  deleteSelectedClips,
+  duplicateClip,
+  renameClip,
+  sliceClipAt,
+  sliceClipAtPlayhead,
+  toggleSelectedClipsMuted,
+  ungroupSelectedClips,
+} from "../app/actions";
+import { readPlayhead } from "../app/playhead";
+import { ContextMenu } from "../ui/controls/ContextMenu";
+import type { Point } from "../ui/controls/menuMath";
+import { useLongPress } from "../ui/controls/useLongPress";
+import { ClipNameEditor } from "../ui/timeline/ClipNameEditor";
+import { buildClipMenuItems } from "../ui/timeline/menuItems";
 import { WaveformCanvas } from "../ui/timeline/WaveformCanvas";
 import {
   clamp,
@@ -40,7 +59,10 @@ export function ClipView({
   trackIds,
   trackIndex,
 }: ClipViewProps) {
-  const [showMenu, setShowMenu] = useState(false);
+  /** 열려 있는 우클릭 메뉴: 누른 자리와, 열 때 정한 "재생선이 클립 안인가"·"그룹에 묶인 선택이 있는가" */
+  const [menu, setMenu] = useState<{ anchor: Point; playheadInside: boolean; hasGroupedClip: boolean } | undefined>();
+  const [renaming, setRenaming] = useState(false);
+  const closeMenu = useCallback(() => setMenu(undefined), []);
   const sessionRef = useRef<PointerSession | undefined>(undefined);
   const selectedClipIds = useDawStore((state) => state.selectedClipIds);
   const playlistTool = useDawStore((state) => state.playlistTool);
@@ -61,6 +83,24 @@ export function ClipView({
   const top = trackIndex * trackHeight + 15;
   const fadeInWidth = Math.min(width / 2, Math.max(0, clip.fadeIn || 0) * zoomPxPerSecond);
   const fadeOutWidth = Math.min(width / 2, Math.max(0, clip.fadeOut || 0) * zoomPxPerSecond);
+
+  /**
+   * 메뉴를 연다. 이 클립이 선택에 없으면 이 클립만 선택하고(메뉴의 일이 눈에 보이는 선택을 대상으로 하도록),
+   * 이미 선택에 들어 있으면 선택은 그대로 둔다(복사·삭제·음소거·그룹 해제는 선택 전체에 한다).
+   */
+  function openMenu(anchor: Point) {
+    if (!useDawStore.getState().selectedClipIds.includes(clip.id)) selectClip(clip.id);
+    const state = useDawStore.getState();
+    const chosen = new Set(state.selectedClipIds);
+    setMenu({
+      anchor,
+      playheadInside: canSliceAt(clip, state.bpm, readPlayhead()),
+      hasGroupedClip: state.tracks.some((track) => track.clips.some((item) => chosen.has(item.id) && item.groupId !== undefined)),
+    });
+  }
+
+  // 터치에서 500 ms 길게 누르면 우클릭과 같은 메뉴(삭제가 아니라 메뉴)
+  const longPress = useLongPress(openMenu);
 
   function getPointerTime(event: React.PointerEvent<HTMLElement>) {
     const lanesRect = lanesRef.current?.getBoundingClientRect();
@@ -248,15 +288,27 @@ export function ClipView({
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        setShowMenu(true);
+        openMenu({ x: event.clientX, y: event.clientY });
       }}
       tabIndex={0}
       aria-label={`${clip.name} 클립`}
-      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectClip(clip.id, event.shiftKey || event.ctrlKey); } if (event.key === "Escape") setShowMenu(false); }}
-      onPointerDown={handleClipPointerDown}
-      onPointerMove={updateDrag}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
+      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectClip(clip.id, event.shiftKey || event.ctrlKey); } }}
+      onPointerDown={(event) => {
+        longPress.onPointerDown(event);
+        handleClipPointerDown(event);
+      }}
+      onPointerMove={(event) => {
+        longPress.onPointerMove(event);
+        updateDrag(event);
+      }}
+      onPointerUp={(event) => {
+        longPress.onPointerUp();
+        endDrag(event);
+      }}
+      onPointerCancel={(event) => {
+        longPress.onPointerCancel();
+        endDrag(event);
+      }}
     >
       <button
         aria-label="클립 시작점 다듬기"
@@ -267,10 +319,26 @@ export function ClipView({
         onPointerCancel={endDrag}
       />
       <WaveformCanvas asset={asset} clip={clip} width={width} left={left} />
-      {showMenu && <div className="clip-context-menu" role="menu" onPointerDown={(event) => event.stopPropagation()}>
-        <button type="button" role="menuitem" onClick={() => { deleteClip(clip.id); setShowMenu(false); }}>클립 삭제</button>
-        <button type="button" role="menuitem" onClick={() => setShowMenu(false)}>닫기</button>
-      </div>}
+      {menu && (
+        <ContextMenu
+          label={ko.menu.clip.label}
+          anchor={menu.anchor}
+          onClose={closeMenu}
+          items={buildClipMenuItems(
+            { playheadInside: menu.playheadInside, hasGroupedClip: menu.hasGroupedClip },
+            {
+              sliceAtPlayhead: () => sliceClipAtPlayhead(clip.id),
+              duplicate: () => duplicateClip(clip.id),
+              copy: copySelectedClips,
+              toggleMute: toggleSelectedClipsMuted,
+              rename: () => setRenaming(true),
+              ungroup: ungroupSelectedClips,
+              remove: deleteSelectedClips,
+            },
+            { copy: keyLabel("copy"), remove: keyLabel("deleteClips") },
+          )}
+        />
+      )}
       {(fadeInWidth > 0 || fadeOutWidth > 0) && (
         <div className="clip-fade-overlays" aria-hidden="true">
           {fadeInWidth > 0 && (
@@ -307,10 +375,22 @@ export function ClipView({
         style={{ right: Math.max(12, fadeOutWidth) }}
         type="button"
       />
-      <div className="clip-label">
-        <strong>{clip.name}</strong>
-        <span>{clip.muted ? "음소거" : `${playbackRate.toFixed(2)}x`}</span>
-      </div>
+      {renaming ? (
+        <ClipNameEditor
+          name={clip.name}
+          label={ko.menu.renameClip(clip.name)}
+          onCommit={(name) => {
+            renameClip(clip.id, name);
+            setRenaming(false);
+          }}
+          onCancel={() => setRenaming(false)}
+        />
+      ) : (
+        <div className="clip-label">
+          <strong>{clip.name}</strong>
+          <span>{clip.muted ? "음소거" : `${playbackRate.toFixed(2)}x`}</span>
+        </div>
+      )}
       <button
         aria-label="클립 끝점 다듬기"
         className="trim-handle right"

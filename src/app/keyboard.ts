@@ -11,6 +11,7 @@
 import type { PlaylistTool } from "../domain/types";
 import { handleKeyEvent, isTypingTarget, type KeyHandlers } from "../services/shortcuts";
 import { useDialogStore } from "../state/dialogStore";
+import { isContextMenuOpen } from "../state/menuStore";
 import { isExportOpen } from "../state/exportStore";
 import { isRelinkOpen } from "../state/relinkStore";
 import { useDawStore } from "../store/useDawStore";
@@ -84,9 +85,9 @@ export const keyHandlers: KeyHandlers = {
   zoomFit: zoomToFit,
 };
 
-/** 확인창·내보내기·재연결 대화상자가 열려 있는 동안에는 뒤의 화면을 건드리는 단축키(삭제·재생 등)를 모두 막는다. */
+/** 확인창·내보내기·재연결 대화상자나 우클릭 메뉴가 열려 있는 동안에는 뒤의 화면을 건드리는 단축키(삭제·재생 등)를 모두 막는다. */
 export function isShortcutBlocked(): boolean {
-  return Boolean(useDialogStore.getState().confirm) || isExportOpen() || isRelinkOpen();
+  return Boolean(useDialogStore.getState().confirm) || isExportOpen() || isRelinkOpen() || isContextMenuOpen();
 }
 
 /**

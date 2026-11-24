@@ -1,12 +1,12 @@
 import { X } from "lucide-react";
 import { useEffect } from "react";
 import { ko } from "../../i18n/ko";
-import { NOTICE_DURATION_MS, useNoticeStore, type Notice } from "../../state/noticeStore";
+import { noticeDuration, useNoticeStore, type Notice } from "../../state/noticeStore";
 import { LayoutNotice } from "./LayoutNotice";
 
 function Toast({ notice }: { notice: Notice }) {
   const dismiss = useNoticeStore((state) => state.dismiss);
-  const duration = NOTICE_DURATION_MS[notice.level];
+  const duration = noticeDuration(notice);
 
   // 같은 안내가 다시 오면(stamp가 바뀌면) 닫히는 시간을 다시 잰다.
   useEffect(() => {

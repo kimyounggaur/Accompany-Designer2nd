@@ -74,7 +74,7 @@
 - [x] 저장 형식 `format: "accompany-designer-project", version: 1`은 바꾸지 않음. 정의 위치 `src/storage/projectStorage.ts`의 `FORMAT`·`VERSION`. v2가 이 형식을 읽어야 한다(P4-1).
 - [x] `window.confirm` 2곳 → P2-2에서 대화상자 부품으로 교체
   - `src/App.tsx:778` 프로젝트 불러오기 덮어쓰기 확인
-  - `src/components/Timeline.tsx:463` 트랙 삭제 확인
+  - `src/components/Timeline.tsx:463` 트랙 삭제 확인 (P5-4: 클립이 든 트랙만 확인창을 거치고 빈 트랙은 바로 지움 — `app/actions.ts`의 `deleteTrack`)
 - [x] `App.tsx`에 들어온 코드 위치 (분리 대상)
   - 자동 저장·복구·`beforeunload`: `App.tsx:90~139` → P2-4 ✅ (`services/persistence/*`, `app/bootstrap.ts`로 이동)
   - 키보드 처리(`event.code` 기반): `App.tsx:187~324` → P5-2 ✅ (`services/shortcuts.ts`·`app/keyboard.ts`로 이동)
