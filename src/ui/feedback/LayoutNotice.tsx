@@ -15,7 +15,7 @@ export function LayoutNotice() {
   return (
     <div className="toast toast--info" role="status" data-testid="layout-notice">
       <span className="toast__message">
-        <strong>화면 배치가 바뀌었습니다.</strong> 올리기·저장·내보내기는 위쪽 [파일] 메뉴에, 안내 문구는 아래 상태 줄에 모였고, WARP는 오른쪽 ‘클립’ 칸으로 옮겼습니다.
+        <strong>화면 배치가 바뀌었습니다.</strong> 올리기·저장·내보내기는 위쪽 [파일] 메뉴에, 안내 문구는 아래 상태 줄에 모였고, 템포 맞춤은 오른쪽 ‘클립’ 칸으로 옮겼습니다.
       </span>
       <button type="button" className="toast__action" onClick={() => setVisible(false)}>
         닫기

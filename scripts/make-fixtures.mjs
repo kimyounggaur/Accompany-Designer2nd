@@ -31,6 +31,23 @@ function longMonoWav({ seconds, sampleRate = 8000, loud, quiet }) {
   return buffer;
 }
 
+/** 8kHz 모노 16비트 WAV: 박마다 짧은 1kHz 딸깍 소리가 나는 곡(파일을 작게 두려는 모양: 10분이 9.6 MB). BPM 감지 시험용. */
+function clickMonoWav({ seconds, bpm, sampleRate = 8000 }) {
+  const frames = seconds * sampleRate;
+  const buffer = Buffer.alloc(44 + frames * 2);
+  buffer.write("RIFF", 0); buffer.writeUInt32LE(36 + frames * 2, 4); buffer.write("WAVE", 8);
+  buffer.write("fmt ", 12); buffer.writeUInt32LE(16, 16); buffer.writeUInt16LE(1, 20); buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24); buffer.writeUInt32LE(sampleRate * 2, 28); buffer.writeUInt16LE(2, 32); buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36); buffer.writeUInt32LE(frames * 2, 40);
+  const beat = 60 / bpm;
+  for (let i = 0; i < frames; i++) {
+    const t = i / sampleRate;
+    const v = Math.round(Math.sin(2 * Math.PI * 1000 * t) * Math.exp(-(t % beat) * 60) * 0.8 * 32767);
+    buffer.writeInt16LE(v, 44 + i * 2);
+  }
+  return buffer;
+}
+
 mkdirSync("e2e/fixtures", { recursive: true });
 // 앞 4초 작게(0.05), 뒤 4초 크게(0.8)인 220Hz 사인파 — B1 파형·C8 출력 한계 측정용
 writeFileSync("e2e/fixtures/quiet-loud-8s.wav",
@@ -48,6 +65,12 @@ writeFileSync("e2e/fixtures/steady-220hz-180s.wav",
 const HOUR = "e2e/fixtures/loud-quiet-220hz-1h.wav";
 if (!existsSync(HOUR) || statSync(HOUR).size !== 44 + 3600 * 8000 * 2) {
   writeFileSync(HOUR, longMonoWav({ seconds: 3600, loud: 0.8, quiet: 0.2 }));
+}
+// 10분짜리 120 BPM 클릭 곡 — P4-4 "10분 곡의 BPM 감지 중 화면이 200 ms 넘게 멈추지 않는다·진행률·취소·×½·×2"를 재는 음원.
+// 파일이 9.6 MB라 이 음원을 쓰는 시험만 올린다. 이미 있으면 다시 만들지 않는다.
+const CLICK_10MIN = "e2e/fixtures/click-120bpm-10min.wav";
+if (!existsSync(CLICK_10MIN) || statSync(CLICK_10MIN).size !== 44 + 600 * 8000 * 2) {
+  writeFileSync(CLICK_10MIN, clickMonoWav({ seconds: 600, bpm: 120 }));
 }
 writeFileSync("e2e/fixtures/not-audio.txt", "not audio");
 console.log("fixtures ready");
