@@ -93,6 +93,8 @@ interface DawStore extends ProjectDoc {
   sliceClipsAt: (clipIds: string[], splitTime: number) => CommandResult<"none-cuttable", { count: number }>;
   /** 클립 여러 개를 한 번에 옮긴다(여러 클립·그룹 끌기). 마지막 이동이 쥔 클립이며, 선택에 없으면 그 클립을 선택한다. */
   moveClips: (moves: commands.ClipMove[]) => void;
+  /** 클립들의 시작 시간만 그 자리에서 바꾼다(키보드 ←→). 클립 순서와 선택은 그대로 둔다. 바뀐 것이 있으면 true. */
+  setClipStarts: (starts: commands.ClipStart[]) => boolean;
   /** 선택한 클립들을 바로 뒤에 복제한다(Ctrl+D). 복제본이 선택된다. */
   duplicateSelectedClips: () => CommandResult<"none-selected", { count: number }>;
   /** 복사해 둔 클립을 `at`(초)에 붙인다(Ctrl+V). 붙인 클립이 선택된다. 트랙이 모자라면 새 트랙을 만든다. */
@@ -318,6 +320,7 @@ export const useDawStore = create<DawStore>((set, get) => ({
       selectedClipIds: state.selectedClipIds.includes(held) ? state.selectedClipIds : [held],
     }));
   },
+  setClipStarts: (starts) => commands.setClipStarts(starts),
   duplicateSelectedClips: () => {
     const state = get();
     const chosen = new Set(state.selectedClipIds);

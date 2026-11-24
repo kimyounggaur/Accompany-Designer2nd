@@ -25,6 +25,13 @@ export function getBeatSeconds(bpm: number) {
   return 60 / clamp(bpm || 120, 20, 300);
 }
 
+/** 격자 한 칸의 길이(초). `division`은 1박을 몇 칸으로 나눌지(2 = 반 박, 0.25 = 네 박 = 한 마디) */
+export function getGridStepSeconds(bpm: number, division = 2) {
+  // 마디 스냅처럼 분할 수가 1보다 작을 때(예: 1/3)는 나누지 않고 그 역수를 곱한다. 0.5 ÷ (1/3) 같은 계산은 끝자리가 어긋난다.
+  const beat = getBeatSeconds(bpm);
+  return division < 1 ? beat * (1 / division) : beat / division;
+}
+
 export function snapTime(
   seconds: number,
   bpm: number,
@@ -35,9 +42,7 @@ export function snapTime(
     return seconds;
   }
 
-  // 마디 스냅처럼 분할 수가 1보다 작을 때(예: 1/3)는 나누지 않고 그 역수를 곱한다. 0.5 ÷ (1/3) 같은 계산은 끝자리가 어긋난다.
-  const beat = getBeatSeconds(bpm);
-  const step = division < 1 ? beat * (1 / division) : beat / division;
+  const step = getGridStepSeconds(bpm, division);
   return Math.round(seconds / step) * step;
 }
 

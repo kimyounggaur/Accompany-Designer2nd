@@ -99,7 +99,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
               </div>
               <Toggle
                 className={`reverb-power ${reverb.enabled ? "on" : ""}`}
-                label="리버브 켜기"
+                label={ko.state.power("리버브", reverb.enabled)}
                 pressed={reverb.enabled}
                 onChange={(enabled) => onChange({ enabled })}
               >

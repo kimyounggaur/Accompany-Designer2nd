@@ -36,7 +36,7 @@
 .eq-band-label {
   margin-top: 8px;
   color: #111;
-  font-size: 9px;
+  font-size: var(--font-size-0);
   text-align: center;
   line-height: 1.05;
 }

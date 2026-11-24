@@ -12,15 +12,23 @@
  *  - 정보: 상태 줄만
  *  - 도구·스냅·녹음 옵션·화면 모드처럼 화면이 이미 보여 주는 상태 변화: 안내하지 않음
  */
-import { clipsToCutAt } from "../domain/timeline/clipMath";
+import { clipsToCutAt, movingItems, planMultiMove, stepOnGrid } from "../domain/timeline/clipMath";
 import { ko } from "../i18n/ko";
 import { useDawStore } from "../store/useDawStore";
 import { useRecordingStore } from "../state/recordingStore";
 import { history } from "../state/history";
 import { copyClips, readClipboard } from "../services/clipboard";
+import { announce } from "../services/announce";
 import { confirmAction } from "../services/confirm";
 import { notify } from "../services/notify";
-import { findClip } from "../utils/audioMath";
+import {
+  clamp,
+  findClip,
+  getClipPlaybackRate,
+  getClipTimelineDuration,
+  getGridStepSeconds,
+  MIN_CLIP_SOURCE_DURATION,
+} from "../utils/audioMath";
 import { readPlayhead } from "./playhead";
 
 const store = () => useDawStore.getState();
@@ -176,6 +184,65 @@ export function sliceClipAt(clipId: string, splitTime: number) {
     return;
   }
   notify("info", result.reason === "not-found" ? text.sliceNeedsClip : text.sliceNeedsInside);
+}
+
+// ───── 클립 키보드 조작(설계 P6-2) ─────
+
+const spoken = ko.announce;
+
+/**
+ * 키보드로 클립을 고르거나 선택에서 뺀다(Enter, 더하기 키(Shift·Ctrl)와 함께면 선택에 더하거나 뺀다).
+ * 결과를 화면 낭독기에 알린다.
+ */
+export function selectClipFromKeyboard(clipId: string, additive: boolean) {
+  const found = findClip(store().tracks, clipId);
+  if (!found) return;
+  store().selectClip(clipId, additive);
+  const selected = store().selectedClipIds.includes(clipId);
+  announce(selected ? spoken.clipSelected(found.clip.name) : spoken.clipDeselected(found.clip.name));
+}
+
+/**
+ * 클립(`clipId`)을 격자 한 칸 앞(-1)·뒤(+1)로 옮긴다(←·→). 스냅이 꺼져 있어도 한 칸의 크기는 같다(`gridDivision`).
+ * 이 클립이 선택에 들어 있으면 선택한 클립 전체(같은 그룹 포함)가 같은 거리만큼 함께 가고, 아니면 이 클립만 간다.
+ * 곡 시작(0초) 앞으로는 가지 못하고, 그 자리에서 전체가 함께 멈춘다. 새 시작 시간을 화면 낭독기에 알린다.
+ * 옮긴 클립의 겹침 순서와 선택은 그대로다(드래그와 달리 트랙 맨 뒤로 보내지 않는다).
+ */
+export function nudgeClip(clipId: string, direction: -1 | 1): boolean {
+  const state = store();
+  const found = findClip(state.tracks, clipId);
+  if (!found) return false;
+  const step = getGridStepSeconds(state.bpm, state.gridDivision);
+  const target = Math.max(0, stepOnGrid(found.clip.startTime, direction, step, state.snapEnabled));
+  const plan = planMultiMove(movingItems(state.tracks, state.selectedClipIds, clipId), target - found.clip.startTime, 0, state.tracks.length);
+  const changed = state.setClipStarts(plan.map((item) => ({ clipId: item.id, startTime: item.startTime })));
+  const lead = plan.find((item) => item.id === clipId);
+  announce(spoken.clipStart(found.clip.name, spoken.spokenTime(lead?.startTime ?? found.clip.startTime)));
+  return changed;
+}
+
+/**
+ * 클립(`clipId`)의 끝을 격자 한 칸 줄이거나(-1)·늘린다(+1)(Shift+←·→). 끌어서 끝점을 다듬는 것과 같은 규칙이다:
+ * 길이를 격자에 맞추고, 최소 길이와 음원 끝(원본이 남아 있는 만큼)을 넘지 않는다. 이 클립 하나만 바뀐다.
+ * 더 바꿀 수 없으면 그렇게 알린다.
+ */
+export function resizeClip(clipId: string, direction: -1 | 1): boolean {
+  const state = store();
+  const found = findClip(state.tracks, clipId);
+  if (!found) return false;
+  const { clip } = found;
+  const rate = getClipPlaybackRate(state.bpm, clip);
+  const assetDuration = state.assets[clip.audioBufferId]?.duration ?? clip.offset + clip.duration;
+  const step = getGridStepSeconds(state.bpm, state.gridDivision);
+  const wanted = stepOnGrid(getClipTimelineDuration(state.bpm, clip), direction, step, state.snapEnabled);
+  const duration = clamp(wanted * rate, MIN_CLIP_SOURCE_DURATION, Math.max(MIN_CLIP_SOURCE_DURATION, assetDuration - clip.offset));
+  if (duration === clip.duration) {
+    announce(spoken.clipLengthLimit(clip.name, spoken.spokenTime(clip.duration / rate)));
+    return false;
+  }
+  state.updateClip(clip.id, { duration });
+  announce(spoken.clipLength(clip.name, spoken.spokenTime(duration / rate)));
+  return true;
 }
 
 export function quantizeSelectedClips() {

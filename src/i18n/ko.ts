@@ -10,7 +10,16 @@
 export const ko = {
   // ───── 화면 부품의 라벨 ─────
 
-  state: { on: "켜짐", off: "꺼짐" },
+  state: {
+    on: "켜짐",
+    off: "꺼짐",
+    /**
+     * 장비 전원 단추의 이름. 단추 안에 보이는 글자가 "켜짐"·"꺼짐"이므로 이름에도 그 글자를 넣는다
+     * (WCAG 2.5.3 '보이는 이름이 접근 이름에 들어 있어야 한다': 음성 제어로 보이는 글자를 말해 누를 수 있게).
+     * 켜짐 여부는 `aria-pressed`로도 따로 알린다.
+     */
+    power: (equipment: string, on: boolean) => `${equipment} ${on ? "켜짐" : "꺼짐"}`,
+  },
 
   /** 타임라인 왼쪽 트랙 머리 */
   trackHeader: {
@@ -393,5 +402,31 @@ export const ko = {
   action: {
     saveProjectFile: "프로젝트 파일로 저장",
     relink: "다시 연결",
+  },
+
+  // ───── 화면 낭독기 안내(눈에는 보이지 않는다, 설계 P6-2) ─────
+
+  announce: {
+    /** 화면 제목: 눈에는 보이지 않고, 화면 낭독기의 제목 이동 키가 찾는 곳 */
+    appTitle: "반주 디자이너 2",
+    playing: "재생 중",
+    stopped: "재생 멈춤",
+    countingIn: "녹음 준비, 카운트인",
+    recording: "녹음 중",
+    recordingStopped: "녹음 멈춤",
+    /** 클립에 초점이 올 때 화면 낭독기가 덧붙여 읽는 키 안내 */
+    clipKeys: "엔터로 고르기, 왼쪽·오른쪽 방향키로 격자 한 칸 옮기기, 시프트와 방향키로 길이 바꾸기, 삭제 키로 지우기",
+    clipSelected: (name: string) => `${name} 선택됨`,
+    clipDeselected: (name: string) => `${name} 선택 해제`,
+    clipStart: (name: string, time: string) => `${name} 시작 ${time}`,
+    clipLength: (name: string, time: string) => `${name} 길이 ${time}`,
+    clipLengthLimit: (name: string, time: string) => `${name} 더 바꿀 수 없음, 길이 ${time}`,
+    /** 시간을 말로 읽을 때: 1분 2.50초 */
+    spokenTime: (seconds: number) => {
+      const safe = Math.max(0, seconds);
+      const minutes = Math.floor(safe / 60);
+      const rest = (safe - minutes * 60).toFixed(2);
+      return minutes > 0 ? `${minutes}분 ${rest}초` : `${rest}초`;
+    },
   },
 } as const;

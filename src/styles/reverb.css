@@ -102,7 +102,7 @@
 }
 
 .reverb-subtitle {
-  font-size: 7px;
+  font-size: var(--font-size-0);
 }
 
 .reverb-power {
@@ -112,7 +112,7 @@
   color: #2a241d;
   background: transparent;
   cursor: pointer;
-  font-size: 7px;
+  font-size: var(--font-size-0);
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -171,7 +171,7 @@
 }
 
 .reverb-module-title {
-  font-size: 8px;
+  font-size: var(--font-size-0);
 }
 
 .reverb-model-select {
@@ -184,7 +184,7 @@
 .reverb-knob > span,
 .reverb-mod-section > span,
 .reverb-eq-section > span {
-  font-size: 7px;
+  font-size: var(--font-size-0);
 }
 
 .reverb-decay-fader {
@@ -245,7 +245,7 @@
   align-content: space-around;
   height: 100%;
   padding: 5px 0;
-  font-size: 5px;
+  font-size: var(--font-size-0);
   font-weight: 900;
   text-align: center;
 }
@@ -348,7 +348,7 @@
   display: grid;
   justify-items: center;
   gap: 3px;
-  font-size: 7px;
+  font-size: var(--font-size-0);
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -388,9 +388,9 @@
 }
 
 .reverb-model-select select {
-  width: 62px;
-  padding: 3px 4px;
-  font-size: 9px;
+  width: 66px;
+  padding: 3px 2px 3px 4px;
+  font-size: var(--font-size-0);
   font-weight: 400;
   color: var(--color-text);
   border: 1px solid hsl(240, 5.9%, 90%);
@@ -449,7 +449,7 @@
 }
 
 .reverb-knob strong {
-  font-size: 8px;
+  font-size: var(--font-size-0);
   font-variant-numeric: tabular-nums;
   text-align: center;
   white-space: nowrap;

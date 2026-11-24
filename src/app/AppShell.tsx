@@ -1,11 +1,13 @@
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { ReactNode } from "react";
+import { ko } from "../i18n/ko";
 import { useDawStore } from "../store/useDawStore";
 import { RelinkDialog } from "../ui/dialogs/RelinkDialog";
 import { AutosaveStatus } from "../ui/feedback/AutosaveStatus";
 import { BuildStamp } from "../ui/feedback/BuildStamp";
 import { ConfirmDialog } from "../ui/feedback/ConfirmDialog";
 import { ExportDialog } from "../ui/feedback/ExportDialog";
+import { LiveAnnouncer } from "../ui/feedback/LiveAnnouncer";
 import { StatusLine } from "../ui/feedback/StatusLine";
 import { ToastRegion } from "../ui/feedback/ToastRegion";
 import { useStoredFlag } from "../ui/useStoredFlag";
@@ -27,6 +29,7 @@ export function AppShell({ topBar, timeline, inspector }: AppShellProps) {
 
   return (
     <main className="app-shell shell">
+      <h1 className="visually-hidden">{ko.announce.appTitle}</h1>
       {topBar}
       <div
         className={`workspace ${playlistDetached ? "detached" : ""}`}
@@ -54,6 +57,7 @@ export function AppShell({ topBar, timeline, inspector }: AppShellProps) {
         <BuildStamp />
       </footer>
       <ToastRegion />
+      <LiveAnnouncer />
       <ConfirmDialog />
       <ExportDialog />
       <RelinkDialog />

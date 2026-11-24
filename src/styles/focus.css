@@ -4,3 +4,9 @@ select:focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
+
+/* 눈에 안 보이는 체크 상자(리버브 '모듈레이션 사용')는 상자 대신 옆의 램프에 초점 고리를 그린다 */
+.reverb-toggle input:focus-visible + i {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}

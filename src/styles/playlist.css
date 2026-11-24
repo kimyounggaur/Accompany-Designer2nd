@@ -115,7 +115,7 @@
 .track-header {
   display: grid;
   align-content: center;
-  gap: 10px;
+  gap: 6px;
   height: 116px;
   padding: 13px;
   cursor: pointer;
@@ -648,7 +648,7 @@
 .track-header input:not([type="range"]) {
   width: 100%;
   min-width: 0;
-  padding: 5px 0;
+  padding: 1px 0;
   font-weight: 600;
   border-radius: 0;
   background: transparent;

@@ -36,7 +36,7 @@
 }
 
 .dly-sub {
-  font-size: 8px;
+  font-size: var(--font-size-0);
 }
 
 .dly-power {
@@ -72,12 +72,12 @@
 }
 
 .dly-knob-label {
-  font-size: 8px;
+  font-size: var(--font-size-0);
   text-align: center;
 }
 
 .dly-knob-value {
-  font-size: 9px;
+  font-size: var(--font-size-0);
   font-variant-numeric: tabular-nums;
   text-align: center;
   min-width: 40px;
@@ -100,7 +100,7 @@
 }
 
 .dly-section-label {
-  font-size: 8px;
+  font-size: var(--font-size-0);
 }
 
 .dly-section-body {
@@ -140,7 +140,7 @@
 }
 
 .dly-toggle-text {
-  font-size: 9px;
+  font-size: var(--font-size-0);
 }
 
 .dly-select {

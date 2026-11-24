@@ -17,7 +17,7 @@
 
 .spec-title-main {
   flex: 1;
-  font-size: 8px;
+  font-size: var(--font-size-0);
 }
 
 .spec-display {
@@ -57,7 +57,7 @@
 }
 
 .spec-btn-label {
-  font-size: 7px;
+  font-size: var(--font-size-0);
 }
 
 .spec-btn-row {
@@ -162,7 +162,7 @@
 }
 
 .spec-db-scale span {
-  font-size: 7px;
+  font-size: var(--font-size-0);
   font-family: monospace;
   text-align: right;
   line-height: 1;

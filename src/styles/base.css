@@ -53,3 +53,17 @@ textarea {
 input[type="range"] {
   accent-color: var(--color-brand);
 }
+
+/* 눈에는 보이지 않고 화면 낭독기만 읽는 글자(제목·안내 방송·키 안내). display:none은 낭독기도 건너뛰므로 쓰지 않는다. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
