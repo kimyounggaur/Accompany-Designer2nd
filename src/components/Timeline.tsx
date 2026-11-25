@@ -21,6 +21,8 @@ import { Slider } from "../ui/controls/Slider";
 import { DropIndicator } from "../ui/timeline/DropIndicator";
 import { buildTrackMenuItems } from "../ui/timeline/menuItems";
 import { PlayheadOverlay } from "../ui/timeline/PlayheadOverlay";
+import { ZoomControls } from "../ui/transport/ZoomControls";
+import { usePhoneMode } from "../ui/usePhoneMode";
 import { useFileDrop } from "../ui/timeline/useFileDrop";
 import {
   clamp,
@@ -87,8 +89,16 @@ function makeBox(startX: number, startY: number, endX: number, endY: number): Dr
   };
 }
 
+/**
+ * 휴대폰 "재생·녹음" 모드에서 빈 곳을 짧게 눌렀다고 보는 기준(설계서 §P6-5).
+ * 손가락이 이만큼(px) 안에서 떼어지면 "눌렀다"(재생 위치 이동)이고, 그 이상 움직였거나 브라우저가 스크롤로 가져가면(pointercancel) 위치를 옮기지 않는다.
+ */
+const PHONE_TAP_SLOP_PX = 10;
+
 export function Timeline() {
   countRender("Timeline");
+  const phone = usePhoneMode();
+  const phoneTapRef = useRef<{ pointerId: number; x: number; y: number } | undefined>(undefined);
   const lanesRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const headersRef = useRef<HTMLDivElement>(null);
@@ -341,6 +351,12 @@ export function Timeline() {
       return;
     }
 
+    // 휴대폰 모드는 보기 전용: 도구와 상관없이 "짧게 누르면 재생 위치 이동"만 한다. 손가락을 끌면 타임라인이 스크롤된다.
+    if (phone) {
+      phoneTapRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+      return;
+    }
+
     const additive = event.shiftKey || event.ctrlKey;
     runEmptyAreaAction(playlistTool, additive, {
       seek: () => {
@@ -455,6 +471,16 @@ export function Timeline() {
   }
 
   function endLanePointer(event: React.PointerEvent<HTMLDivElement>) {
+    if (phone) {
+      const tap = phoneTapRef.current;
+      phoneTapRef.current = undefined;
+      const isTap =
+        event.type === "pointerup" &&
+        tap?.pointerId === event.pointerId &&
+        Math.hypot(event.clientX - tap.x, event.clientY - tap.y) <= PHONE_TAP_SLOP_PX;
+      if (isTap) seekFromPointer(event);
+      return;
+    }
     const session = sessionRef.current;
     if (!session || session.pointerId !== event.pointerId) {
       return;
@@ -520,126 +546,135 @@ export function Timeline() {
 
   return (
     <section
-      className={`playlist ${performanceMode ? "performance-mode" : ""}`}
+      className={`playlist ${performanceMode ? "performance-mode" : ""} ${phone ? "playlist--phone" : ""}`}
       aria-label="플레이리스트"
       style={playlistCursorStyle}
     >
       <span id={CLIP_KEYS_HELP_ID} className="visually-hidden">{ko.announce.clipKeys}</span>
-      <PlaylistToolbar />
-      <div className="track-column" ref={headersRef}>
-        <div className="ruler-corner">
+      {phone ? (
+        <div className="phone-viewbar" role="toolbar" aria-label={ko.phone.viewBar} data-testid="phone-viewbar">
+          <ZoomControls />
           <button type="button" className="follow-toggle" aria-pressed={followPlayhead} onClick={() => setFollowPlayhead(!followPlayhead)} title="재생선 따라가기 켜기/끄기">{followPlayhead ? "따라가기 켬" : "따라가기 끔"}</button>
-          <button className="add-track-button" onClick={addTrack} title="트랙 추가">
-            <Plus size={15} />
-            <span>트랙</span>
-          </button>
         </div>
-        {tracks.map((track, index) => (
-          <div
-            className={`track-header ${selectedTrackId === track.id ? "selected" : ""}`}
-            data-testid="track-header"
-            key={track.id}
-            onClick={() => selectTrack(track.id)}
-            onContextMenu={(event) => {
-              // 글자 칸(트랙 이름)에서는 그 칸의 기본 메뉴(복사·붙여넣기)를 그대로 둔다.
-              if ((event.target as HTMLElement).closest("input, textarea")) return;
-              event.preventDefault();
-              openTrackMenu(track.id, { x: event.clientX, y: event.clientY });
-            }}
-            onPointerDown={(event) => {
-              // 단추·노브·글자 칸을 오래 누르는 것은 메뉴 신호가 아니다.
-              if ((event.target as HTMLElement).closest("input, button, textarea, select, [aria-valuenow]")) return;
-              pressedTrackId.current = track.id;
-              headerLongPress.onPointerDown(event);
-            }}
-            onPointerMove={headerLongPress.onPointerMove}
-            onPointerUp={headerLongPress.onPointerUp}
-            onPointerCancel={headerLongPress.onPointerCancel}
-          >
-            <div className="track-heading">
-              <input
-                aria-label={`${track.name} 트랙 이름`}
-                data-testid="track-name"
-                ref={(element) => {
-                  if (element) nameInputs.current.set(track.id, element);
-                  else nameInputs.current.delete(track.id);
-                }}
-                value={track.name}
-                onFocus={() => history.beginGesture(`track:${track.id}:name`, "focus")}
-                onBlur={() => history.endGesture({ kind: "focus" })}
-                onChange={(event) => updateTrack(track.id, { name: event.target.value })}
-              />
-              <button type="button" className="track-order-button" disabled={index === 0 || isRecording}
-                aria-label={`${track.name} 위로 이동`} title="트랙 위로 이동"
-                onClick={(event) => { event.stopPropagation(); reorderTrack(track.id, -1); }}><ArrowUp size={14} /></button>
-              <button type="button" className="track-order-button" disabled={index === tracks.length - 1 || isRecording}
-                aria-label={`${track.name} 아래로 이동`} title="트랙 아래로 이동"
-                onClick={(event) => { event.stopPropagation(); reorderTrack(track.id, 1); }}><ArrowDown size={14} /></button>
-              <button type="button" className="track-order-button" disabled={tracks.length <= 1 || isRecording}
-                aria-label={`${track.name} 삭제`} title={tracks.length <= 1 ? "트랙은 하나 이상 필요합니다" : "트랙 삭제"}
-                onClick={(event) => { event.stopPropagation(); void deleteTrack(track.id); }}><Trash2 size={14} /></button>
-            </div>
-            <div className="track-toggles">
-              <button
-                className={
-                  armedTrackId === track.id
-                    ? "toggle arm-toggle active"
-                    : "toggle arm-toggle"
-                }
-                disabled={isRecording}
-                onClick={() => toggleRecordingArm(track.id)}
-                title={ko.trackHeader.armHint}
-                aria-label={`${track.name} ${ko.trackHeader.arm}`}
-                aria-pressed={armedTrackId === track.id}
-                type="button"
-              >
-                {ko.trackHeader.arm}
-              </button>
-              <button
-                className={track.muted ? "toggle active danger" : "toggle"}
-                onClick={() => updateTrack(track.id, { muted: !track.muted })}
-                aria-label={`${track.name} ${ko.trackHeader.mute}`}
-                aria-pressed={track.muted}
-                type="button"
-              >
-                {ko.trackHeader.mute}
-              </button>
-              <button
-                className={track.solo ? "toggle active" : "toggle"}
-                onClick={() => updateTrack(track.id, { solo: !track.solo })}
-                aria-label={`${track.name} ${ko.trackHeader.solo}`}
-                aria-pressed={track.solo}
-                type="button"
-              >
-                {ko.trackHeader.solo}
-              </button>
-            </div>
-            <label>
-              {ko.trackHeader.volume}
-              <span className="track-volume-row">
-                <Slider
-                  label={`${track.name} 볼륨`}
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={track.volume}
-                  defaultValue={DEFAULT_TRACK_VOLUME}
-                  format={(volume) => `${Math.round(volume * 100)}%`}
-                  testId="track-volume"
-                  entry={{
-                    ...scaledEntry(ko.trackHeader.volumeInput(track.name), 100, 0, 100, 1),
-                    className: "track-volume-number",
-                    testId: "track-volume-input",
-                  }}
-                  onChangeStart={() => history.beginGesture(`track:${track.id}:volume`)}
-                  onChange={(volume) => updateTrack(track.id, { volume })}
-                  onChangeEnd={() => history.endGesture()}
-                />
-              </span>
-            </label>
+      ) : (
+        <PlaylistToolbar />
+      )}
+      {!phone && (
+        <div className="track-column" ref={headersRef}>
+          <div className="ruler-corner">
+            <button type="button" className="follow-toggle" aria-pressed={followPlayhead} onClick={() => setFollowPlayhead(!followPlayhead)} title="재생선 따라가기 켜기/끄기">{followPlayhead ? "따라가기 켬" : "따라가기 끔"}</button>
+            <button className="add-track-button" onClick={addTrack} title="트랙 추가">
+              <Plus size={15} />
+              <span>트랙</span>
+            </button>
           </div>
-        ))}
-      </div>
+          {tracks.map((track, index) => (
+            <div
+              className={`track-header ${selectedTrackId === track.id ? "selected" : ""}`}
+              data-testid="track-header"
+              key={track.id}
+              onClick={() => selectTrack(track.id)}
+              onContextMenu={(event) => {
+                // 글자 칸(트랙 이름)에서는 그 칸의 기본 메뉴(복사·붙여넣기)를 그대로 둔다.
+                if ((event.target as HTMLElement).closest("input, textarea")) return;
+                event.preventDefault();
+                openTrackMenu(track.id, { x: event.clientX, y: event.clientY });
+              }}
+              onPointerDown={(event) => {
+                // 단추·노브·글자 칸을 오래 누르는 것은 메뉴 신호가 아니다.
+                if ((event.target as HTMLElement).closest("input, button, textarea, select, [aria-valuenow]")) return;
+                pressedTrackId.current = track.id;
+                headerLongPress.onPointerDown(event);
+              }}
+              onPointerMove={headerLongPress.onPointerMove}
+              onPointerUp={headerLongPress.onPointerUp}
+              onPointerCancel={headerLongPress.onPointerCancel}
+            >
+              <div className="track-heading">
+                <input
+                  aria-label={`${track.name} 트랙 이름`}
+                  data-testid="track-name"
+                  ref={(element) => {
+                    if (element) nameInputs.current.set(track.id, element);
+                    else nameInputs.current.delete(track.id);
+                  }}
+                  value={track.name}
+                  onFocus={() => history.beginGesture(`track:${track.id}:name`, "focus")}
+                  onBlur={() => history.endGesture({ kind: "focus" })}
+                  onChange={(event) => updateTrack(track.id, { name: event.target.value })}
+                />
+                <button type="button" className="track-order-button" disabled={index === 0 || isRecording}
+                  aria-label={`${track.name} 위로 이동`} title="트랙 위로 이동"
+                  onClick={(event) => { event.stopPropagation(); reorderTrack(track.id, -1); }}><ArrowUp size={14} /></button>
+                <button type="button" className="track-order-button" disabled={index === tracks.length - 1 || isRecording}
+                  aria-label={`${track.name} 아래로 이동`} title="트랙 아래로 이동"
+                  onClick={(event) => { event.stopPropagation(); reorderTrack(track.id, 1); }}><ArrowDown size={14} /></button>
+                <button type="button" className="track-order-button" disabled={tracks.length <= 1 || isRecording}
+                  aria-label={`${track.name} 삭제`} title={tracks.length <= 1 ? "트랙은 하나 이상 필요합니다" : "트랙 삭제"}
+                  onClick={(event) => { event.stopPropagation(); void deleteTrack(track.id); }}><Trash2 size={14} /></button>
+              </div>
+              <div className="track-toggles">
+                <button
+                  className={
+                    armedTrackId === track.id
+                      ? "toggle arm-toggle active"
+                      : "toggle arm-toggle"
+                  }
+                  disabled={isRecording}
+                  onClick={() => toggleRecordingArm(track.id)}
+                  title={ko.trackHeader.armHint}
+                  aria-label={`${track.name} ${ko.trackHeader.arm}`}
+                  aria-pressed={armedTrackId === track.id}
+                  type="button"
+                >
+                  {ko.trackHeader.arm}
+                </button>
+                <button
+                  className={track.muted ? "toggle active danger" : "toggle"}
+                  onClick={() => updateTrack(track.id, { muted: !track.muted })}
+                  aria-label={`${track.name} ${ko.trackHeader.mute}`}
+                  aria-pressed={track.muted}
+                  type="button"
+                >
+                  {ko.trackHeader.mute}
+                </button>
+                <button
+                  className={track.solo ? "toggle active" : "toggle"}
+                  onClick={() => updateTrack(track.id, { solo: !track.solo })}
+                  aria-label={`${track.name} ${ko.trackHeader.solo}`}
+                  aria-pressed={track.solo}
+                  type="button"
+                >
+                  {ko.trackHeader.solo}
+                </button>
+              </div>
+              <label>
+                {ko.trackHeader.volume}
+                <span className="track-volume-row">
+                  <Slider
+                    label={`${track.name} 볼륨`}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={track.volume}
+                    defaultValue={DEFAULT_TRACK_VOLUME}
+                    format={(volume) => `${Math.round(volume * 100)}%`}
+                    testId="track-volume"
+                    entry={{
+                      ...scaledEntry(ko.trackHeader.volumeInput(track.name), 100, 0, 100, 1),
+                      className: "track-volume-number",
+                      testId: "track-volume-input",
+                    }}
+                    onChangeStart={() => history.beginGesture(`track:${track.id}:volume`)}
+                    onChange={(volume) => updateTrack(track.id, { volume })}
+                    onChangeEnd={() => history.endGesture()}
+                  />
+                </span>
+              </label>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div
         className={`timeline-scroll ${dropHint ? "drop-active" : ""}`}
@@ -710,7 +745,9 @@ export function Timeline() {
                 height: TRACK_HEIGHT,
                 top: index * TRACK_HEIGHT,
               }}
-            />
+            >
+              {phone && <span className="phone-lane-name">{track.name}</span>}
+            </div>
           ))}
           {timelineClips.map(({ clip, trackIndex }) => (
             <ClipView
