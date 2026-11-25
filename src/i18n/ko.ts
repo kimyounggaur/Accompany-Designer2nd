@@ -306,6 +306,33 @@ export const ko = {
     },
   },
 
+  // ───── 큰 음원 메모리 안내 (설계서 §P6-4) ─────
+
+  memory: {
+    /** 풀기 전에, 파일 하나가 크다고(300MB 넘음) 묻는다 */
+    askFile: {
+      title: "큰 파일입니다",
+      message: (fileName: string, size: string) =>
+        `'${fileName}'은(는) ${size}로 큽니다. 소리를 푸는 데 시간이 오래 걸리고 앱이 느려지거나 멈출 수 있습니다. 그래도 올릴까요?`,
+    },
+    /** 이 파일까지 올리면 소리 전체가 많은 메모리를 쓴다고 묻는다 */
+    askTotal: {
+      title: "메모리를 많이 씁니다",
+      message: (fileName: string, size: string, total: string) =>
+        `'${fileName}'을(를) 올리면 소리 데이터가 모두 약 ${total}가 되어(이 파일 약 ${size}) 앱이 느려질 수 있습니다. 그래도 올릴까요?`,
+    },
+    /** 올리지 못하게 막고 알린다(확인 단추만 있다) */
+    refuse: {
+      title: "올릴 수 없습니다",
+      message: (fileName: string, size: string, total: string, limit: string) =>
+        `'${fileName}'을(를) 올리면 소리 데이터가 모두 약 ${total}가 되어(이 파일 약 ${size}) 이 기기에서 쓸 수 있는 크기(${limit})를 넘습니다. 파일을 짧게 나누거나, 올려 둔 곡 일부를 지운 뒤 다시 올려 주세요.`,
+      ok: "확인",
+    },
+    uploadAnyway: "그래도 올리기",
+    skip: "올리지 않기",
+    skipped: (fileName: string) => `${fileName}은(는) 올리지 않았습니다.`,
+  },
+
   // ───── 음원 다시 연결 대화상자 (설계서 §P4-2) ─────
 
   relink: {

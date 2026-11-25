@@ -8,6 +8,8 @@ export interface ConfirmRequest {
   cancelLabel: string;
   /** danger: 되돌리기 어려운 작업. 취소 단추에 초점을 둔다. */
   tone: "default" | "danger";
+  /** 취소 단추를 보이는가(false면 확인만 있는 안내 창. Esc는 그대로 닫는다) */
+  showCancel: boolean;
   resolve: (confirmed: boolean) => void;
 }
 

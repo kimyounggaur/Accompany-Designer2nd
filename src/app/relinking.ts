@@ -2,12 +2,13 @@ import { judgeRelink, listMissingAssets, mismatchReason, findMissingByHash, type
 import type { AssetMeta } from "../domain/types";
 import { ko } from "../i18n/ko";
 import { attachAudio, readAudioFile, type ReadAudio } from "../services/importer";
+import { UploadSkipped } from "../services/memoryGuard";
 import { notify, notifyError } from "../services/notify";
 import { hasRememberedAudio } from "../services/persistence/audioBlobs";
 import { useRelinkStore } from "../state/relinkStore";
 import { useDawStore } from "../store/useDawStore";
 import { requestAutosave } from "./autosaveControl";
-import { decodeUpload, type ImportDeps } from "./importing";
+import { defaultImportDeps, type ImportDeps } from "./importing";
 import { ensurePeaks } from "./peaks";
 import { getProjectSnapshot } from "./projectSnapshot";
 
@@ -52,12 +53,12 @@ function link(targets: ReadonlyArray<AssetMeta>, file: File, read: ReadAudio, sa
 }
 
 /** 줄의 [파일 찾기]에서 파일을 골랐다 */
-export async function chooseRelinkFile(assetId: string, file: File, deps: ImportDeps = { decode: decodeUpload }): Promise<void> {
+export async function chooseRelinkFile(assetId: string, file: File, deps: ImportDeps = defaultImportDeps): Promise<void> {
   const rows = useRelinkStore.getState();
   discard(assetId);
   rows.setRow(assetId, { kind: "checking" });
   try {
-    const read = await readAudioFile(file, deps.decode);
+    const read = await readAudioFile(file, deps.decode, deps.guard);
     const missing = missingAudio();
     const target = missing.find((item) => item.asset.id === assetId);
     if (!target) {
@@ -81,6 +82,11 @@ export async function chooseRelinkFile(assetId: string, file: File, deps: Import
       });
     }
   } catch (error) {
+    if (error instanceof UploadSkipped) {
+      // 큰 음원을 올리지 않기로 했거나 막았다(P6-4): 이유는 묻는 창에서 알렸으니 줄은 다시 고르기를 기다린다.
+      useRelinkStore.getState().setRow(assetId, { kind: "waiting" });
+      return;
+    }
     useRelinkStore.getState().setRow(assetId, { kind: "failed", fileName: file.name });
     notifyError(error, { kind: "decode", title: ko.failed.decode(file.name), fileName: file.name });
   }

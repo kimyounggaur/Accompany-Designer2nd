@@ -1,4 +1,5 @@
 import type { AssetMeta, Clip, ProjectDoc } from "../domain/types";
+import { BYTES_PER_SAMPLE } from "../domain/memory/budget";
 import { attachProbe, isProbeEnabled } from "./probe";
 import { planSync, type SyncDoc } from "./engine/syncPlan";
 import { clipSignature } from "./engine/clipSignature";
@@ -100,8 +101,8 @@ export class BrowserAudioEngine {
 
   async decodeFile(file: File): Promise<DecodedAudio> {
     const context = await this.ensureContext();
-    const data = await file.arrayBuffer();
-    const buffer = await context.decodeAudioData(data.slice(0));
+    // decodeAudioData가 넘겨 준 데이터를 가져가므로(이 뒤로 쓰지 않는다) 복사하지 않는다 — 큰 파일에서 순간 메모리가 파일 크기만큼 덜 든다.
+    const buffer = await context.decodeAudioData(await file.arrayBuffer());
     const asset: AssetMeta = {
       id: createId("asset"),
       fileName: file.name,
@@ -124,8 +125,7 @@ export class BrowserAudioEngine {
     source: AssetMeta["source"] = "recording",
   ): Promise<DecodedAudio> {
     const context = await this.ensureContext();
-    const data = await blob.arrayBuffer();
-    const buffer = await context.decodeAudioData(data.slice(0));
+    const buffer = await context.decodeAudioData(await blob.arrayBuffer());
     const asset: AssetMeta = {
       id: assetId,
       fileName,
@@ -140,6 +140,21 @@ export class BrowserAudioEngine {
 
     this.buffers.set(asset.id, buffer);
     return { asset, buffer };
+  }
+
+  /**
+   * 올려 둔 소리가 메모리에서 차지하는 크기(바이트): 소리마다 길이 × 채널 수 × 4(32비트 실수, 설계서 §P6-4).
+   * 같은 소리를 여러 음원 id로 올려 두었으면(같은 파일을 빠진 음원 여럿에 이을 때) 한 번만 센다.
+   */
+  getDecodedBytes(): number {
+    let bytes = 0;
+    for (const buffer of new Set(this.buffers.values())) bytes += buffer.length * buffer.numberOfChannels * BYTES_PER_SAMPLE;
+    return bytes;
+  }
+
+  /** 소리 장치의 샘플레이트. 풀린 소리는 이 샘플레이트로 맞춰진다. 장치를 아직 열지 않았으면 undefined */
+  getOutputSampleRate(): number | undefined {
+    return this.context?.sampleRate;
   }
 
   registerBuffer(assetId: string, buffer: AudioBuffer) {
