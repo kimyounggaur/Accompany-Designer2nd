@@ -309,7 +309,7 @@
   overflow: hidden;
 }
 
-.trax-panel {
+.mix-panel {
   padding: 0;
   overflow: hidden;
   border-color: #8a6a20;
@@ -438,7 +438,7 @@
   gap: var(--space-2);
 }
 
-.trax-panel,
+.mix-panel,
 .delay-panel,
 .reverb-panel,
 .eq-panel,

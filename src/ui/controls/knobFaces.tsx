@@ -9,7 +9,7 @@ import type { FaceProps } from "./Knob";
  * 모양은 노브마다 새로 짜지 않고 옛 노브들의 그림을 그대로 옮겨 왔다(이퀄라이저·트랙 믹스·컴프레서·딜레이·리버브).
  * 모든 모양은 모듈 맨 위에 한 번만 정의한다.
  */
-export type KnobFaceName = "eq" | "trax" | "comp" | "arc" | "cap";
+export type KnobFaceName = "eq" | "mix" | "comp" | "arc" | "cap";
 
 const toRad = (deg: number) => (deg - 90) * (Math.PI / 180);
 
@@ -38,7 +38,7 @@ function EqFace({ caption, norm, valueNode, color, dial }: FaceProps) {
 }
 
 /** 트랙 믹스: 눈금과 점선 아크가 있는 주황 지시선 노브(큰 것은 볼륨, 작은 것은 팬) */
-function TraxFace({ caption, norm, valueNode, size, dial }: FaceProps) {
+function MixFace({ caption, norm, valueNode, size, dial }: FaceProps) {
   const large = size === "large";
   const startAngle = -135;
   const endAngle = 135;
@@ -68,10 +68,10 @@ function TraxFace({ caption, norm, valueNode, size, dial }: FaceProps) {
   const indRad = toRad(angle);
   const ix = cx + indicatorR * Math.cos(indRad);
   const iy = cy + indicatorR * Math.sin(indRad);
-  const gradient = `traxGrad_${large ? "large" : "small"}`;
+  const gradient = `mixGrad_${large ? "large" : "small"}`;
 
   return (
-    <div className={`trax-knob-wrap ${large ? "large" : ""}`}>
+    <div className={`mix-knob-wrap ${large ? "large" : ""}`}>
       <svg className="knob" width={box} height={box} viewBox={`0 0 ${box} ${box}`} style={{ display: "block" }} {...dial}>
         {tickAngles.map((a, i) => {
           const r1 = tickR;
@@ -106,8 +106,8 @@ function TraxFace({ caption, norm, valueNode, size, dial }: FaceProps) {
         <line x1={cx} y1={cy} x2={ix} y2={iy} stroke="#f5a623" strokeWidth={large ? "3" : "2.5"} strokeLinecap="round" />
         <circle cx={ix} cy={iy} r={large ? 2 : 1.5} fill="#f5a623" />
       </svg>
-      <span className="trax-knob-label">{caption}</span>
-      <span className="trax-knob-val">{valueNode}</span>
+      <span className="mix-knob-label">{caption}</span>
+      <span className="mix-knob-val">{valueNode}</span>
     </div>
   );
 }
@@ -227,7 +227,7 @@ function CapFace({ caption, norm, valueNode, size, dial }: FaceProps) {
 
 export const KNOB_FACES: Readonly<Record<KnobFaceName, ComponentType<FaceProps>>> = {
   eq: EqFace,
-  trax: TraxFace,
+  mix: MixFace,
   comp: CompFace,
   arc: ArcFace,
   cap: CapFace,

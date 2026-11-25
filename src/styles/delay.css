@@ -7,7 +7,7 @@
   opacity: 1;
 }
 
-.dly-wood {
+.dly-frame {
   padding: 9px;
 }
 
@@ -240,7 +240,7 @@
   text-transform: uppercase;
 }
 
-.dly-wood {
+.dly-frame {
   border-radius: 0;
   background: var(--color-surface);
   box-shadow: var(--shadow-card);

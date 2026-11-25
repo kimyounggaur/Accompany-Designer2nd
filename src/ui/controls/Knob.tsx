@@ -117,7 +117,7 @@ export function Knob({
   onChange,
   onChangeEnd,
   entry,
-  face = "trax",
+  face = "mix",
   caption,
   color,
   size,

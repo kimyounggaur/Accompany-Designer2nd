@@ -82,15 +82,8 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
 
   return (
     <div className={`reverb-rack ${reverb.enabled ? "on" : ""}`}>
-      <div className="reverb-wood-frame">
+      <div className="reverb-frame">
         <div className="reverb-faceplate">
-          <div className="reverb-screws" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-            <span />
-          </div>
-
           <div className="reverb-main-deck">
             <section className="reverb-brand-module">
               <div>
@@ -108,10 +101,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
               </Toggle>
             </section>
 
-            <section className="reverb-tube-module">
-              <div className="reverb-tube-window" aria-hidden="true">
-                <span />
-              </div>
+            <section className="reverb-drive-module">
               <Knob
                 face="cap"
                 label={`${ko.reverb.drive} 리버브`}
@@ -208,7 +198,7 @@ export function ReverbPluginPanel({ reverb, onChange }: ReverbPluginPanelProps) 
           </div>
 
           <div className="reverb-bottom-strip">
-            <div className="reverb-arturia-mark" aria-label="반주 디자이너">RD</div>
+            <div className="reverb-badge" aria-label="반주 디자이너">RD</div>
             <Knob
               face="cap"
               size="small"
