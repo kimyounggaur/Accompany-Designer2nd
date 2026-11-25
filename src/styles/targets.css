@@ -55,12 +55,12 @@
   background-clip: content-box;
 }
 
-.trax-switch {
+.mix-switch {
   width: 24px;
   margin-inline: -2px;
 }
 
-.trax-switch-lever {
+.mix-switch-lever {
   left: 4px;
 }
 

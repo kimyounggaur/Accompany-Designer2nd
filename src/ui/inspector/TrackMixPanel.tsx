@@ -30,39 +30,39 @@ export function TrackMixPanel({ track }: { track: Track }) {
   const gesture = useHistoryGesture(`track:${track.id}:mix`);
 
   return (
-    <PanelSection id="trax" title="트랙 믹스" className="trax-panel">
-      <div className="trax-rack">
-        <div className="trax-header">
-          <span className="trax-brand">{ko.trackMix.title}</span>
-          <div className="trax-toggles">
-            <div className="trax-toggle-group">
+    <PanelSection id="mix" title="트랙 믹스" className="mix-panel">
+      <div className="mix-rack">
+        <div className="mix-header">
+          <span className="mix-brand">{ko.trackMix.title}</span>
+          <div className="mix-toggles">
+            <div className="mix-toggle-group">
               <Toggle
-                className={`trax-switch ${track.muted ? "on danger" : ""}`}
+                className={`mix-switch ${track.muted ? "on danger" : ""}`}
                 label="트랙 음소거"
                 pressed={track.muted}
                 onChange={(muted) => updateTrack(track.id, { muted })}
               >
-                <span className="trax-switch-lever" />
+                <span className="mix-switch-lever" />
               </Toggle>
-              <span className="trax-switch-label">{ko.trackMix.mute}</span>
+              <span className="mix-switch-label">{ko.trackMix.mute}</span>
             </div>
-            <div className="trax-toggle-group">
+            <div className="mix-toggle-group">
               <Toggle
-                className={`trax-switch ${track.solo ? "on solo" : ""}`}
+                className={`mix-switch ${track.solo ? "on solo" : ""}`}
                 label="트랙 솔로"
                 pressed={track.solo}
                 onChange={(solo) => updateTrack(track.id, { solo })}
               >
-                <span className="trax-switch-lever" />
+                <span className="mix-switch-lever" />
               </Toggle>
-              <span className="trax-switch-label">{ko.trackMix.solo}</span>
+              <span className="mix-switch-label">{ko.trackMix.solo}</span>
             </div>
           </div>
         </div>
 
-        <div className="trax-knobs">
+        <div className="mix-knobs">
           <Knob
-            face="trax"
+            face="mix"
             size="large"
             label={VOLUME_LABEL}
             caption={ko.trackMix.volume}
@@ -77,7 +77,7 @@ export function TrackMixPanel({ track }: { track: Track }) {
             {...gesture}
           />
           <Knob
-            face="trax"
+            face="mix"
             label={PAN_LABEL}
             caption={ko.trackMix.pan}
             value={track.pan}

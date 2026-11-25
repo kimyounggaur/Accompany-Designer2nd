@@ -5530,3 +5530,102 @@ test.describe("P6-2 접근성", () => {
     measuredP62("초점 표시", { Tab_정지: stops.length, 화면_밖: stops.filter((stop) => stop.visible === null).length, 표시_없음: 0 });
   });
 });
+
+const measuredP63 = (name: string, value: unknown) => console.log(`P6-3 측정 ${name}: ${JSON.stringify(value)}`);
+
+/**
+ * P6-3 타사 표기 정리(설계 §P6-3): 실제로 그려진 화면의 글자·접근 이름·클래스·ID·속성·CSS 선택자에 타사 프로그램 이름이 없고,
+ * 이름을 바꾼 트랙 믹스 칸과 장식을 걷어낸 리버브 칸이 그대로 동작한다.
+ * 소스 글자 검사(tests/third-party-names.test.mjs)가 못 보는 실행 중에 만들어지는 이름까지 본다.
+ * 타사 화면과 닮았는지는 사람이 참고 이미지와 나란히 놓고 봐야 해서 docs/ops-checklist.md에 있다.
+ */
+test.describe("P6-3 타사 표기", () => {
+  const THIRD_PARTY = /arturia|fl studio|t-racks|trax|specan|ableton/i;
+
+  /** 문서 전체 마크업(글자·클래스·ID·aria-*·title·SVG 이름)과 적용 중인 모든 CSS 선택자 */
+  const rendered = (page: Page) =>
+    page.evaluate(() => {
+      const selectors: string[] = [];
+      const walk = (rules: CSSRuleList) => {
+        for (const rule of Array.from(rules)) {
+          if ("selectorText" in rule) selectors.push((rule as CSSStyleRule).selectorText);
+          if ("cssRules" in rule) walk((rule as CSSGroupingRule).cssRules);
+        }
+      };
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          walk(sheet.cssRules);
+        } catch {
+          /* 다른 출처의 CSS는 읽을 수 없다 */
+        }
+      }
+      return { title: document.title, markup: document.documentElement.outerHTML, selectors: selectors.join("\n") };
+    });
+
+  const tallScreen = async (page: Page) => {
+    await page.setViewportSize({ width: 1440, height: 3200 }); // 오른쪽 패널의 장비 화면이 모두 보이는 높이
+    await expect.poll(async () => (await page.locator(S.inspector).boundingBox())?.height ?? 0).toBeGreaterThan(2500);
+  };
+
+  test("그려진 화면의 글자·이름·클래스·ID·속성과 CSS 선택자 어디에도 타사 이름이 없다(첫 화면 · 클립을 고른 뒤 · 높이 3200)", async ({ page }) => {
+    await openApp(page);
+    const sizes: Record<string, { 마크업_글자수: number; CSS_선택자_수: number }> = {};
+    const check = async (label: string) => {
+      const state = await rendered(page);
+      const where = [
+        THIRD_PARTY.test(state.title) ? "제목" : "",
+        THIRD_PARTY.test(state.markup) ? "마크업" : "",
+        THIRD_PARTY.test(state.selectors) ? "CSS 선택자" : "",
+      ].filter(Boolean);
+      expect(where, `${label}: 타사 이름이 보이는 곳`).toEqual([]);
+      expect(state.selectors.length, `${label}: 읽은 CSS 선택자가 있다(검사가 빈 것을 보지 않음)`).toBeGreaterThan(1000);
+      sizes[label] = { 마크업_글자수: state.markup.length, CSS_선택자_수: state.selectors.split("\n").length };
+    };
+    await check("첫 화면");
+    await upload(page);
+    await page.locator(S.clip).first().click();
+    await tallScreen(page);
+    await expect(page.locator('[data-panel="mix"]')).toBeVisible(); // 트랙 믹스 칸과 리버브 배지까지 그려진 화면을 봤다
+    await expect(page.locator(".reverb-badge")).toBeVisible();
+    await check("클립을 고른 뒤(높이 3200)");
+    measuredP63("그려진 화면 검사", sizes);
+  });
+
+  test("트랙 믹스 칸(이름을 mix로 바꿈): 음소거·솔로 스위치가 눌림 상태를 따라 바뀌고 트랙 머리와 같이 움직인다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await page.locator(S.clip).first().click();
+    const panel = page.locator('[data-panel="mix"]');
+    await expect(panel.locator(".panel-section__heading")).toHaveText("트랙 믹스");
+    for (const [name, head] of [["트랙 음소거", "음소거"], ["트랙 솔로", "솔로"]] as const) {
+      const toggle = panel.locator(`button[aria-label="${name}"]`);
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await toggle.click();
+      await expect(toggle, `${name} 켬`).toHaveAttribute("aria-pressed", "true");
+      await expect(toggle).toHaveClass(/mix-switch/);
+      const headButton = page.getByRole("button", { name: `트랙 1 ${head}`, exact: true });
+      await expect(headButton, `트랙 머리의 ${head}도 켜짐`).toHaveAttribute("aria-pressed", "true");
+      await toggle.click();
+      await expect(toggle, `${name} 끔`).toHaveAttribute("aria-pressed", "false");
+      await expect(headButton, `트랙 머리의 ${head}도 꺼짐`).toHaveAttribute("aria-pressed", "false");
+    }
+  });
+
+  test("리버브 칸: 나사 4개·진공관 불빛 창 장식이 없고, 배지(RD)와 조작부는 그대로 있다", async ({ page }) => {
+    await openApp(page);
+    await upload(page);
+    await page.locator(S.clip).first().click();
+    await tallScreen(page);
+    const panel = page.locator('[data-panel="reverb"]');
+    await expect(panel).toBeVisible();
+    await expect(panel.locator('[class*="screw"], [class*="tube"], [class*="wood"]'), "장식으로만 있던 요소").toHaveCount(0);
+    await expect(panel.locator(".reverb-badge")).toHaveText("RD");
+    await expect(panel.locator(".reverb-badge")).toHaveAttribute("aria-label", "반주 디자이너");
+    for (const name of ["드라이브 리버브", "섞는 비율 리버브", "폭 리버브", "초기 지연 리버브"]) {
+      await expect(panel.locator(`[aria-label="${name}"]`), `${name} 노브`).toBeVisible();
+    }
+    await expect(panel.locator(".reverb-decay-fader input")).toBeVisible();
+    const box = await panel.boundingBox();
+    measuredP63("리버브 칸 크기", { 폭: Math.round(box?.width ?? 0), 높이: Math.round(box?.height ?? 0) });
+  });
+});

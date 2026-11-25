@@ -7,49 +7,13 @@
   opacity: 1;
 }
 
-.reverb-wood-frame {
+.reverb-frame {
   padding: 7px;
 }
 
 .reverb-faceplate {
   position: relative;
   padding: 10px 9px 9px;
-}
-
-.reverb-screws {
-  position: absolute;
-  inset: 5px;
-  pointer-events: none;
-}
-
-.reverb-screws span {
-  position: absolute;
-  width: 9px;
-  height: 9px;
-  border: 1px solid rgba(45, 38, 30, 0.58);
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(255,255,255,0.5), transparent 45%), #7d766e;
-  box-shadow: inset 0 -1px 1px rgba(0,0,0,0.5);
-}
-
-.reverb-screws span:nth-child(1) {
-  left: 0;
-  top: 0;
-}
-
-.reverb-screws span:nth-child(2) {
-  right: 0;
-  top: 0;
-}
-
-.reverb-screws span:nth-child(3) {
-  left: 0;
-  bottom: 0;
-}
-
-.reverb-screws span:nth-child(4) {
-  right: 0;
-  bottom: 0;
 }
 
 .reverb-main-deck {
@@ -59,7 +23,7 @@
 }
 
 .reverb-brand-module,
-.reverb-tube-module,
+.reverb-drive-module,
 .reverb-decay-module,
 .reverb-blend-module {
   min-width: 0;
@@ -70,7 +34,7 @@
   flex: 1 1 104px;
 }
 
-.reverb-tube-module {
+.reverb-drive-module {
   flex: 1 1 90px;
 }
 
@@ -127,7 +91,7 @@
   box-shadow: 0 1px 2px rgba(0,0,0,0.4), inset 0 0 3px rgba(0,0,0,0.8);
 }
 
-.reverb-tube-module {
+.reverb-drive-module {
   display: grid;
   justify-items: center;
   align-content: center;
@@ -146,22 +110,6 @@
   justify-items: center;
   align-content: center;
   padding: 9px 7px;
-}
-
-.reverb-tube-window {
-  position: relative;
-  width: 42px;
-  height: 78px;
-  border: 1px solid #6d695f;
-  box-shadow: inset 0 0 12px rgba(0,0,0,0.9);
-}
-
-.reverb-tube-window span {
-  position: absolute;
-  inset: 12px 11px;
-  border-radius: 45%;
-  background: radial-gradient(circle at 50% 24%, rgba(255,255,210,0.9), transparent 10%), radial-gradient(circle at 50% 56%, rgba(255,88,42,0.9), transparent 26%), linear-gradient(90deg, transparent, rgba(255,150,60,0.32), transparent);
-  box-shadow: 0 0 13px rgba(255, 82, 32, 0.75);
 }
 
 .reverb-decay-module {
@@ -280,7 +228,7 @@
   padding: 8px 9px;
 }
 
-.reverb-bottom-strip > .reverb-arturia-mark {
+.reverb-bottom-strip > .reverb-badge {
   flex: 0 0 auto;
 }
 
@@ -296,7 +244,7 @@
   flex: 1.8 1 140px;
 }
 
-.reverb-arturia-mark {
+.reverb-badge {
   display: grid;
   place-items: center;
   width: 30px;
@@ -419,7 +367,7 @@
   text-transform: uppercase;
 }
 
-.reverb-wood-frame {
+.reverb-frame {
   border-radius: 0;
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
@@ -433,7 +381,7 @@
   box-shadow: none;
 }
 
-.reverb-tube-module,
+.reverb-drive-module,
 .reverb-decay-module,
 .reverb-blend-module,
 .reverb-bottom-strip {
@@ -503,8 +451,7 @@
   box-shadow: 0 0 0 3px rgba(250, 82, 15, 0.16);
 }
 
-.reverb-arturia-mark,
-.reverb-tube-window,
+.reverb-badge,
 .reverb-knob-cap {
   border-radius: 0;
   background: var(--color-dark);

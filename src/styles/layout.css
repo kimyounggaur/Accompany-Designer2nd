@@ -240,7 +240,7 @@
   padding-bottom: 8px;
 }
 
-.trax-panel > .panel-section__header,
+.mix-panel > .panel-section__header,
 .comp-panel > .panel-section__header,
 .delay-panel > .panel-section__header,
 .reverb-panel > .panel-section__header,
@@ -248,7 +248,7 @@
   padding: 6px 14px;
 }
 
-.trax-panel.panel-section[data-open="true"] > .panel-section__body,
+.mix-panel.panel-section[data-open="true"] > .panel-section__body,
 .comp-panel.panel-section[data-open="true"] > .panel-section__body,
 .delay-panel.panel-section[data-open="true"] > .panel-section__body,
 .reverb-panel.panel-section[data-open="true"] > .panel-section__body,

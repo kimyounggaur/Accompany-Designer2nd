@@ -32,7 +32,7 @@ export function DelayPluginPanel({ bpm, delay, onChange }: DelayPluginPanelProps
   return (
     <div className={`dly-rack ${delay.enabled ? "on" : ""}`}>
       {/* Wood frame */}
-      <div className="dly-wood">
+      <div className="dly-frame">
         {/* Faceplate */}
         <div className="dly-face">
 
