@@ -2518,8 +2518,11 @@ test.describe("P4-3 다단계 파형과 확대 범위", () => {
     await page.addInitScript(LONG_TASKS);
     await page.addInitScript(COUNT_PEAKS_WORKERS);
     await openApp(page);
-    const startedAt = Date.now();
     await page.setInputFiles(S.upload, HOUR);
+    // P6-4: 1시간 음원은 풀면 약 0.64~0.69GB(모노 44.1~48kHz × 4바이트)라 데스크톱 안내 기준(600MB)을 넘어 먼저 묻는다. 올리기를 고른다.
+    await expect(page.locator(S.confirmDialog)).toContainText("메모리를 많이 씁니다");
+    await page.locator(S.confirmOk).click();
+    const startedAt = Date.now(); // 풀기는 [그래도 올리기]를 누른 뒤에 시작한다
     await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 180_000 });
     const decodedAt = Date.now();
     await waitForWaveforms(page, 1, 180_000);
@@ -5627,5 +5630,138 @@ test.describe("P6-3 타사 표기", () => {
     await expect(panel.locator(".reverb-decay-fader input")).toBeVisible();
     const box = await panel.boundingBox();
     measuredP63("리버브 칸 크기", { 폭: Math.round(box?.width ?? 0), 높이: Math.round(box?.height ?? 0) });
+  });
+});
+
+const measuredP64 = (name: string, value: unknown) => console.log(`P6-4 측정 ${name}: ${JSON.stringify(value)}`);
+
+/**
+ * 머리글(44바이트)과 짧은 무음만 있는 가짜 WAV. 데이터 크기를 크게 적어 두면, 앱은 풀기 전에 이 값만 보고 메모리를 어림한다.
+ * 어림값 = 길이(초) × 출력 표본 속도 × 채널 × 4바이트라서, 2채널 48kHz에서는 1초가 약 0.384MB다.
+ */
+function fakeWav(declaredSeconds: number, actualSeconds = 0, name = "큰파일.wav") {
+  const sampleRate = 48_000;
+  const channels = 2;
+  const blockAlign = channels * 2;
+  const declared = Math.round(declaredSeconds * sampleRate) * blockAlign;
+  const actual = Math.round(actualSeconds * sampleRate) * blockAlign;
+  const head = Buffer.alloc(44);
+  head.write("RIFF", 0, "ascii");
+  head.writeUInt32LE(36 + declared, 4);
+  head.write("WAVE", 8, "ascii");
+  head.write("fmt ", 12, "ascii");
+  head.writeUInt32LE(16, 16);
+  head.writeUInt16LE(1, 20);
+  head.writeUInt16LE(channels, 22);
+  head.writeUInt32LE(sampleRate, 24);
+  head.writeUInt32LE(sampleRate * blockAlign, 28);
+  head.writeUInt16LE(blockAlign, 32);
+  head.writeUInt16LE(16, 34);
+  head.write("data", 36, "ascii");
+  head.writeUInt32LE(declared, 40);
+  return { name, mimeType: "audio/wav", buffer: Buffer.concat([head, Buffer.alloc(actual)]) };
+}
+
+/** 휴대폰으로 보이게 한다: 기기 메모리 2GB(네 번째 한도 줄에 해당). 앱이 켜지기 전에 심어야 해서 openApp보다 먼저 부른다. */
+async function asPhoneMemory(page: Page) {
+  await page.addInitScript(() => Object.defineProperty(navigator, "deviceMemory", { value: 2, configurable: true }));
+}
+
+/**
+ * P6-4 메모리 상한(설계 §P6-4): 소리를 풀면 길이 × 표본 속도 × 채널 × 4바이트를 차지한다.
+ * 데스크톱은 합계 600MB를 넘으면 알리고 1.2GB를 넘으면 막고, 휴대폰은 200MB·400MB이며, 파일 하나가 300MB를 넘으면 풀기 전에 묻는다.
+ * 큰 곡을 실제로 올리면 이 시험이 느려지므로 머리글만 큰 가짜 WAV로 어림 단계를 시험한다. 실제 큰 곡 편집은 docs/ops-checklist.md에 있다.
+ */
+test.describe("P6-4 메모리 상한", () => {
+  test("데스크톱: 풀면 1.2GB를 넘는 파일은 풀기 전에 막고 알린다(확인 단추만, 클립 없음, 오류 알림 없음)", async ({ page }) => {
+    await openApp(page);
+    await page.setInputFiles(S.upload, fakeWav(5400)); // 약 2.07GB
+    const dialog = page.locator(S.confirmDialog);
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText("올릴 수 없습니다");
+    await expect(dialog).toContainText("큰파일.wav");
+    await expect(dialog).toContainText("1.2GB");
+    await expect(page.locator('[data-testid="confirm-cancel"]'), "알림만이라 취소 단추가 없다").toHaveCount(0);
+    await page.locator(S.confirmOk).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator(S.clip)).toHaveCount(0);
+    await expect(page.locator(S.status)).toContainText("큰파일.wav은(는) 올리지 않았습니다");
+    await expect(page.locator(S.toast).filter({ hasText: "읽지 못" }), "풀기 실패 오류가 아니다").toHaveCount(0);
+    measuredP64("한도 넘음(데스크톱)", { 안내: "올릴 수 없습니다", 클립: 0 });
+  });
+
+  test("데스크톱: 합계가 600MB를 넘으면 묻고, 올리지 않기를 고르면 아무것도 올라가지 않는다", async ({ page }) => {
+    await openApp(page);
+    await page.setInputFiles(S.upload, fakeWav(2400)); // 약 0.92GB
+    const dialog = page.locator(S.confirmDialog);
+    await expect(dialog).toContainText("메모리를 많이 씁니다");
+    await expect(dialog).toContainText("느려질 수 있습니다");
+    await expect(page.locator('[data-testid="confirm-cancel"]')).toHaveText("올리지 않기");
+    await expect(page.locator(S.confirmOk)).toHaveText("그래도 올리기");
+    await page.locator('[data-testid="confirm-cancel"]').click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator(S.clip)).toHaveCount(0);
+    await expect(page.locator(S.status)).toContainText("올리지 않았습니다");
+    await expect(page.locator(S.toast).filter({ hasText: "읽지 못" })).toHaveCount(0);
+  });
+
+  test("데스크톱: 600MB를 넘어도 그래도 올리기를 고르면 풀기를 이어 간다(묻는 창은 한 번뿐)", async ({ page }) => {
+    await openApp(page);
+    await page.setInputFiles(S.upload, fakeWav(2400, 3)); // 선언은 약 0.92GB, 실제 소리는 3초
+    const dialog = page.locator(S.confirmDialog);
+    await expect(dialog).toContainText("메모리를 많이 씁니다");
+    await page.locator(S.confirmOk).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    await page.waitForTimeout(500);
+    await expect(dialog, "푼 뒤에 같은 질문을 다시 하지 않는다").toBeHidden();
+  });
+
+  test("평범한 파일은 묻지 않고 올라간다(8초 곡 3번)", async ({ page }) => {
+    await openApp(page);
+    for (let count = 1; count <= 3; count += 1) {
+      await upload(page);
+      await expect(page.locator(S.confirmDialog)).toBeHidden();
+    }
+    await expect(page.locator(S.clip)).toHaveCount(3);
+  });
+
+  test("휴대폰 기준(기기 메모리 2GB): 평범한 파일은 그대로, 약 300MB는 묻고, 약 600MB는 막는다", async ({ page }) => {
+    await asPhoneMemory(page);
+    await openApp(page);
+    await upload(page);
+    await expect(page.locator(S.confirmDialog)).toBeHidden();
+
+    await page.setInputFiles(S.upload, fakeWav(800, 2, "중간.wav")); // 약 0.31GB — 200MB는 넘고 400MB는 안 넘음
+    const ask = page.locator(S.confirmDialog);
+    await expect(ask).toContainText("메모리를 많이 씁니다");
+    await page.locator('[data-testid="confirm-cancel"]').click();
+    await expect(ask).toBeHidden();
+    await expect(page.locator(S.clip)).toHaveCount(1);
+
+    await page.setInputFiles(S.upload, fakeWav(1600, 2, "아주큰.wav")); // 약 0.61GB — 400MB 넘음
+    await expect(ask).toContainText("올릴 수 없습니다");
+    await expect(ask).toContainText("400MB");
+    await page.locator(S.confirmOk).click();
+    await expect(ask).toBeHidden();
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    measuredP64("휴대폰 기준", { 묻는_한도: "200MB", 막는_한도: "400MB" });
+  });
+
+  test("같은 약 0.31GB 파일이 데스크톱에서는 묻지 않고 올라간다(휴대폰 한도가 따로 있다는 증거)", async ({ page }) => {
+    await openApp(page);
+    await page.setInputFiles(S.upload, fakeWav(800, 2, "중간.wav")); // 휴대폰 기준 시험의 그 파일
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    await expect(page.locator(S.confirmDialog)).toBeHidden();
+  });
+
+  test("여러 파일을 한꺼번에 올릴 때 큰 파일만 빠지고 나머지는 올라간다", async ({ page }) => {
+    await openApp(page);
+    const ordinary = { name: "quiet-loud-8s.wav", mimeType: "audio/wav", buffer: fs.readFileSync(WAV) };
+    await page.setInputFiles(S.upload, [ordinary, fakeWav(5400)]);
+    await expect(page.locator(S.confirmDialog)).toContainText("올릴 수 없습니다");
+    await page.locator(S.confirmOk).click();
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    await expect(page.locator(S.toast).filter({ hasText: "2개 중 1개만 업로드했습니다" })).toBeVisible();
   });
 });

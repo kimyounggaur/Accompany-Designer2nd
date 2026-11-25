@@ -6,6 +6,8 @@ export interface ConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: "default" | "danger";
+  /** false면 취소 단추 없이 확인만 둔다(알리기만 하는 창). 기본 true */
+  showCancel?: boolean;
 }
 
 let nextId = 1;
@@ -20,6 +22,7 @@ export function confirmAction(options: ConfirmOptions): Promise<boolean> {
       confirmLabel: options.confirmLabel ?? "확인",
       cancelLabel: options.cancelLabel ?? "취소",
       tone: options.tone ?? "default",
+      showCancel: options.showCancel ?? true,
       resolve,
     });
   });

@@ -34,15 +34,17 @@ export function ConfirmDialog() {
           <h2 id="confirm-dialog-title">{request.title}</h2>
           <p id="confirm-dialog-message">{request.message}</p>
           <div className="confirm-dialog__buttons">
-            <button
-              type="button"
-              className="text-button"
-              data-testid="confirm-cancel"
-              data-autofocus={request.tone === "danger" ? "" : undefined}
-              onClick={() => close(request.id, false)}
-            >
-              {request.cancelLabel}
-            </button>
+            {request.showCancel !== false && (
+              <button
+                type="button"
+                className="text-button"
+                data-testid="confirm-cancel"
+                data-autofocus={request.tone === "danger" ? "" : undefined}
+                onClick={() => close(request.id, false)}
+              >
+                {request.cancelLabel}
+              </button>
+            )}
             <button
               type="button"
               className={`text-button ${request.tone === "danger" ? "danger" : "primary"}`}

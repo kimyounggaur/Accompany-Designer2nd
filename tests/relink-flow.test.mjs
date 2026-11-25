@@ -249,6 +249,24 @@ test("대화상자: 읽을 수 없는 파일이면 그 줄에 실패를 보이�
   assert.deepEqual(rowOf("a1"), { kind: "linked", sameFile: true });
 });
 
+test("대화상자: 큰 음원을 올리지 않기로 하면 오류 없이 그 줄이 다시 고르기를 기다리고, 풀지도 않는다(P6-4)", async () => {
+  await loadProjectMissingAudio();
+  relinking.openRelinkDialog();
+  const { deps, log } = fakeDecoder();
+  const { UploadSkipped } = await import("../src/services/memoryGuard.ts");
+  const refusing = {
+    beforeDecode: async (file) => { throw new UploadSkipped(file.name, "refused"); },
+    afterDecode: async () => assert.fail("풀기 전에 막혔으면 푼 뒤 검사까지 가지 않는다"),
+  };
+  await relinking.chooseRelinkFile("a1", fileOf("반주.wav", SOURCE), { ...deps, guard: refusing });
+  assert.deepEqual(rowOf("a1"), { kind: "waiting" });
+  assert.deepEqual(log.decoded, [], "막힌 파일은 풀지 않는다");
+  assert.equal(hasRememberedAudio("a1"), false);
+  assert.deepEqual(messages(), [], "오류 알림이 없다(이유는 묻는 창이 알렸다)");
+  await relinking.chooseRelinkFile("a1", fileOf("반주.wav", SOURCE), deps); // 다시 고르면 보통대로 연결
+  assert.deepEqual(rowOf("a1"), { kind: "linked", sameFile: true });
+});
+
 test("대화상자를 닫으면 확인 대기 파일을 버리고 연결 결과를 알린다", async () => {
   await loadProjectMissingAudio();
   relinking.openRelinkDialog();

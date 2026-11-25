@@ -8,6 +8,7 @@ import { chooseTrack, type PlacementChoice } from "../domain/timeline/placement"
 import type { AssetMeta, Clip, ProjectDoc } from "../domain/types";
 import { getClipTimelineDuration } from "../utils/audioMath";
 import { hashOrUndefined } from "./persistence/assetHash";
+import type { UploadGuard } from "./memoryGuard";
 import { rememberAudio } from "./persistence/audioBlobs";
 
 /** 소리 엔진이 파일 하나를 푼 결과 */
@@ -24,9 +25,24 @@ export interface ReadAudio extends DecodedUpload {
   hash?: string;
 }
 
-/** 소리를 풀고 해시를 계산한다. 풀 수 없는 파일이면 던진다. */
-export async function readAudioFile(file: File, decode: (file: File) => Promise<DecodedUpload>): Promise<ReadAudio> {
-  const [decoded, hash] = await Promise.all([decode(file), hashOrUndefined(file)]);
+/**
+ * 소리를 풀고 해시를 계산한다. 풀 수 없는 파일이면 던진다.
+ * `guard`가 있으면(P6-4) 파일을 읽기 전에 큰 파일을 묻거나 막고, 푼 뒤에 풀린 크기로 다시 따진다. 올리지 않기로 하면
+ * `UploadSkipped`를 던지고(풀어 둔 소리는 내려놓는다), 풀기 전에 막힌 파일은 해시도 읽지 않는다(큰 파일을 통째로 읽는 일을 피한다).
+ */
+export async function readAudioFile(file: File, decode: (file: File) => Promise<DecodedUpload>, guard?: UploadGuard): Promise<ReadAudio> {
+  const before = await guard?.beforeDecode(file);
+  const hashing = hashOrUndefined(file); // 풀기와 함께 시작한다(실패하지 않는 약속)
+  const decoded = await decode(file);
+  if (guard && before) {
+    try {
+      await guard.afterDecode(file, decoded.asset, before);
+    } catch (error) {
+      decoded.release();
+      throw error;
+    }
+  }
+  const hash = await hashing;
   return { ...decoded, hash, asset: hash ? { ...decoded.asset, hash } : decoded.asset };
 }
 

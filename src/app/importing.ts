@@ -4,6 +4,7 @@ import { dropRowAt, type DropPlacement } from "../domain/timeline/drop";
 import type { Clip } from "../domain/types";
 import { ko } from "../i18n/ko";
 import { attachAudio, planUpload, readAudioFile, type DecodedUpload } from "../services/importer";
+import { UploadSkipped, type UploadGuard } from "../services/memoryGuard";
 import { notify, notifyError } from "../services/notify";
 import { hasRememberedAudio, rememberAudio } from "../services/persistence/audioBlobs";
 import { useDawStore } from "../store/useDawStore";
@@ -12,6 +13,7 @@ import { requestAutosave } from "./autosaveControl";
 import { ensurePeaks } from "./peaks";
 import { readPlayhead } from "./playhead";
 import { getProjectSnapshot } from "./projectSnapshot";
+import { uploadGuard } from "./uploadGuard";
 
 /** 소리 엔진으로 파일을 푼다(`services/importer`에 넘기는 풀기 함수). 풀면 소리는 임시 음원 id로 엔진에 올라간다. */
 export async function decodeUpload(file: File): Promise<DecodedUpload> {
@@ -26,9 +28,14 @@ export async function decodeUpload(file: File): Promise<DecodedUpload> {
 /** 가져오기에 끼우는 부품(시험에서는 가짜로 바꾼다) */
 export interface ImportDeps {
   decode: (file: File) => Promise<DecodedUpload>;
+  /** 큰 음원 검사(P6-4). 없으면 검사하지 않는다(시험이 가짜 풀기만 끼울 때). */
+  guard?: UploadGuard;
 }
 
-const defaultDeps: ImportDeps = { decode: decodeUpload };
+/** 화면에서 쓰는 기본 부품: 소리 엔진으로 풀고, 큰 음원을 묻거나 막는다 */
+export const defaultImportDeps: ImportDeps = { decode: decodeUpload, guard: uploadGuard };
+
+const defaultDeps = defaultImportDeps;
 
 /**
  * 파일 메뉴의 "오디오 업로드": 파일마다 소리를 풀어 새 음원과 클립을 만든다.
@@ -60,7 +67,7 @@ async function importFiles(files: FileList | File[], deps: ImportDeps, drop?: Dr
   for (let i = 0; i < fileArray.length; i++) {
     const file = fileArray[i];
     try {
-      const read = await readAudioFile(file, deps.decode);
+      const read = await readAudioFile(file, deps.decode, deps.guard);
       const store = useDawStore.getState();
 
       const same = findMissingByHash(listMissingAssets(getProjectSnapshot(), hasRememberedAudio), read.hash);
@@ -109,6 +116,11 @@ async function importFiles(files: FileList | File[], deps: ImportDeps, drop?: Dr
       if (fileArray.length > 1) notify("info", ko.notice.uploadProgress(i + 1, fileArray.length, asset.fileName));
       else notify("success", ko.notice.uploadDone(asset.fileName));
     } catch (error) {
+      if (error instanceof UploadSkipped) {
+        // 큰 음원을 올리지 않기로 했거나 막았다(P6-4): 오류가 아니다. 이유는 묻는 창에서 이미 알렸다.
+        notify("info", ko.memory.skipped(file.name));
+        continue;
+      }
       notifyError(error, { kind: "decode", title: ko.failed.decode(file.name), fileName: file.name });
     }
   }
