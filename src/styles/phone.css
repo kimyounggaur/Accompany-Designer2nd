@@ -1,0 +1,466 @@
+/*
+ * 휴대폰 "재생·녹음" 모드(설계서 §P6-5). 화면 폭이 768px 미만일 때만 쓰인다.
+ * 구조(상단 바 한 줄 · 보기 전용 타임라인 · 아래 시트)는 코드가 바꾼다(`usePhoneMode`, `<main data-phone>`).
+ * 이 파일은 그 구조의 모양만 맡는다. 맨 마지막에 불러와 앞의 규칙(≤980px용 겹침 방지 규칙 포함)을 덮어쓴다.
+ * 기준 폭(767px)은 src/domain/layout/breakpoints.ts의 PHONE_BREAKPOINT와 같아야 한다(tests/phone-mode.test.mjs가 확인한다).
+ *
+ * 눌리는 크기 44×44px 이상: 이 모드에서 손가락이 닿는 단추·슬라이더·선택 상자·입력 칸은 모두 44px 이상으로 키운다.
+ */
+
+@media (max-width: 767px) {
+  html,
+  body {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  body {
+    min-width: 0;
+  }
+}
+
+/* ---------- 틀: 화면 높이에 맞춰 딱 맞게. 페이지는 스크롤하지 않고 타임라인만 스크롤한다 ---------- */
+.app-shell.shell[data-phone="true"] {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell[data-phone="true"] .workspace,
+.app-shell[data-phone="true"] .workspace[data-inspector] {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-shell[data-phone="true"] button,
+.app-shell[data-phone="true"] select,
+.app-shell[data-phone="true"] input {
+  touch-action: manipulation;
+}
+
+/* ---------- 상단 바: 한 줄 (재생 · 정지 · 녹음 · 시간 · 시트 단추 · 파일) ---------- */
+.transport.topbar[data-layout="phone"] {
+  display: block;
+  min-height: 0;
+  padding: 8px 8px;
+}
+
+.topbar[data-layout="phone"] .topbar__row {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.topbar[data-layout="phone"] .topbar__row > * {
+  flex-shrink: 0;
+}
+
+.topbar[data-layout="phone"] .transport-group {
+  min-width: 0;
+  padding: 0;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-shell[data-phone="true"] .icon-button,
+.app-shell[data-phone="true"] .text-button,
+.app-shell[data-phone="true"] .toggle,
+.app-shell[data-phone="true"] .follow-toggle,
+.app-shell[data-phone="true"] .topbar .icon-button,
+.app-shell[data-phone="true"] .topbar .text-button {
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+}
+
+.topbar[data-layout="phone"] .time-display {
+  min-width: 0;
+  height: 44px;
+  padding: 0 4px;
+  font-size: 14px;
+}
+
+.topbar[data-layout="phone"] .file-menu .text-button {
+  gap: 4px;
+  padding: 0 10px;
+}
+
+.phone-sheet-toggle.active {
+  color: #fff;
+  background: #a5350c;
+}
+
+.app-shell[data-phone="true"] .file-menu-panel button[role="menuitem"] {
+  min-height: 44px;
+}
+
+/* ---------- 타임라인: 보기 전용. 트랙 머리 칸이 없어 폭 전체를 쓴다 ---------- */
+.playlist.playlist--phone {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.playlist--phone .timeline-scroll {
+  grid-column: 1;
+  grid-row: 2;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+}
+
+.playlist--phone .lanes {
+  /* clip: 가려 두되 스크롤 상자가 되지는 않아서, 이름표(sticky)가 바깥 스크롤 상자 기준으로 붙어 있는다 */
+  overflow: clip;
+}
+
+/* 클립은 보기만 한다: 눌러도 클립이 반응하지 않고 아래 줄이 받아 "재생 위치 이동"이 된다 */
+.playlist--phone .clip,
+.playlist--phone .clip * {
+  pointer-events: none;
+}
+
+.phone-viewbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-surface);
+}
+
+.phone-viewbar > * {
+  flex-shrink: 0;
+}
+
+.phone-viewbar .transport-group {
+  padding: 0;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.phone-viewbar .follow-toggle {
+  min-width: 88px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.phone-lane-name {
+  position: sticky;
+  left: 4px;
+  z-index: 2;
+  display: block;
+  width: fit-content;
+  max-width: 45%;
+  height: 15px; /* 클립 윗단(15px) 위에 들어가는 높이 */
+  margin: 0 0 0 4px;
+  padding: 0 6px;
+  overflow: hidden;
+  border: 1px solid var(--color-line);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--color-text);
+  font-size: 11px;
+  line-height: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ---------- 아래 시트 ---------- */
+.phone-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50; /* 상단 바(60)보다 아래: 시트가 열려 있어도 재생·녹음 단추는 그대로 누를 수 있다 */
+  background: rgba(36, 32, 24, 0.42);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s ease, visibility 0s linear 0.18s;
+}
+
+.phone-scrim[data-open="true"] {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.18s ease;
+}
+
+.phone-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 55;
+  display: block;
+  max-height: min(72vh, 640px);
+  max-height: min(72dvh, 640px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--color-line);
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: 0 -10px 28px rgba(36, 32, 24, 0.22);
+  transform: translateY(100%);
+  visibility: hidden;
+  transition: transform 0.2s ease, visibility 0s linear 0.2s;
+}
+
+.phone-sheet[data-open="true"] {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phone-scrim,
+  .phone-scrim[data-open="true"],
+  .phone-sheet,
+  .phone-sheet[data-open="true"] {
+    transition: none;
+  }
+}
+
+.phone-sheet__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 52px;
+  margin: 0 -12px 4px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-bg);
+}
+
+.phone-sheet__header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.phone-sheet__section {
+  display: grid;
+  gap: 8px;
+  padding: 10px 0 4px;
+}
+
+.phone-sheet__section h3 {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.phone-tracks {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.phone-track {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface-raised);
+}
+
+.phone-track__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.phone-track__name {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phone-track__toggles {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.phone-track .toggle {
+  padding: 0 8px;
+}
+
+.phone-track .arm-toggle {
+  min-width: 52px;
+}
+
+.phone-track__volume {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.phone-track__volume input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  margin: 0;
+  accent-color: var(--color-brand);
+}
+
+.phone-track__value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* 녹음 설정: 시트 안에서는 늘 펼쳐 둔다. 단추에는 글자 이름표가 붙는다 */
+.record-options-sheet {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.record-options-sheet .icon-button {
+  width: 100%;
+  gap: 8px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.record-options-sheet .monitor-volume-control,
+.record-options-sheet .count-in-control,
+.record-options-sheet .latency-control,
+.record-options-sheet .input-select-control {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 44px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.record-options-sheet .monitor-volume-control input[type="range"] {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  height: 44px;
+}
+
+.record-options-sheet input:not([type="range"]) {
+  height: 44px;
+  min-height: 44px;
+  font-size: 14px;
+}
+
+.record-options-sheet .monitor-volume-control input.monitor-volume-number {
+  flex: 0 0 64px;
+  width: 64px;
+}
+
+.record-options-sheet .count-in-control span,
+.record-options-sheet .input-select-control > span {
+  flex: 0 0 auto;
+}
+
+.record-options-sheet .count-in-control select,
+.record-options-sheet .input-select-control select {
+  flex: 1 1 0;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface-raised);
+  width: auto;
+  min-width: 0;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  font-size: 14px;
+}
+
+.record-options-sheet .latency-control input {
+  flex: 0 0 72px;
+  width: 72px;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+/* ---------- 아래 상태 줄 · 알림 ---------- */
+.app-shell[data-phone="true"] .statusbar {
+  position: static;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 8px;
+  overflow: hidden;
+}
+
+.app-shell[data-phone="true"] .statusbar .build-stamp {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 28vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell[data-phone="true"] .toast__close,
+.app-shell[data-phone="true"] .toast__action {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* 알림은 아래 상태 줄 위에 뜬다. 시트가 올라와 있을 때만 시트 안 설정을 가리지 않도록 위쪽(상단 바 아래)으로 옮긴다 */
+.app-shell[data-phone="true"] .toast-region {
+  bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+}
+
+.app-shell[data-phone="true"]:has(.phone-sheet[data-open="true"]) .toast-region {
+  top: calc(68px + env(safe-area-inset-top, 0px));
+  bottom: auto;
+}
+
+/* 아주 좁은 폰(360px 미만, 예: 320px): 단추 크기(44px)는 지키고 단추 사이 틈·글자만 줄여 한 줄에 담는다 */
+@media (max-width: 359px) {
+  .transport.topbar[data-layout="phone"] {
+    padding-inline: 4px;
+  }
+
+  .topbar[data-layout="phone"] .topbar__row,
+  .topbar[data-layout="phone"] .transport-group {
+    gap: 2px;
+  }
+
+  .topbar[data-layout="phone"] .time-display {
+    padding: 0 2px;
+    font-size: 13px;
+  }
+
+  .topbar[data-layout="phone"] .file-menu .text-button {
+    padding: 0 6px;
+  }
+
+  .topbar[data-layout="phone"] .file-menu .text-button svg {
+    display: none;
+  }
+}

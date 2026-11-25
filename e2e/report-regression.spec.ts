@@ -5765,3 +5765,375 @@ test.describe("P6-4 메모리 상한", () => {
     await expect(page.locator(S.toast).filter({ hasText: "2개 중 1개만 업로드했습니다" })).toBeVisible();
   });
 });
+
+const measuredP65 = (name: string, value: unknown) => console.log(`P6-5 측정 ${name}: ${JSON.stringify(value)}`);
+
+/**
+ * P6-5 휴대폰 "재생·녹음" 모드(설계 §P6-5): 화면 폭 768px 미만에서 한 줄 상단 바 · 보기 전용 타임라인 · 아래 시트로 바뀐다.
+ * 모든 시험은 휴대폰 기기 흉내(390×844, 손가락 입력, 화면 배율 2)로 돈다. 눌러 보는 것은 손가락 입력(tap)으로 한다.
+ * 진짜 아이폰·안드로이드에서 쓰는 것은 사람이 해 봐야 한다(docs/ops-checklist.md).
+ */
+test.describe("P6-5 휴대폰 모드", () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+
+  const sheetToggle = '[data-testid="phone-sheet-toggle"]';
+  const sheet = '[data-testid="phone-sheet"]';
+  const scrim = '[data-testid="phone-scrim"]';
+  const viewbar = '[data-testid="phone-viewbar"]';
+
+  /** 휴대폰 화면에는 오른쪽 패널이 없어 openApp(패널을 기다린다)을 쓰지 못한다. 대신 상단 바를 기다린다. */
+  async function openPhone(page: Page, query?: string) {
+    await page.addInitScript(PROBES);
+    await page.addInitScript(() => {
+      try {
+        window.localStorage.setItem("ad.ui.layoutNoticeSeen", "1");
+      } catch {
+        /* 저장소를 못 쓰는 환경 */
+      }
+    });
+    await page.goto(`/${withEngine(query)}`);
+    await page.locator(S.transport).waitFor();
+    await page.waitForTimeout(1200); // 자동 저장 복구가 끝날 때까지
+  }
+
+  const rect = (page: Page, selector: string) =>
+    page.evaluate((target) => {
+      const element = document.querySelector(target);
+      if (!element) return null;
+      const box = element.getBoundingClientRect();
+      return { x: box.x, y: box.y, width: box.width, height: box.height };
+    }, selector);
+
+  /** 손가락 하나로 (x, y)에서 가로로 dx만큼 끈다(진짜 터치 이벤트: 브라우저가 스크롤로 받아들인다). */
+  async function touchDrag(page: Page, x: number, y: number, dx: number) {
+    const client = await page.context().newCDPSession(page);
+    await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+    const steps = 12;
+    for (let step = 1; step <= steps; step += 1) {
+      await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x + (dx * step) / steps, y }] });
+      await page.waitForTimeout(16);
+    }
+    await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.waitForTimeout(400);
+  }
+
+  /** 눈에 보이는 눌림 대상 중 가로 또는 세로가 44px 미만인 것들(이름 · 크기) */
+  const smallTargets = (page: Page, scope: string) =>
+    page.evaluate((root) => {
+      const found: string[] = [];
+      for (const element of document.querySelectorAll(`${root} button, ${root} input, ${root} select`)) {
+        const box = element.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) continue;
+        if (box.width < 43.5 || box.height < 43.5) {
+          const name = element.getAttribute("aria-label") ?? element.getAttribute("title") ?? element.textContent?.trim() ?? element.tagName;
+          found.push(`${name} ${Math.round(box.width)}×${Math.round(box.height)}`);
+        }
+      }
+      return found;
+    }, scope);
+
+  test("390×844: 가로 넘침 0, 상단 바는 한 줄 64px 이하, 타임라인 폭 350px 이상 — 오른쪽 패널·트랙 머리 칸은 없다", async ({ page }) => {
+    await openPhone(page);
+    const measure = async () => {
+      const doc = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight }));
+      const topbar = (await rect(page, S.transport))!;
+      const scroll = (await rect(page, S.timelineScroll))!;
+      const status = (await rect(page, S.statusbar))!;
+      return { 문서_가로: doc.width, 문서_세로: doc.height, 상단바_높이: Math.round(topbar.height), 타임라인_폭: Math.round(scroll.width), 상태줄_아래끝: Math.round(status.y + status.height) };
+    };
+    const first = await measure();
+    expect(first.문서_가로).toBeLessThanOrEqual(390);
+    expect(first.문서_세로, "페이지는 스크롤하지 않고 화면에 딱 맞는다").toBeLessThanOrEqual(844);
+    expect(first.상단바_높이).toBeLessThanOrEqual(64);
+    expect(first.타임라인_폭).toBeGreaterThanOrEqual(350);
+    expect(first.상태줄_아래끝).toBeLessThanOrEqual(844);
+    await expect(page.locator(S.inspector)).toHaveCount(0);
+    await expect(page.locator(S.trackHeader)).toHaveCount(0);
+    await expect(page.locator(S.tempo)).toHaveCount(0);
+    await expect(page.locator(S.inspectorToggle)).toHaveCount(0);
+
+    // 올린 뒤(아주 긴 파일 이름이 상태 줄·알림에 떠도 넘치지 않는다)
+    const longName = "아주아주아주아주아주아주아주아주아주긴이름의반주파일_최종_진짜최종_수정본_다시수정.wav";
+    await page.setInputFiles(S.upload, { name: longName, mimeType: "audio/wav", buffer: fs.readFileSync(WAV) });
+    await expect(page.locator(S.clip)).toHaveCount(1);
+    await page.waitForTimeout(500);
+    const uploaded = await measure();
+    expect(uploaded.문서_가로).toBeLessThanOrEqual(390);
+    expect(uploaded.문서_세로).toBeLessThanOrEqual(844);
+    expect(uploaded.상단바_높이).toBeLessThanOrEqual(64);
+    expect(uploaded.타임라인_폭).toBeGreaterThanOrEqual(350);
+
+    // 상단 바의 재생·정지·녹음·시간·시트 단추·파일 단추는 모두 같은 줄에 있다
+    const rows = new Set<number>();
+    for (const selector of [S.play, S.stop, S.record, S.timeDisplay, sheetToggle, S.fileMenuTrigger]) {
+      const box = (await rect(page, selector))!;
+      expect(box, selector).not.toBeNull();
+      expect(box.x, selector).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, selector).toBeLessThanOrEqual(390);
+      rows.add(Math.round((box.y + box.height / 2) / 8));
+    }
+    expect(rows.size, "여섯 부품의 세로 가운데가 같은 줄").toBe(1);
+    measuredP65("390×844", { 처음: first, 올린_뒤: uploaded });
+  });
+
+  test("폭이 좁은 폰(320·360px)과 767px에서도 넘치지 않고 상단 바가 64px 이하 한 줄이다", async ({ page }) => {
+    await openPhone(page);
+    await upload(page);
+    for (const width of [320, 360, 414, 767]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.waitForTimeout(200);
+      const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(scrollWidth, `${width}px 문서 가로`).toBeLessThanOrEqual(width);
+      const topbar = (await rect(page, S.transport))!;
+      expect(topbar.height, `${width}px 상단 바`).toBeLessThanOrEqual(64);
+      const file = (await rect(page, S.fileMenuTrigger))!;
+      expect(file.x + file.width, `${width}px 파일 단추가 오른쪽 끝 안`).toBeLessThanOrEqual(width);
+    }
+  });
+
+  test("눌리는 크기: 상단 바·확대 줄·파일 메뉴의 단추는 모두 44×44px 이상이다", async ({ page }) => {
+    await openPhone(page);
+    await upload(page);
+    expect(await smallTargets(page, S.transport)).toEqual([]);
+    expect(await smallTargets(page, viewbar)).toEqual([]);
+    await page.locator(S.fileMenuTrigger).tap();
+    const panel = (await rect(page, S.fileMenuPanel))!;
+    expect(panel.x).toBeGreaterThanOrEqual(0);
+    expect(panel.x + panel.width, "파일 메뉴가 화면 오른쪽 밖으로 나가지 않는다").toBeLessThanOrEqual(390);
+    expect(await smallTargets(page, S.fileMenuPanel)).toEqual([]);
+  });
+
+  test("아래 시트: 열면 단추·슬라이더·선택 상자·입력 칸이 모두 44px 이상이고, 안에서 가로로 넘치지 않는다", async ({ page }) => {
+    await openPhone(page);
+    await upload(page);
+    await page.locator(sheetToggle).tap();
+    await expect(page.locator(sheet)).toBeVisible();
+    expect(await smallTargets(page, sheet)).toEqual([]);
+    const overflow = await page.evaluate((selector) => {
+      const element = document.querySelector(selector)!;
+      return { scroll: element.scrollWidth, client: element.clientWidth };
+    }, sheet);
+    expect(overflow.scroll).toBeLessThanOrEqual(overflow.client);
+    await expect.poll(async () => { const box = (await rect(page, sheet))!; return box.y + box.height; }, { message: "올라오는 움직임이 끝나면 시트는 화면 아래에 붙는다" }).toBeCloseTo(844, 0);
+    const box = (await rect(page, sheet))!;
+    expect(box.height, "시트는 화면의 4분의 3을 넘지 않는다").toBeLessThanOrEqual(844 * 0.75);
+  });
+
+  test("재생: 손가락으로 재생 단추를 누르면 시간이 흐르고, 다시 누르면 멈춘다", async ({ page }) => {
+    await openPhone(page);
+    await upload(page);
+    await expect(page.locator(S.play)).toHaveAttribute("title", "재생/일시정지");
+    await page.locator(S.play).tap();
+    await expect.poll(() => timeSeconds(page), { timeout: 8000 }).toBeGreaterThan(0.5);
+    await page.locator(S.play).tap();
+    const stopped = await timeSeconds(page);
+    await page.waitForTimeout(500);
+    expect(Math.abs((await timeSeconds(page)) - stopped), "멈춘 뒤에는 시간이 가만히 있다").toBeLessThan(0.05);
+    await page.locator(S.stop).tap();
+    await expect.poll(() => timeSeconds(page)).toBeLessThan(0.05);
+  });
+
+  test("녹음: 손가락으로 녹음을 눌러 시작하고 다시 눌러 끝내면 클립이 1개 생긴다", async ({ page }) => {
+    await openPhone(page, P32_QUERY);
+    await page.locator(S.record).tap();
+    await expect(page.locator(S.record)).toHaveClass(/recording/, { timeout: 8000 });
+    await expect(page.locator(S.clip)).toHaveCount(0);
+    await page.waitForTimeout(1500);
+    expect(await timeSeconds(page)).toBeGreaterThan(0.5);
+    await page.locator(S.record).tap();
+    await expect(page.locator(S.clip)).toHaveCount(1, { timeout: 8000 });
+    await expect(page.locator(S.record)).not.toHaveClass(/recording/);
+    const doc = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(doc).toBeLessThanOrEqual(390);
+  });
+
+  test("아래 시트: 단추로 열고, 닫기 단추·바깥 눌러 닫기·Esc로 닫는다(닫혀 있을 때는 보이지도 눌리지도 않는다)", async ({ page }) => {
+    await openPhone(page);
+    const toggle = page.locator(sheetToggle);
+    await expect(page.locator(sheet)).toBeHidden();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator(scrim)).toBeHidden();
+
+    await toggle.tap();
+    await expect(page.locator(sheet)).toBeVisible();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator(`${sheet} [data-sheet-close]`)).toBeFocused();
+    await expect(page.locator(sheet).getByRole("heading", { name: "트랙과 녹음 설정" })).toBeVisible();
+
+    await page.locator(`${sheet} [data-sheet-close]`).tap();
+    await expect(page.locator(sheet)).toBeHidden();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await toggle.tap();
+    await expect(page.locator(sheet)).toBeVisible();
+    await page.touchscreen.tap(195, 150); // 시트 위쪽 어두운 바깥
+    await expect(page.locator(sheet)).toBeHidden();
+
+    await toggle.tap();
+    await expect(page.locator(sheet)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(sheet)).toBeHidden();
+    await expect(toggle, "닫으면 초점이 시트 단추로 돌아온다").toBeFocused();
+
+    // 닫혀 있는 시트 안의 것은 키보드 초점도 받지 않는다
+    expect(await page.evaluate(() => (document.querySelector('[data-testid="phone-sheet"]') as HTMLElement).inert)).toBe(true);
+  });
+
+  test("아래 시트가 열려 있어도 상단 바의 재생·녹음은 그대로 눌린다", async ({ page }) => {
+    await openPhone(page);
+    await upload(page);
+    await page.locator(sheetToggle).tap();
+    await expect(page.locator(sheet)).toBeVisible();
+    await page.locator(S.play).tap();
+    await expect.poll(() => timeSeconds(page), { timeout: 8000 }).toBeGreaterThan(0.5);
+    await expect(page.locator(sheet), "재생을 눌러도 시트는 그대로").toBeVisible();
+    await page.locator(S.play).tap();
+  });
+
+  test("아래 시트 안: 트랙 볼륨·음소거·녹음 대기와 녹음 설정(모니터링·카운트인)이 바뀐다", async ({ page }) => {
+    await openPhone(page);
+    await upload(page);
+    await page.locator(sheetToggle).tap();
+    const panel = page.locator(sheet);
+    await expect(panel.locator('[data-testid="phone-track"]')).toHaveCount(1);
+    await expect(panel.locator(".phone-track__name")).toHaveText("트랙 1");
+
+    await setRange(page, '[data-testid="phone-track-volume"]', 0.5);
+    await expect(panel.locator(".phone-track__value")).toHaveText("50%");
+
+    const mute = panel.getByRole("button", { name: /음소거/ });
+    await mute.tap();
+    await expect(mute).toHaveAttribute("aria-pressed", "true");
+    const arm = panel.getByRole("button", { name: /녹음 대기/ });
+    await arm.tap();
+    await expect(arm).toHaveAttribute("aria-pressed", "true");
+    const solo = panel.getByRole("button", { name: /솔로/ });
+    await solo.tap();
+    await expect(solo).toHaveAttribute("aria-pressed", "true");
+
+    const monitoring = panel.getByRole("button", { name: "입력 모니터링" });
+    await expect(monitoring).toHaveAttribute("aria-pressed", "false");
+    await monitoring.tap();
+    await expect(monitoring).toHaveAttribute("aria-pressed", "true");
+    await panel.locator(S.countIn).selectOption("4");
+    await expect(panel.locator(S.countIn)).toHaveValue("4");
+
+    // 닫았다 열어도 값이 그대로다
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    await page.locator(sheetToggle).tap();
+    await expect(panel.locator(".phone-track__value")).toHaveText("50%");
+    await expect(mute).toHaveAttribute("aria-pressed", "true");
+    await expect(panel.locator(S.countIn)).toHaveValue("4");
+  });
+
+  test("타임라인은 보기 전용: 짧게 누르면 재생 위치가 옮겨지고 클립은 고르지 않으며, 끌면 스크롤될 뿐 재생 위치도 클립도 그대로다", async ({ page }) => {
+    await openPhone(page);
+    await upload(page);
+    await upload(page); // 두 번째 클립이 새로 올라가 골라진 상태가 된다
+    const selection = () => page.locator(S.clip).evaluateAll((elements) => elements.map((element) => element.classList.contains("selected")));
+    const before = await selection();
+    expect(before.filter(Boolean), "방금 올린 클립 하나만 골라져 있다").toHaveLength(1);
+    const target = before.indexOf(false); // 골라지지 않은 클립을 누른다(넓은 화면이라면 이 클립이 골라진다)
+    const clipBox = (await page.locator(S.clip).nth(target).boundingBox())!;
+    const tapY = clipBox.y + 40;
+
+    await page.touchscreen.tap(250, tapY);
+    await expect.poll(() => timeSeconds(page)).toBeGreaterThan(2);
+    const tapped = await timeSeconds(page);
+    expect(tapped).toBeLessThan(3.2);
+    expect(await selection(), "눌러도 클립 선택이 바뀌지 않는다").toEqual(before);
+
+    // 손가락 끌기(진짜 터치 스크롤 몸짓): 타임라인이 가로로 스크롤된다
+    const start = (await page.locator(S.clip).nth(target).boundingBox())!;
+    await touchDrag(page, 300, tapY, -200);
+    const scrollLeft = await page.locator(S.timelineScroll).evaluate((element) => element.scrollLeft);
+    expect(scrollLeft, "끌었더니 스크롤되었다").toBeGreaterThan(100);
+    const after = (await page.locator(S.clip).nth(target).boundingBox())!;
+    expect(Math.abs(after.x + scrollLeft - start.x), "클립은 스크롤로 밀렸을 뿐 제자리다").toBeLessThan(2);
+    expect(Math.abs((await timeSeconds(page)) - tapped), "끌어도 재생 위치는 그대로").toBeLessThan(0.02);
+    expect(await selection(), "끌어도 클립 선택은 그대로").toEqual(before);
+
+    // 스크롤한 만큼을 더해 위치를 잡는다: 화면 x=100 → 300px 지점 ≈ 3.1초
+    await page.touchscreen.tap(100, tapY);
+    await expect.poll(() => timeSeconds(page)).toBeGreaterThan(2.6);
+    expect(await timeSeconds(page)).toBeLessThan(3.6);
+    measuredP65("보기 전용 타임라인", { 누른_위치_초: tapped, 끈_뒤_스크롤: Math.round(scrollLeft) });
+  });
+
+  test("눈금자를 짧게 눌러도 재생 위치가 옮겨진다", async ({ page }) => {
+    await openPhone(page);
+    await upload(page);
+    const ruler = (await rect(page, S.ruler))!;
+    await page.touchscreen.tap(ruler.x + 192, ruler.y + 8); // 192px = 2초
+    await expect.poll(() => timeSeconds(page)).toBeGreaterThan(1.5);
+    expect(await timeSeconds(page)).toBeLessThan(2.6);
+  });
+
+  test("확대 단추는 확대 줄에 한 군데뿐이고, 확대하면 클립이 길어지고 '전체 보기'는 화면 안에 맞춘다", async ({ page }) => {
+    await openPhone(page);
+    await upload(page);
+    await expect(page.locator(S.zoomOut)).toHaveCount(1);
+    await expect(page.locator(viewbar).locator(S.zoomOut)).toHaveCount(1);
+    const start = (await rect(page, S.clip))!.width;
+    await page.locator('button[title="확대"]').tap();
+    await expect.poll(async () => (await rect(page, S.clip))!.width).toBeGreaterThan(start * 1.1);
+    await page.locator(S.zoomFit).tap();
+    await expect.poll(async () => (await rect(page, S.clip))!.width).toBeLessThanOrEqual(390);
+    const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(390);
+  });
+
+  test("트랙 이름은 타임라인 안의 작은 이름표로 보이고, 가로로 스크롤해도 따라온다", async ({ page }) => {
+    await openPhone(page);
+    await upload(page);
+    const chip = page.locator(".phone-lane-name");
+    await expect(chip).toHaveCount(1);
+    await expect(chip).toHaveText("트랙 1");
+    const start = (await rect(page, ".phone-lane-name"))!;
+    await page.locator(S.timelineScroll).evaluate((element) => { element.scrollLeft = 300; });
+    await page.waitForTimeout(150);
+    const moved = (await rect(page, ".phone-lane-name"))!;
+    expect(Math.abs(moved.x - start.x), "스크롤해도 이름표는 왼쪽 끝에 붙어 있다").toBeLessThan(2);
+  });
+
+  test("경계: 768px부터는 휴대폰 모드가 아니고(오른쪽 패널·트랙 머리 칸), 767px부터 휴대폰 모드다", async ({ page }) => {
+    await openPhone(page);
+    await upload(page);
+    await expect(page.locator("main.app-shell")).toHaveAttribute("data-phone", "true");
+    await page.locator(sheetToggle).tap(); // 시트를 연 채로 넓은 화면으로 갔다 오면, 시트는 닫혀 있다
+    await expect(page.locator(sheet)).toBeVisible();
+    await page.setViewportSize({ width: 768, height: 900 });
+    await expect(page.locator("main.app-shell")).toHaveAttribute("data-phone", "false");
+    await expect(page.locator(S.inspector)).toBeVisible();
+    await expect(page.locator(S.trackHeader)).toHaveCount(1);
+    await expect(page.locator(sheetToggle)).toHaveCount(0);
+    await expect(page.locator(viewbar)).toHaveCount(0);
+    await expect(page.locator(S.tempo)).toHaveCount(1);
+    await page.setViewportSize({ width: 767, height: 900 });
+    await expect(page.locator("main.app-shell")).toHaveAttribute("data-phone", "true");
+    await expect(page.locator(S.inspector)).toHaveCount(0);
+    await expect(page.locator(sheetToggle)).toBeVisible();
+    await expect(page.locator(sheetToggle)).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator(sheet)).toBeHidden();
+    // 클립은 폭이 바뀌어도 그대로다
+    await expect(page.locator(S.clip)).toHaveCount(1);
+  });
+
+  test("axe: 시트가 닫혀 있을 때와 열려 있을 때 색 대비 위반 0건, 심각한 위반 0건", async ({ page }) => {
+    await openPhone(page);
+    await upload(page);
+    const scan = async (label: string) => {
+      const result = await new AxeBuilder({ page }).analyze();
+      const contrast = result.violations.filter((rule) => rule.id === "color-contrast").flatMap((rule) => rule.nodes.map((node) => node.target.join(" ")));
+      const blocking = result.violations.filter((rule) => rule.impact === "serious" || rule.impact === "critical").map((rule) => `${rule.id}: ${rule.nodes.map((node) => node.target.join(" ")).join(", ")}`);
+      expect(contrast, `${label} 색 대비`).toEqual([]);
+      expect(blocking, `${label} 심각한 위반`).toEqual([]);
+    };
+    await scan("시트 닫힘");
+    await page.locator(sheetToggle).tap();
+    await expect(page.locator(sheet)).toBeVisible();
+    await page.waitForTimeout(300);
+    await scan("시트 열림");
+  });
+});

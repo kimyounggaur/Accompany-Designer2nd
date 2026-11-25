@@ -23,6 +23,7 @@ import "./styles/legibility.css";
 import "./styles/master.css";
 import "./styles/controls.css";
 import "./styles/targets.css";
+import "./styles/phone.css";
 
 installGlobalErrorHandlers();
 

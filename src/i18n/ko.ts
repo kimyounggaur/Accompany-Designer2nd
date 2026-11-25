@@ -105,6 +105,22 @@ export const ko = {
     volumeInput: "모니터 볼륨 값(%)",
   },
 
+  /** 휴대폰 "재생·녹음" 모드(화면 폭 768px 미만, 설계서 §P6-5) */
+  phone: {
+    /** 상단 바에서 아래 시트를 여는 단추 */
+    sheetButton: "트랙과 녹음 설정",
+    sheetTitle: "트랙과 녹음 설정",
+    tracksHeading: "트랙",
+    recordHeading: "녹음 설정",
+    close: "닫기",
+    /** 보기 전용 타임라인의 확대 줄 */
+    viewBar: "타임라인 보기",
+    /** 시트 안 녹음 설정의 단추 글자(넓은 화면에서는 아이콘만 있다) */
+    monitorLabel: "입력 모니터링",
+    metronomeLabel: "녹음 메트로놈",
+    countInLabel: "카운트인",
+  },
+
   master: {
     heading: "마스터",
     volumeLabel: "마스터 볼륨",

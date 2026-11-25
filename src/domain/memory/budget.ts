@@ -5,6 +5,7 @@
  *   풀린 크기 = 길이(초) × 샘플레이트 × 채널 수 × 4바이트   (4분 스테레오 44.1kHz = 84,672,000바이트, 약 85MB)
  * MB는 1,000,000바이트, GB는 1,000,000,000바이트(설계서의 "약 85MB"와 같은 셈).
  */
+import { isPhoneWidth } from "../layout/breakpoints";
 
 export const MB = 1_000_000;
 export const GB = 1_000 * MB;
@@ -45,7 +46,7 @@ export interface DeviceHint {
 /** 휴대폰급 기준을 쓸 기기인가: 알려진 메모리가 4GB 이하이거나 화면 폭이 768px 미만 */
 export function isPhoneClass(hint: DeviceHint): boolean {
   const lowMemory = typeof hint.deviceMemory === "number" && hint.deviceMemory <= 4;
-  return lowMemory || hint.width < 768;
+  return lowMemory || isPhoneWidth(hint.width);
 }
 
 export function limitsFor(hint: DeviceHint): Readonly<MemoryLimits> {

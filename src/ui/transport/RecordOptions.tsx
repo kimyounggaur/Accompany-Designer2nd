@@ -28,8 +28,11 @@ function countInLabel(option: CountInOption): string {
 
 interface RecordOptionsProps {
   isRecording: boolean;
-  /** inline: 한 줄에 모두 펼침(넓은 화면). popover: "녹음 설정" 버튼 뒤로 접음(좁은 화면). */
-  variant: "inline" | "popover";
+  /**
+   * inline: 한 줄에 모두 펼침(넓은 화면). popover: "녹음 설정" 버튼 뒤로 접음(좁은 화면).
+   * sheet: 휴대폰 모드의 아래 시트 안에 늘 펼쳐 둠(설계서 §P6-5). 단추마다 글자 이름표가 붙는다.
+   */
+  variant: "inline" | "popover" | "sheet";
 }
 
 /** 입력 모니터링 · 녹음 메트로놈 · 카운트인 · 입력 장치 */
@@ -80,6 +83,7 @@ export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
     };
   }, []);
 
+  const sheet = variant === "sheet";
   const controls = (
     <>
       <button
@@ -91,6 +95,7 @@ export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
         type="button"
       >
         <Headphones size={16} />
+        {sheet && <span>{ko.phone.monitorLabel}</span>}
       </button>
       <button
         className={`icon-button metronome-button ${metronomeEnabled ? "active" : ""}`}
@@ -101,6 +106,7 @@ export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
         type="button"
       >
         <Music2 size={16} />
+        {sheet && <span>{ko.phone.metronomeLabel}</span>}
       </button>
       <label className="monitor-volume-control" title={ko.monitor.volumeTitle}>
         <Volume2 size={14} aria-hidden="true" />
@@ -123,6 +129,7 @@ export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
       </label>
       <label className="count-in-control">
         <Timer size={14} />
+        {sheet && <span>{ko.phone.countInLabel}</span>}
         <select
           aria-label="녹음 카운트인"
           disabled={isRecording}
@@ -171,6 +178,14 @@ export function RecordOptions({ isRecording, variant }: RecordOptionsProps) {
 
   if (variant === "inline") {
     return <div className="transport-group record-options-group">{controls}</div>;
+  }
+
+  if (variant === "sheet") {
+    return (
+      <div className="record-options-group record-options-sheet" data-testid="record-options-sheet">
+        {controls}
+      </div>
+    );
   }
 
   return (
